@@ -627,19 +627,42 @@ const HRV = (() => {
       wantConnected = true; reconnectTries = 0;
       await openGatt();
     }catch(e){
-      status('Connessione annullata o non riuscita: '+(e.message||e), true);
+      wantConnected = false;
+      const m = ''+(e.message||e);
+      if(/cancel|user/i.test(m) && /chooser|requestDevice/i.test(m)) status('Selezione annullata. Premi "Connetti fascia" per riprovare.', true);
+      else status(m, true);
     }
   }
+  // gatt.connect() su Windows può restare appeso all'infinito se la fascia è
+  // "bondata" dall'OS o tenuta da un'altra app: un timeout evita l'attesa muta.
+  function withTimeout(p, ms, label){
+    return Promise.race([
+      Promise.resolve(p),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT_'+label)), ms))
+    ]);
+  }
   async function openGatt(){
-    const server = await device.gatt.connect();
-    const svc = await server.getPrimaryService(HR_SERVICE);
-    gattChar = await svc.getCharacteristic(HR_CHAR);
-    await gattChar.startNotifications();
-    gattChar.removeEventListener('characteristicvaluechanged', onValue);
-    gattChar.addEventListener('characteristicvaluechanged', onValue);
-    connected = true; reconnectTries = 0; lastBeatAt = performance.now(); updateConnUI();
-    status('Fascia connessa ('+(device.name||'dispositivo')+'). '+(capturing?'Registrazione in corso.':'Avvia una sessione per registrare l\'HRV.'));
-    startWave();
+    try{
+      status('Connessione alla fascia in corso…');
+      const server = await withTimeout(device.gatt.connect(), 12000, 'connect');
+      status('Lettura del servizio cardiaco…');
+      const svc = await withTimeout(server.getPrimaryService(HR_SERVICE), 8000, 'service');
+      gattChar = await withTimeout(svc.getCharacteristic(HR_CHAR), 8000, 'char');
+      status('Avvio della trasmissione dei battiti…');
+      await withTimeout(gattChar.startNotifications(), 8000, 'notify');
+      gattChar.removeEventListener('characteristicvaluechanged', onValue);
+      gattChar.addEventListener('characteristicvaluechanged', onValue);
+      connected = true; reconnectTries = 0; lastBeatAt = performance.now(); updateConnUI();
+      status('Fascia connessa ('+(device.name||'dispositivo')+'). '+(capturing?'Registrazione in corso.':'Avvia una sessione per registrare l\'HRV.'));
+      startWave();
+    }catch(e){
+      const msg = (''+(e.message||e)).indexOf('TIMEOUT') === 0
+        ? 'La connessione si è bloccata ('+(e.message)+'). Quasi sempre la fascia è "accoppiata" in Windows o tenuta da un\'altra app. Soluzione: Impostazioni Windows → Bluetooth → Polar H10 → "Rimuovi dispositivo", chiudi eventuali app Polar/telefono connessi alla fascia, poi premi di nuovo "Connetti fascia" (NON pre-accoppiare: lascia che sia il browser a connettersi).'
+        : 'Connessione non riuscita: '+(e.message||e);
+      connected = false; updateConnUI();
+      try{ if(device && device.gatt && device.gatt.connected) device.gatt.disconnect(); }catch(_){}
+      throw new Error(msg);
+    }
   }
   function disconnect(){
     wantConnected = false;
