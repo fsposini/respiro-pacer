@@ -146,6 +146,15 @@
   .hrv-quality .ok{color:var(--accent2)}
   .hrv-quality .bad{color:var(--danger)}
   .hrv-exports{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .hrv-wave-wrap{margin-top:16px}
+  .hrv-wave-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;
+    font-size:.74rem;font-weight:600;color:var(--accent);margin-bottom:8px}
+  .hrv-wave-legend{font-size:.66rem;color:var(--muted);font-weight:400;display:flex;align-items:center}
+  .hrv-wave-legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .hrv-wave-legend .dot-hr{background:var(--inhale)}
+  .hrv-wave-legend .dot-br{background:var(--exhale)}
+  #hrvWave{width:100%;height:200px;display:block;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+  .hrv-wave-note{font-size:.66rem;color:var(--muted);margin-top:6px;line-height:1.45}
 </style>
 </head>
 <body>
@@ -248,6 +257,15 @@
     <div class="hrv-cell"><div class="v" id="hrvRMSSD">—</div><div class="l">RMSSD live (ms)</div></div>
     <div class="hrv-cell"><div class="v" id="hrvRSA">—</div><div class="l">Ampiezza RSA (ms)</div></div>
     <div class="hrv-cell"><div class="v" id="hrvBeats">—</div><div class="l">Battiti raccolti</div></div>
+  </div>
+
+  <div class="hrv-wave-wrap">
+    <div class="hrv-wave-head">
+      <span>Onda della frequenza cardiaca <span style="color:var(--muted);font-weight:400">— coerenza / RSA</span></span>
+      <span class="hrv-wave-legend"><i class="dot-hr"></i>FC istantanea &nbsp;<i class="dot-br"></i>respiro guida</span>
+    </div>
+    <canvas id="hrvWave" height="200"></canvas>
+    <div class="hrv-wave-note" id="hrvWaveNote">Connetti la fascia: l'onda della frequenza cardiaca apparirà qui. In coerenza, sale in inspirazione e scende in espirazione, in sincrono col respiro.</div>
   </div>
 
   <div class="hrv-results" id="hrvResults">
@@ -574,13 +592,24 @@ const HRV = (() => {
   const LIVE_RMSSD_BEATS = 30;     // RMSSD istantaneo su ~ultimi 30 battiti
   const RSA_WINDOW_MS = 12000;     // ampiezza oscillazione HR sugli ultimi 12 s
 
+  // ---- Onda / robustezza connessione ----
+  const WAVE_WINDOW_MS = 60000;    // 60 s di onda visibile a schermo
+  const CONTACT_TIMEOUT_MS = 5000; // nessun battito per 5 s → segnale assente (contatto)
+  const MAX_RECONNECT = 6;
+
   let device = null, gattChar = null, connected = false;
   let capturing = false, paused = false;
   let rr = [];                     // {tcum: ms cumulativi, rr: ms}  (tutta la sessione)
   let tcum = 0;                    // tempo cumulativo RR (ms)
   let sessionMeta = null;          // {start, breathRate}
-  let hrHistory = [];              // {t: epoch ms, hr} per ampiezza RSA live
+  let hrHistory = [];              // {t: perf.now, hr} per ampiezza RSA live
   let lastHR = 0;
+  let wave = [];                   // {t: perf.now, hr: bpm istantanea} per il grafico
+  let breathBuf = [];              // {t, full} curva del respiro guida (da scala orb)
+  let lastBeatAt = 0;
+  let wantConnected = false;       // connessione voluta → abilita riconnessione automatica
+  let reconnectTries = 0, reconnectTimer = null, waveRAF = null;
+  let canvas = null, cctx = null;
 
   /* ----------------------------- BLE ----------------------------- */
   async function connect(){
@@ -595,24 +624,46 @@ const HRV = (() => {
         optionalServices:[HR_SERVICE]
       });
       device.addEventListener('gattserverdisconnected', onDisconnected);
-      const server = await device.gatt.connect();
-      const svc = await server.getPrimaryService(HR_SERVICE);
-      gattChar = await svc.getCharacteristic(HR_CHAR);
-      await gattChar.startNotifications();
-      gattChar.addEventListener('characteristicvaluechanged', onValue);
-      connected = true; updateConnUI();
-      status('Fascia connessa ('+(device.name||'dispositivo')+'). Avvia una sessione per registrare l\'HRV.');
+      wantConnected = true; reconnectTries = 0;
+      await openGatt();
     }catch(e){
       status('Connessione annullata o non riuscita: '+(e.message||e), true);
     }
   }
+  async function openGatt(){
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(HR_SERVICE);
+    gattChar = await svc.getCharacteristic(HR_CHAR);
+    await gattChar.startNotifications();
+    gattChar.removeEventListener('characteristicvaluechanged', onValue);
+    gattChar.addEventListener('characteristicvaluechanged', onValue);
+    connected = true; reconnectTries = 0; lastBeatAt = performance.now(); updateConnUI();
+    status('Fascia connessa ('+(device.name||'dispositivo')+'). '+(capturing?'Registrazione in corso.':'Avvia una sessione per registrare l\'HRV.'));
+    startWave();
+  }
   function disconnect(){
+    wantConnected = false;
+    if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
     try{ if(device && device.gatt.connected) device.gatt.disconnect(); }catch(e){}
     onDisconnected();
   }
   function onDisconnected(){
+    const wasConn = connected;
     connected = false; gattChar = null; updateConnUI();
-    status('Fascia disconnessa.');
+    if(wantConnected){
+      // La fascia può cadere per contatto, interferenza o risparmio energetico: riprova da solo.
+      if(reconnectTries < MAX_RECONNECT){
+        reconnectTries++;
+        status('Collegamento interrotto — riconnessione automatica ('+reconnectTries+'/'+MAX_RECONNECT+')…', true);
+        reconnectTimer = setTimeout(()=>{ openGatt().catch(()=>{ if(wantConnected) onDisconnected(); }); }, 1500);
+      }else{
+        wantConnected = false; stopWave();
+        status('Riconnessione non riuscita. Verifica: fascia indossata bene con elettrodi inumiditi, batteria del Polar carica, e nessun\'altra app/dispositivo (Polar Flow, telefono) connesso alla fascia. Poi premi "Connetti fascia".', true);
+      }
+    }else{
+      stopWave();
+      if(wasConn) status('Fascia disconnessa.');
+    }
   }
 
   // Heart Rate Measurement (0x2A37): Flags, HR(8/16), [Energy 16], [RR 16…] in 1/1024 s
@@ -631,13 +682,116 @@ const HRV = (() => {
       }
     }
     const now = performance.now();
+    lastBeatAt = now;
     hrHistory.push({t: now, hr: lastHR});
     while(hrHistory.length && now - hrHistory[0].t > RSA_WINDOW_MS) hrHistory.shift();
+
+    // Onda: frequenza cardiaca ISTANTANEA da ogni RR (è la curva RSA → coerenza)
+    if(incoming.length){ for(const v of incoming){ wave.push({t: now, hr: 60000/v}); } }
+    else { wave.push({t: now, hr: lastHR}); }    // fallback se la fascia non invia RR
+    while(wave.length && now - wave[0].t > WAVE_WINDOW_MS) wave.shift();
 
     if(capturing && !paused){
       for(const v of incoming){ tcum += v; rr.push({tcum, rr: v}); }
     }
-    renderLive(incoming.length > 0);
+    renderLive();
+  }
+
+  /* ------------------------- Grafico onda ------------------------- */
+  function startWave(){
+    if(waveRAF) return;
+    canvas = canvas || el('hrvWave');
+    cctx = cctx || (canvas && canvas.getContext('2d'));
+    const loop = () => { drawWave(); waveRAF = requestAnimationFrame(loop); };
+    waveRAF = requestAnimationFrame(loop);
+  }
+  function stopWave(){ if(waveRAF){ cancelAnimationFrame(waveRAF); waveRAF = null; } }
+  function orbFullness(){
+    const orb = document.getElementById('orb');
+    if(!orb) return 0;
+    const tr = getComputedStyle(orb).transform;
+    if(!tr || tr === 'none') return 0.05;
+    const m = tr.match(/matrix\(([^)]+)\)/);
+    if(!m) return 0.05;
+    const scale = parseFloat(m[1].split(',')[0]); // render(): scale = 0.9 + full*2.0
+    return Math.max(0, Math.min(1, (scale - 0.9) / 2.0));
+  }
+  function drawWave(){
+    if(!canvas || !cctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 600, cssH = canvas.clientHeight || 200;
+    if(canvas.width !== Math.round(cssW*dpr) || canvas.height !== Math.round(cssH*dpr)){
+      canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
+    }
+    const W = canvas.width, H = canvas.height, c = cctx;
+    c.clearRect(0,0,W,H);
+    const now = performance.now(), t0 = now - WAVE_WINDOW_MS;
+    const padL = 42*dpr, padR = 10*dpr, padT = 12*dpr, padB = 16*dpr;
+    const pw = W-padL-padR, ph = H-padT-padB;
+    const xFor = t => padL + ((t - t0) / WAVE_WINDOW_MS) * pw;
+
+    // Aggiorna curva del respiro guida (solo durante la sessione)
+    const running = document.body.dataset.running === '1';
+    if(running){ breathBuf.push({t: now, full: orbFullness()}); }
+    while(breathBuf.length && now - breathBuf[0].t > WAVE_WINDOW_MS) breathBuf.shift();
+
+    const pts = wave.filter(p => p.t >= t0);
+
+    // Stato contatto / nota
+    const note = el('hrvWaveNote');
+    if(connected && lastBeatAt && now - lastBeatAt > CONTACT_TIMEOUT_MS){
+      note.textContent = '⚠️ Nessun battito da qualche secondo: controlla il contatto della fascia (inumidisci gli elettrodi e stringila bene sul torace).';
+      note.style.color = 'var(--hold)';
+    } else if(connected){
+      note.textContent = 'In coerenza cardiaca la curva è una sinusoide regolare: la FC sale in inspirazione e scende in espirazione, in sincrono col respiro guida.';
+      note.style.color = 'var(--muted)';
+    }
+
+    if(pts.length < 2){
+      c.fillStyle = 'rgba(143,176,201,.5)'; c.font = (12*dpr)+'px system-ui';
+      c.textAlign = 'center';
+      c.fillText(connected ? 'In attesa dei battiti…' : 'Connetti la fascia per vedere l\'onda', W/2, H/2);
+      return;
+    }
+
+    // Scala Y dalla FC
+    let mn = Infinity, mx = -Infinity;
+    for(const p of pts){ if(p.hr < mn) mn = p.hr; if(p.hr > mx) mx = p.hr; }
+    let span = mx - mn;
+    if(span < 6){ const mid = (mn+mx)/2; mn = mid-3; mx = mid+3; span = 6; }
+    mn -= span*0.15; mx += span*0.15;
+    const yFor = hr => padT + ph - ((hr - mn) / (mx - mn)) * ph;
+
+    // Griglia + etichette bpm
+    c.strokeStyle = 'rgba(36,69,99,.7)'; c.lineWidth = 1*dpr;
+    c.fillStyle = 'rgba(143,176,201,.75)'; c.font = (10*dpr)+'px system-ui'; c.textAlign = 'right';
+    const ticks = 4;
+    for(let k=0;k<=ticks;k++){
+      const val = mn + (mx-mn)*k/ticks, y = yFor(val);
+      c.beginPath(); c.moveTo(padL, y); c.lineTo(W-padR, y); c.stroke();
+      c.fillText(Math.round(val), padL-6*dpr, y+3*dpr);
+    }
+
+    // Curva del respiro guida (riferimento, sotto)
+    if(running && breathBuf.length > 1){
+      c.strokeStyle = 'rgba(91,155,213,.55)'; c.lineWidth = 2*dpr;
+      c.beginPath();
+      breathBuf.forEach((p,idx)=>{
+        const x = xFor(p.t), y = padT + ph - p.full*ph;
+        idx ? c.lineTo(x,y) : c.moveTo(x,y);
+      });
+      c.stroke();
+    }
+
+    // Curva FC istantanea (in primo piano)
+    c.strokeStyle = '#4fd1c5'; c.lineWidth = 2.4*dpr; c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach((p,idx)=>{ const x = xFor(p.t), y = yFor(p.hr); idx ? c.lineTo(x,y) : c.moveTo(x,y); });
+    c.stroke();
+    // punto vivo
+    const last = pts[pts.length-1];
+    c.fillStyle = '#5ad1c0';
+    c.beginPath(); c.arc(xFor(last.t), yFor(last.hr), 3.2*dpr, 0, Math.PI*2); c.fill();
   }
 
   /* --------------------------- Sessione --------------------------- */

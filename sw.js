@@ -1,7 +1,7 @@
 // Service worker minimo: cache-first per funzionamento offline.
 // L'app è un singolo file autonomo (audio e immagini incorporati),
 // quindi basta mettere in cache i pochi file statici.
-const CACHE = 'respiro-pacer-v2-hrv';
+const CACHE = 'respiro-pacer-v3-hrv-wave';
 const ASSETS = [
   './',
   './index.html',
