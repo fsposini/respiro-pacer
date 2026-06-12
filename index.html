@@ -155,6 +155,11 @@
   .hrv-wave-legend .dot-br{background:var(--exhale)}
   #hrvWave{width:100%;height:200px;display:block;background:var(--bg);border:1px solid var(--line);border-radius:12px}
   .hrv-wave-note{font-size:.66rem;color:var(--muted);margin-top:6px;line-height:1.45}
+  .hrv-diag{margin-top:8px;font-size:.7rem;color:var(--muted)}
+  .hrv-diag summary{cursor:pointer;color:var(--accent);font-size:.7rem}
+  .hrv-diag-row{margin:8px 0 4px}
+  .hrv-log{font-family:ui-monospace,Consolas,monospace;font-size:.64rem;line-height:1.55;background:var(--bg);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:130px;overflow:auto;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -251,6 +256,10 @@
     </div>
   </div>
   <div class="hrv-status" id="hrvStatus">Collega il Polar H10 e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
+  <details class="hrv-diag"><summary>Diagnostica connessione</summary>
+    <div class="hrv-diag-row">Intervalli RR dalla fascia: <b id="hrvRRflag">—</b></div>
+    <div class="hrv-log" id="hrvLog"></div>
+  </details>
 
   <div class="hrv-live">
     <div class="hrv-cell beat"><div class="v" id="hrvHR">—</div><div class="l">Battiti / min</div></div>
@@ -262,7 +271,7 @@
   <div class="hrv-wave-wrap">
     <div class="hrv-wave-head">
       <span>Onda della frequenza cardiaca <span style="color:var(--muted);font-weight:400">— coerenza / RSA</span></span>
-      <span class="hrv-wave-legend"><i class="dot-hr"></i>FC istantanea &nbsp;<i class="dot-br"></i>respiro guida</span>
+      <span class="hrv-wave-legend"><i class="dot-hr"></i>FC istantanea (onda reale) &nbsp;<i class="dot-br"></i>respiro guida (tratteggio)</span>
     </div>
     <canvas id="hrvWave" height="200"></canvas>
     <div class="hrv-wave-note" id="hrvWaveNote">Connetti la fascia: l'onda della frequenza cardiaca apparirà qui. In coerenza, sale in inspirazione e scende in espirazione, in sincrono col respiro.</div>
@@ -595,7 +604,7 @@ const HRV = (() => {
   // ---- Onda / robustezza connessione ----
   const WAVE_WINDOW_MS = 60000;    // 60 s di onda visibile a schermo
   const CONTACT_TIMEOUT_MS = 5000; // nessun battito per 5 s → segnale assente (contatto)
-  const MAX_RECONNECT = 6;
+  const MAX_RECONNECT = 40;        // riprova a lungo: i drop del Polar sono frequenti
 
   let device = null, gattChar = null, connected = false;
   let capturing = false, paused = false;
@@ -610,6 +619,14 @@ const HRV = (() => {
   let wantConnected = false;       // connessione voluta → abilita riconnessione automatica
   let reconnectTries = 0, reconnectTimer = null, waveRAF = null;
   let canvas = null, cctx = null;
+  let connectAt = 0, beatsThisConn = 0, rrSeen = false; // diagnostica
+
+  function logEvent(msg){
+    const elLog = el('hrvLog'); if(!elLog) return;
+    const ts = new Date().toLocaleTimeString('it-IT');
+    elLog.textContent = ts + '  ' + msg + '\n' + elLog.textContent;
+    const lines = elLog.textContent.split('\n'); if(lines.length > 40) elLog.textContent = lines.slice(0,40).join('\n');
+  }
 
   /* ----------------------------- BLE ----------------------------- */
   async function connect(){
@@ -652,7 +669,9 @@ const HRV = (() => {
       await withTimeout(gattChar.startNotifications(), 8000, 'notify');
       gattChar.removeEventListener('characteristicvaluechanged', onValue);
       gattChar.addEventListener('characteristicvaluechanged', onValue);
-      connected = true; reconnectTries = 0; lastBeatAt = performance.now(); updateConnUI();
+      connected = true; reconnectTries = 0; lastBeatAt = performance.now();
+      connectAt = performance.now(); beatsThisConn = 0; rrSeen = false; updateConnUI();
+      logEvent('✓ Connesso ('+(device.name||'dispositivo')+')');
       status('Fascia connessa ('+(device.name||'dispositivo')+'). '+(capturing?'Registrazione in corso.':'Avvia una sessione per registrare l\'HRV.'));
       startWave();
     }catch(e){
@@ -673,15 +692,21 @@ const HRV = (() => {
   function onDisconnected(){
     const wasConn = connected;
     connected = false; gattChar = null; updateConnUI();
+    if(wasConn && connectAt){
+      const secs = ((performance.now()-connectAt)/1000).toFixed(1);
+      logEvent('✗ Disconnesso dopo '+secs+'s / '+beatsThisConn+' battiti'+(rrSeen?'':' (NESSUN RR ricevuto!)'));
+    }
     if(wantConnected){
-      // La fascia può cadere per contatto, interferenza o risparmio energetico: riprova da solo.
+      // La fascia può cadere per contatto, interferenza o risparmio energetico: riprova da solo, a lungo.
       if(reconnectTries < MAX_RECONNECT){
         reconnectTries++;
-        status('Collegamento interrotto — riconnessione automatica ('+reconnectTries+'/'+MAX_RECONNECT+')…', true);
-        reconnectTimer = setTimeout(()=>{ openGatt().catch(()=>{ if(wantConnected) onDisconnected(); }); }, 1500);
+        const backoff = Math.min(1200 + reconnectTries*400, 4000);
+        status('Collegamento interrotto — riconnessione automatica (tentativo '+reconnectTries+')…', true);
+        logEvent('… riconnessione tentativo '+reconnectTries);
+        reconnectTimer = setTimeout(()=>{ openGatt().catch(()=>{ if(wantConnected) onDisconnected(); }); }, backoff);
       }else{
         wantConnected = false; stopWave();
-        status('Riconnessione non riuscita. Verifica: fascia indossata bene con elettrodi inumiditi, batteria del Polar carica, e nessun\'altra app/dispositivo (Polar Flow, telefono) connesso alla fascia. Poi premi "Connetti fascia".', true);
+        status('Riconnessione interrotta dopo molti tentativi. Verifica: fascia indossata con elettrodi inumiditi, batteria del Polar carica, Bluetooth del telefono SPENTO (non solo le app chiuse), e PC vicino. Poi premi "Connetti fascia".', true);
       }
     }else{
       stopWave();
@@ -705,7 +730,11 @@ const HRV = (() => {
       }
     }
     const now = performance.now();
-    lastBeatAt = now;
+    lastBeatAt = now; beatsThisConn++;
+    const rrNow = (flags & 0x10) && incoming.length > 0;
+    if(rrNow && !rrSeen){ rrSeen = true; }
+    const flagEl = el('hrvRRflag');
+    if(flagEl){ flagEl.textContent = rrNow ? 'sì ✓' : 'NO — solo FC (HRV non calcolabile)'; flagEl.style.color = rrNow ? 'var(--accent2)' : 'var(--danger)'; }
     hrHistory.push({t: now, hr: lastHR});
     while(hrHistory.length && now - hrHistory[0].t > RSA_WINDOW_MS) hrHistory.shift();
 
@@ -795,15 +824,17 @@ const HRV = (() => {
       c.fillText(Math.round(val), padL-6*dpr, y+3*dpr);
     }
 
-    // Curva del respiro guida (riferimento, sotto)
+    // Curva del respiro guida (riferimento tratteggiato, sotto)
     if(running && breathBuf.length > 1){
-      c.strokeStyle = 'rgba(91,155,213,.55)'; c.lineWidth = 2*dpr;
+      c.save();
+      c.strokeStyle = 'rgba(91,155,213,.45)'; c.lineWidth = 1.5*dpr; c.setLineDash([5*dpr, 5*dpr]);
       c.beginPath();
       breathBuf.forEach((p,idx)=>{
         const x = xFor(p.t), y = padT + ph - p.full*ph;
         idx ? c.lineTo(x,y) : c.moveTo(x,y);
       });
       c.stroke();
+      c.restore();
     }
 
     // Curva FC istantanea (in primo piano)
