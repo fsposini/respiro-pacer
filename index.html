@@ -110,6 +110,42 @@
   input[type="file"]{font-size:.66rem;color:var(--muted);width:100%}
   .file-note{font-size:.66rem;color:var(--muted);margin-top:4px;line-height:1.45}
   footer{margin-top:14px;color:var(--muted);font-size:.66rem;text-align:center;opacity:.65}
+
+  /* ---------- HRV ---------- */
+  .hrv-panel{width:100%;max-width:1180px;margin-top:14px;background:linear-gradient(180deg,var(--panel),var(--bg2));
+    border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
+  .hrv-panel h2{font-size:.82rem;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  .hrv-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .hrv-conn{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .hrv-dot{width:10px;height:10px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px rgba(224,106,106,.6);transition:background .3s}
+  .hrv-dot.on{background:var(--accent2);box-shadow:0 0 10px rgba(90,209,192,.7)}
+  .hrv-btn{border:1px solid var(--line);background:var(--panel-soft);color:var(--text);font-size:.74rem;
+    padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:600;letter-spacing:.2px;transition:.15s}
+  .hrv-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .hrv-btn:disabled{opacity:.4;cursor:not-allowed}
+  .hrv-btn.ghost{background:transparent}
+  .hrv-status{font-size:.7rem;color:var(--muted);margin-top:8px;line-height:1.45;min-height:1em}
+  .hrv-warn{font-size:.68rem;color:var(--hold);margin-top:6px;line-height:1.45}
+  .hrv-live{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+  @media(max-width:680px){.hrv-live{grid-template-columns:repeat(2,1fr)}}
+  .hrv-cell{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center}
+  .hrv-cell .v{font-size:1.5rem;font-weight:700;color:var(--accent2);line-height:1.1;font-variant-numeric:tabular-nums}
+  .hrv-cell .l{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:5px;line-height:1.3}
+  .hrv-cell.beat .v{color:var(--inhale)}
+  .hrv-results{margin-top:16px;display:none}
+  .hrv-results.show{display:block}
+  .hrv-results h3{font-size:.74rem;color:var(--accent);text-transform:uppercase;letter-spacing:.8px;margin:14px 0 8px}
+  .hrv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+  .hrv-metric{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center}
+  .hrv-metric .mv{font-size:1.15rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+  .hrv-metric .mu{font-size:.6rem;color:var(--muted);margin-left:2px}
+  .hrv-metric .ml{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+  .hrv-quality{font-size:.7rem;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;margin-top:10px;line-height:1.7;font-variant-numeric:tabular-nums}
+  .hrv-quality b{color:var(--text)}
+  .hrv-quality .ok{color:var(--accent2)}
+  .hrv-quality .bad{color:var(--danger)}
+  .hrv-exports{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -192,6 +228,53 @@
     <div class="toggle-row"><span>Voce italiana</span><label class="switch"><input type="checkbox" id="voiceOn" checked><span class="slider"></span></label></div>
     <div class="field" style="margin-top:10px"><label>Voce</label><select id="voiceSelect"><option>Caricamento voci…</option></select></div>
     <div class="vol-field"><label>Volume voce</label><input type="range" id="voiceVol" min="0" max="100" value="100"></div>
+  </div>
+</div>
+
+<div class="hrv-panel">
+  <div class="hrv-head">
+    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— Polar H10</span></h2>
+    <div class="hrv-conn">
+      <span class="hrv-dot" id="hrvDot"></span>
+      <span id="hrvConnLabel" style="font-size:.72rem;color:var(--muted)">Non connesso</span>
+      <button class="hrv-btn" id="hrvConnect">Connetti fascia</button>
+      <button class="hrv-btn ghost" id="hrvDisconnect" disabled>Disconnetti</button>
+    </div>
+  </div>
+  <div class="hrv-status" id="hrvStatus">Collega il Polar H10 e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
+
+  <div class="hrv-live">
+    <div class="hrv-cell beat"><div class="v" id="hrvHR">—</div><div class="l">Battiti / min</div></div>
+    <div class="hrv-cell"><div class="v" id="hrvRMSSD">—</div><div class="l">RMSSD live (ms)</div></div>
+    <div class="hrv-cell"><div class="v" id="hrvRSA">—</div><div class="l">Ampiezza RSA (ms)</div></div>
+    <div class="hrv-cell"><div class="v" id="hrvBeats">—</div><div class="l">Battiti raccolti</div></div>
+  </div>
+
+  <div class="hrv-results" id="hrvResults">
+    <h3>Time domain</h3>
+    <div class="hrv-grid">
+      <div class="hrv-metric"><div><span class="mv" id="mRMSSD">—</span><span class="mu">ms</span></div><div class="ml">RMSSD</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mSDNN">—</span><span class="mu">ms</span></div><div class="ml">SDNN</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mPNN50">—</span><span class="mu">%</span></div><div class="ml">pNN50</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mMeanHR">—</span><span class="mu">bpm</span></div><div class="ml">FC media</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mMeanNN">—</span><span class="mu">ms</span></div><div class="ml">NN media</div></div>
+    </div>
+    <h3>Frequency domain</h3>
+    <div class="hrv-grid">
+      <div class="hrv-metric"><div><span class="mv" id="mVLF">—</span><span class="mu">ms²</span></div><div class="ml">VLF</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mLF">—</span><span class="mu">ms²</span></div><div class="ml">LF</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mHF">—</span><span class="mu">ms²</span></div><div class="ml">HF</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mLFHF">—</span></div><div class="ml">LF/HF</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mLFn">—</span><span class="mu">n.u.</span></div><div class="ml">LF norm.</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mHFn">—</span><span class="mu">n.u.</span></div><div class="ml">HF norm.</div></div>
+      <div class="hrv-metric"><div><span class="mv" id="mTP">—</span><span class="mu">ms²</span></div><div class="ml">Potenza tot.</div></div>
+    </div>
+    <div class="hrv-quality" id="hrvQuality"></div>
+    <div class="hrv-exports">
+      <button class="hrv-btn" id="hrvExportJSON">Esporta sessione (JSON)</button>
+      <button class="hrv-btn ghost" id="hrvExportCSV">Esporta storico (CSV)</button>
+      <button class="hrv-btn ghost" id="hrvClear">Cancella storico</button>
+    </div>
   </div>
 </div>
 
@@ -342,6 +425,11 @@ const App = (() => {
     return s.length?s:[{name:'inhale',dur:4},{name:'exhale',dur:6}];
   }
   const dynSeqForRate=r=>{const c=60/r,h=c/2;return[{name:'inhale',dur:h},{name:'exhale',dur:h}];};
+  function currentRate(){
+    if(mode==='dynamic')return dyn?dyn.rate:+el('startRate').value;
+    const t=+el('inhale').value+ +el('holdFull').value+ +el('exhale').value+ +el('holdEmpty').value;
+    return t>0?60/t:0;
+  }
   function fullnessFor(name,p){const ease=x=>0.5-0.5*Math.cos(Math.PI*x);
     if(name==='inhale')return ease(p);if(name==='exhale')return 1-ease(p);if(name==='holdFull')return 1;return 0;}
 
@@ -406,14 +494,15 @@ const App = (() => {
     Voice.setEnabled(el('voiceOn').checked);Voice.setVol(+el('voiceVol').value/100);
     running=true;paused=false;const now=performance.now();sessionStart=now;startPhase(now);btnState();
     document.body.dataset.running='1';WakeLock.acquire();        // tieni acceso lo schermo durante la sessione
+    if(window.HRV)HRV.sessionStart(currentRate());              // avvia registrazione HRV
     rafId=requestAnimationFrame(tick);
   }
-  function pause(){if(!running)return;paused=!paused;const now=performance.now();
+  function pause(){if(!running)return;paused=!paused;const now=performance.now();if(window.HRV)HRV.setPaused(paused);
     if(paused){pausedAt=now;el('phaseLabel').textContent='Pausa';speechSynthesis.cancel();}
     else{const d=now-pausedAt;pausedAccum+=d;phaseStart+=d;startPhase(now);}
     el('btnPause').textContent=paused?'Riprendi':'Pausa';}
   function finish(){stop(true);el('phaseLabel').textContent='Completato';el('phaseLabel').style.color='var(--accent2)';}
-  function stop(keep){running=false;paused=false;document.body.dataset.running='0';if(rafId)cancelAnimationFrame(rafId);Audio.stop();speechSynthesis.cancel();WakeLock.release();
+  function stop(keep){running=false;paused=false;document.body.dataset.running='0';if(window.HRV)HRV.sessionEnd();if(rafId)cancelAnimationFrame(rafId);Audio.stop();speechSynthesis.cancel();WakeLock.release();
     el('orb').style.transform='scale(1)';el('halo').style.opacity='0.15';el('halo').style.width='96px';el('halo').style.height='96px';el('orbCount').textContent='';
     if(!keep){el('phaseLabel').textContent='Pronto';el('phaseLabel').style.color='';}
     el('btnPause').textContent='Pausa';btnState();updateFreqDisplay();}
@@ -470,7 +559,346 @@ const App = (() => {
   }
   return{init};
 })();
+
+/* ================= HRV ENGINE (Polar H10 · Web Bluetooth) ================= */
+/* Calcoli secondo Task Force ESC/NASPE 1996. Filtro artefatti: moving median  */
+/* finestra 9 beat, soglia 20% (Kubios/Malik), limiti assoluti 300–2000 ms.    */
+const HRV = (() => {
+  const el = id => document.getElementById(id);
+  const HR_SERVICE = 0x180d, HR_CHAR = 0x2a37;
+  const STORE = 'respiroPacer.hrv.v1';
+
+  // ---- Parametri filtro ----
+  const MED_WIN = 9, THRESH = 0.20, RR_MIN = 300, RR_MAX = 2000;
+  // ---- Finestre live ----
+  const LIVE_RMSSD_BEATS = 30;     // RMSSD istantaneo su ~ultimi 30 battiti
+  const RSA_WINDOW_MS = 12000;     // ampiezza oscillazione HR sugli ultimi 12 s
+
+  let device = null, gattChar = null, connected = false;
+  let capturing = false, paused = false;
+  let rr = [];                     // {tcum: ms cumulativi, rr: ms}  (tutta la sessione)
+  let tcum = 0;                    // tempo cumulativo RR (ms)
+  let sessionMeta = null;          // {start, breathRate}
+  let hrHistory = [];              // {t: epoch ms, hr} per ampiezza RSA live
+  let lastHR = 0;
+
+  /* ----------------------------- BLE ----------------------------- */
+  async function connect(){
+    if(!navigator.bluetooth){
+      status('Web Bluetooth non è supportato in questo browser. Usa Chrome o Edge su desktop (o Chrome su Android).', true);
+      return;
+    }
+    try{
+      status('Seleziona il Polar H10 nella finestra di sistema…');
+      device = await navigator.bluetooth.requestDevice({
+        filters:[{services:[HR_SERVICE]}],
+        optionalServices:[HR_SERVICE]
+      });
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+      const server = await device.gatt.connect();
+      const svc = await server.getPrimaryService(HR_SERVICE);
+      gattChar = await svc.getCharacteristic(HR_CHAR);
+      await gattChar.startNotifications();
+      gattChar.addEventListener('characteristicvaluechanged', onValue);
+      connected = true; updateConnUI();
+      status('Fascia connessa ('+(device.name||'dispositivo')+'). Avvia una sessione per registrare l\'HRV.');
+    }catch(e){
+      status('Connessione annullata o non riuscita: '+(e.message||e), true);
+    }
+  }
+  function disconnect(){
+    try{ if(device && device.gatt.connected) device.gatt.disconnect(); }catch(e){}
+    onDisconnected();
+  }
+  function onDisconnected(){
+    connected = false; gattChar = null; updateConnUI();
+    status('Fascia disconnessa.');
+  }
+
+  // Heart Rate Measurement (0x2A37): Flags, HR(8/16), [Energy 16], [RR 16…] in 1/1024 s
+  function onValue(e){
+    const dv = e.target.value;
+    const flags = dv.getUint8(0);
+    let i = 1;
+    if(flags & 0x01){ lastHR = dv.getUint16(i, true); i += 2; }
+    else { lastHR = dv.getUint8(i); i += 1; }
+    if(flags & 0x08){ i += 2; }                 // Energy Expended presente → salta 2 byte
+    const incoming = [];
+    if(flags & 0x10){                            // RR-Interval presente
+      while(i + 2 <= dv.byteLength){
+        const raw = dv.getUint16(i, true); i += 2;
+        incoming.push(raw * 1000 / 1024);        // → millisecondi
+      }
+    }
+    const now = performance.now();
+    hrHistory.push({t: now, hr: lastHR});
+    while(hrHistory.length && now - hrHistory[0].t > RSA_WINDOW_MS) hrHistory.shift();
+
+    if(capturing && !paused){
+      for(const v of incoming){ tcum += v; rr.push({tcum, rr: v}); }
+    }
+    renderLive(incoming.length > 0);
+  }
+
+  /* --------------------------- Sessione --------------------------- */
+  function sessionStart(breathRate){
+    rr = []; tcum = 0; paused = false; capturing = true;
+    sessionMeta = { start: new Date().toISOString(), breathRate: breathRate || 0 };
+    el('hrvResults').classList.remove('show');
+    if(!connected) status('⚠️ Fascia non connessa: la sessione di respirazione parte ma l\'HRV non verrà registrato.', true);
+    else status('Registrazione HRV in corso…');
+  }
+  function setPaused(p){ paused = p; }
+  function sessionEnd(){
+    if(!capturing) return;
+    capturing = false;
+    const captured = rr.length;
+    if(captured < 20){
+      if(captured > 0) status('Sessione troppo breve o pochi battiti raccolti ('+captured+'): HRV non calcolabile in modo affidabile.', true);
+      return;
+    }
+    const report = analyze(rr);
+    showResults(report);
+    saveSession(report);
+    status('Sessione completata: '+report.quality.kept+' battiti validi su '+report.quality.total+'. Risultati salvati.');
+  }
+
+  /* ----------------------- Filtro artefatti ----------------------- */
+  function median(a){ const s=[...a].sort((x,y)=>x-y); const m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+  function filterSeries(series){
+    const vals = series.map(o=>o.rr), n = vals.length, half = MED_WIN>>1;
+    return series.map((o,idx)=>{
+      let bad = o.rr < RR_MIN || o.rr > RR_MAX;
+      if(!bad){
+        const a = Math.max(0, idx-half), b = Math.min(n, idx+half+1);
+        const med = median(vals.slice(a,b));
+        if(med>0 && Math.abs(o.rr-med)/med > THRESH) bad = true;
+      }
+      return { tcum:o.tcum, rr:o.rr, kept:!bad };
+    });
+  }
+
+  /* ------------------------ Time domain ------------------------ */
+  function timeDomain(nn){
+    const n = nn.length;
+    let mean=0; for(const v of nn) mean+=v; mean/=n;
+    let sd=0; for(const v of nn) sd+=(v-mean)*(v-mean); sd=Math.sqrt(sd/(n-1));
+    let ss=0, nn50=0;
+    for(let k=1;k<n;k++){ const d=nn[k]-nn[k-1]; ss+=d*d; if(Math.abs(d)>50) nn50++; }
+    return {
+      meanNN: mean, sdnn: sd,
+      rmssd: Math.sqrt(ss/(n-1)),
+      pnn50: nn50/(n-1)*100,
+      meanHR: 60000/mean
+    };
+  }
+
+  /* ---------------------- Frequency domain ---------------------- */
+  // Tachogramma NN ricampionato a 4 Hz → finestra di Hanning → FFT → PSD (ms²/Hz)
+  function fft(re, im){
+    const n = re.length;
+    for(let i=1, j=0; i<n; i++){
+      let bit = n>>1;
+      for(; j & bit; bit>>=1) j ^= bit;
+      j ^= bit;
+      if(i < j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; }
+    }
+    for(let len=2; len<=n; len<<=1){
+      const ang = -2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+      for(let i=0; i<n; i+=len){
+        let cr=1, ci=0;
+        for(let k=0; k<len/2; k++){
+          const a=i+k, b=i+k+len/2;
+          const vr = re[b]*cr - im[b]*ci, vi = re[b]*ci + im[b]*cr;
+          re[b]=re[a]-vr; im[b]=im[a]-vi; re[a]+=vr; im[a]+=vi;
+          const ncr = cr*wr - ci*wi; ci = cr*wi + ci*wr; cr = ncr;
+        }
+      }
+    }
+  }
+  function freqDomain(nn){
+    if(nn.length < 30) return null;
+    const fs = 4;                                   // Hz
+    const t = new Array(nn.length); t[0]=0;
+    for(let k=1;k<nn.length;k++) t[k] = t[k-1] + nn[k-1]/1000; // sec
+    const dur = t[t.length-1];
+    if(dur < 20) return null;                        // troppo breve per le frequenze
+    const N = Math.floor(dur*fs);
+    if(N < 16) return null;
+    const x = new Float64Array(N);
+    let j=0;
+    for(let k=0;k<N;k++){
+      const tk = k/fs;
+      while(j < t.length-2 && t[j+1] < tk) j++;
+      const span = t[j+1]-t[j];
+      const f = span>0 ? (tk-t[j])/span : 0;
+      x[k] = nn[j] + f*(nn[j+1]-nn[j]);
+    }
+    let mean=0; for(let k=0;k<N;k++) mean+=x[k]; mean/=N;
+    let U=0;
+    for(let k=0;k<N;k++){ const w=0.5-0.5*Math.cos(2*Math.PI*k/(N-1)); x[k]=(x[k]-mean)*w; U+=w*w; }
+    U /= N;
+    let Nfft=1; while(Nfft<N) Nfft<<=1;
+    const re=new Float64Array(Nfft), im=new Float64Array(Nfft);
+    for(let k=0;k<N;k++) re[k]=x[k];
+    fft(re, im);
+    const df = fs/Nfft;
+    let vlf=0, lf=0, hf=0;
+    for(let k=1;k<=Nfft/2;k++){
+      const freq = k*df;
+      let p = (re[k]*re[k]+im[k]*im[k])/(fs*N*U) * df;
+      if(k !== Nfft/2) p *= 2;                       // spettro one-sided
+      if(freq>=0.003 && freq<0.04) vlf+=p;
+      else if(freq>=0.04 && freq<0.15) lf+=p;
+      else if(freq>=0.15 && freq<0.40) hf+=p;
+    }
+    const tp = vlf+lf+hf;
+    return {
+      vlf, lf, hf, totalPower: tp,
+      lfhf: hf>0 ? lf/hf : 0,
+      lfn: (lf+hf)>0 ? lf/(lf+hf)*100 : 0,
+      hfn: (lf+hf)>0 ? hf/(lf+hf)*100 : 0,
+      durSec: dur
+    };
+  }
+
+  function analyze(series){
+    const filt = filterSeries(series);
+    const kept = filt.filter(o=>o.kept);
+    const nn = kept.map(o=>o.rr);
+    const time = timeDomain(nn);
+    const freq = freqDomain(nn);
+    const total = filt.length, keptN = kept.length;
+    return {
+      meta: sessionMeta,
+      durationS: Math.round(tcum/1000),
+      time, freq,
+      quality: {
+        total, kept: keptN,
+        excluded: total-keptN,
+        keptPct: total>0 ? keptN/total*100 : 0,
+        reliableFreq: total>0 ? (keptN/total) >= 0.95 : false
+      },
+      rrRaw: series.map(o=>+o.rr.toFixed(1)),
+      rrKept: filt.map(o=>o.kept?1:0)
+    };
+  }
+
+  /* ----------------------------- UI ----------------------------- */
+  function status(msg, warn){
+    const e = el('hrvStatus'); e.textContent = msg;
+    e.style.color = warn ? 'var(--hold)' : 'var(--muted)';
+  }
+  function updateConnUI(){
+    el('hrvDot').classList.toggle('on', connected);
+    el('hrvConnLabel').textContent = connected ? (device&&device.name?device.name:'Connesso') : 'Non connesso';
+    el('hrvConnect').disabled = connected;
+    el('hrvDisconnect').disabled = !connected;
+  }
+  function liveRMSSD(){
+    if(!capturing || rr.length < 4) return null;
+    const tail = rr.slice(-LIVE_RMSSD_BEATS).map(o=>o.rr);
+    let ss=0, n=0;
+    for(let k=1;k<tail.length;k++){ const d=tail[k]-tail[k-1]; ss+=d*d; n++; }
+    return n? Math.sqrt(ss/n) : null;
+  }
+  function liveRSA(){
+    if(hrHistory.length < 4) return null;
+    let mn=Infinity, mx=-Infinity;
+    for(const h of hrHistory){ if(h.hr<mn)mn=h.hr; if(h.hr>mx)mx=h.hr; }
+    if(mn<=0 || mx<=0) return null;
+    return (60000/mn) - (60000/mx);                  // ampiezza RSA in ms (max-min degli NN)
+  }
+  function renderLive(){
+    el('hrvHR').textContent = lastHR ? Math.round(lastHR) : '—';
+    const r = liveRMSSD(); el('hrvRMSSD').textContent = r!=null ? r.toFixed(0) : '—';
+    const s = liveRSA();   el('hrvRSA').textContent   = s!=null ? s.toFixed(0) : '—';
+    el('hrvBeats').textContent = capturing ? rr.length : (rr.length||'—');
+  }
+  function fmt(v, d){ return (v==null||!isFinite(v)) ? '—' : v.toFixed(d==null?0:d); }
+  function showResults(r){
+    el('mRMSSD').textContent = fmt(r.time.rmssd,1);
+    el('mSDNN').textContent  = fmt(r.time.sdnn,1);
+    el('mPNN50').textContent = fmt(r.time.pnn50,1);
+    el('mMeanHR').textContent= fmt(r.time.meanHR,0);
+    el('mMeanNN').textContent= fmt(r.time.meanNN,0);
+    const f = r.freq;
+    el('mVLF').textContent = f?fmt(f.vlf,0):'—';
+    el('mLF').textContent  = f?fmt(f.lf,0):'—';
+    el('mHF').textContent  = f?fmt(f.hf,0):'—';
+    el('mLFHF').textContent= f?fmt(f.lfhf,2):'—';
+    el('mLFn').textContent = f?fmt(f.lfn,1):'—';
+    el('mHFn').textContent = f?fmt(f.hfn,1):'—';
+    el('mTP').textContent  = f?fmt(f.totalPower,0):'—';
+    const q = r.quality;
+    const relCls = q.reliableFreq ? 'ok' : 'bad';
+    const relTxt = q.reliableFreq ? 'sì ✓' : 'no — sotto soglia 95%';
+    el('hrvQuality').innerHTML =
+      'Durata registrazione: <b>'+r.durationS+' s</b> · Respiro: <b>'+fmt(r.meta.breathRate,1)+'</b> atti/min<br>'+
+      'Battiti totali: <b>'+q.total+'</b> · Esclusi (filtro automatico): <b>'+q.excluded+'</b> ('+fmt(100-q.keptPct,1)+'%)<br>'+
+      'Recording utilizzabile: <b class="'+relCls+'">'+fmt(q.keptPct,1)+'%</b> · Affidabilità frequenze: <span class="'+relCls+'">'+relTxt+'</span>'+
+      (f? '' : '<br><span class="bad">Dominio in frequenza non calcolato: registrazione troppo breve (servono ≥20 s utili).</span>');
+    el('hrvResults').classList.add('show');
+    el('hrvResults').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  /* --------------------------- Storage --------------------------- */
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORE))||[]; }catch(e){ return []; } }
+  function saveSession(r){
+    const list = load();
+    list.push({
+      id: Date.now(), date: r.meta.start, breathRate: r.meta.breathRate, durationS: r.durationS,
+      time: r.time, freq: r.freq, quality: r.quality, rrRaw: r.rrRaw, rrKept: r.rrKept
+    });
+    try{ localStorage.setItem(STORE, JSON.stringify(list)); }catch(e){
+      status('Storico non salvato (memoria piena). Esporta i dati per non perderli.', true);
+    }
+  }
+  function dl(name, text, type){
+    const blob = new Blob([text], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  }
+  function exportJSON(){
+    const list = load(); if(!list.length){ status('Nessuna sessione da esportare.', true); return; }
+    dl('hrv_sessione_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json',
+       JSON.stringify(list[list.length-1], null, 2), 'application/json');
+  }
+  function exportCSV(){
+    const list = load(); if(!list.length){ status('Nessuna sessione da esportare.', true); return; }
+    const head = ['data','respiro_atti_min','durata_s','battiti_tot','battiti_validi','perc_validi',
+      'RMSSD_ms','SDNN_ms','pNN50_pct','FC_media_bpm','NN_media_ms','VLF_ms2','LF_ms2','HF_ms2','LF_HF','LFn','HFn','TP_ms2'];
+    const rows = list.map(s=>{
+      const f=s.freq||{};
+      return [s.date, s.breathRate, s.durationS, s.quality.total, s.quality.kept, s.quality.keptPct.toFixed(1),
+        s.time.rmssd.toFixed(1), s.time.sdnn.toFixed(1), s.time.pnn50.toFixed(1), s.time.meanHR.toFixed(0), s.time.meanNN.toFixed(0),
+        f.vlf?f.vlf.toFixed(0):'', f.lf?f.lf.toFixed(0):'', f.hf?f.hf.toFixed(0):'', f.lfhf?f.lfhf.toFixed(2):'',
+        f.lfn?f.lfn.toFixed(1):'', f.hfn?f.hfn.toFixed(1):'', f.totalPower?f.totalPower.toFixed(0):''].join(',');
+    });
+    dl('hrv_storico.csv', [head.join(','), ...rows].join('\n'), 'text/csv');
+  }
+  function clearStore(){
+    if(!load().length){ status('Storico già vuoto.'); return; }
+    if(confirm('Cancellare tutto lo storico HRV salvato su questo dispositivo?')){
+      localStorage.removeItem(STORE); status('Storico HRV cancellato.');
+    }
+  }
+
+  function init(){
+    el('hrvConnect').addEventListener('click', connect);
+    el('hrvDisconnect').addEventListener('click', disconnect);
+    el('hrvExportJSON').addEventListener('click', exportJSON);
+    el('hrvExportCSV').addEventListener('click', exportCSV);
+    el('hrvClear').addEventListener('click', clearStore);
+    updateConnUI();
+  }
+  return { init, sessionStart, sessionEnd, setPaused };
+})();
+window.HRV = HRV;
+
 App.init();
+HRV.init();
 
 /* ---------- SERVICE WORKER (installazione + offline) ---------- */
 if('serviceWorker' in navigator){
