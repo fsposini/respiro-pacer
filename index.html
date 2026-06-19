@@ -247,7 +247,7 @@
 
 <div class="hrv-panel">
   <div class="hrv-head">
-    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— Polar H10</span></h2>
+    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— Polar H10</span> <span id="appVer" style="font-weight:400;color:var(--accent);font-size:.62rem;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px"></span></h2>
     <div class="hrv-conn">
       <span class="hrv-dot" id="hrvDot"></span>
       <span id="hrvConnLabel" style="font-size:.72rem;color:var(--muted)">Non connesso</span>
@@ -1099,6 +1099,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v6';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused };
