@@ -631,23 +631,30 @@ const HRV = (() => {
   /* ----------------------------- BLE ----------------------------- */
   async function connect(){
     if(!navigator.bluetooth){
-      status('Web Bluetooth non è supportato in questo browser. Usa Chrome o Edge su desktop (o Chrome su Android).', true);
+      status('Web Bluetooth non è supportato in questo browser. Su iPhone usa l\'app Bluefy; su PC usa Chrome o Edge.', true);
+      logEvent('✗ navigator.bluetooth assente (browser senza Web Bluetooth)');
       return;
     }
     try{
-      status('Seleziona il Polar H10 nella finestra di sistema…');
+      status('Apertura elenco dispositivi… scegli il Polar H10.');
+      logEvent('… apertura selettore dispositivi');
+      // Mostra TUTTI i dispositivi vicini: alcuni browser (Bluefy) non fanno
+      // comparire la fascia col filtro per servizio. optionalServices dà
+      // comunque accesso al servizio cardiaco una volta connessi.
       device = await navigator.bluetooth.requestDevice({
-        filters:[{services:[HR_SERVICE]}],
-        optionalServices:[HR_SERVICE]
+        acceptAllDevices: true,
+        optionalServices: [HR_SERVICE]
       });
+      logEvent('✓ scelto: '+(device.name||'dispositivo senza nome'));
       device.addEventListener('gattserverdisconnected', onDisconnected);
       wantConnected = true; reconnectTries = 0;
       await openGatt();
     }catch(e){
       wantConnected = false;
       const m = ''+(e.message||e);
-      if(/cancel|user/i.test(m) && /chooser|requestDevice/i.test(m)) status('Selezione annullata. Premi "Connetti fascia" per riprovare.', true);
-      else status(m, true);
+      logEvent('✗ '+m);
+      if(/cancel|user/i.test(m) && /chooser|requestDevice/i.test(m)) status('Selezione annullata o nessun dispositivo scelto. Premi "Connetti fascia" per riprovare.', true);
+      else status('Errore: '+m, true);
     }
   }
   // gatt.connect() su Windows può restare appeso all'infinito se la fascia è
@@ -1099,7 +1106,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v6';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v7';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused };
