@@ -651,10 +651,13 @@ const HRV = (() => {
       await openGatt();
     }catch(e){
       wantConnected = false;
-      const m = ''+(e.message||e);
-      logEvent('✗ '+m);
-      if(/cancel|user/i.test(m) && /chooser|requestDevice/i.test(m)) status('Selezione annullata o nessun dispositivo scelto. Premi "Connetti fascia" per riprovare.', true);
-      else status('Errore: '+m, true);
+      const nm = (e && e.name) ? e.name : '?';
+      const m = (e && e.message != null) ? (''+e.message) : (''+e);
+      logEvent('✗ ['+nm+'] '+m);
+      if(nm === 'NotFoundError' && /cancel/i.test(m)) status('Selezione annullata. Premi "Connetti fascia" per riprovare.', true);
+      else if(nm === 'NotFoundError') status('Nessun dispositivo trovato: indossa la fascia (elettrodi inumiditi) e riprova.', true);
+      else if(nm === 'SecurityError' || nm === 'NotAllowedError' || /2/.test(m)) status('Bluetooth non disponibile per l\'app. Su iPhone: Impostazioni → Bluefy → attiva Bluetooth; verifica che il Bluetooth del telefono sia acceso. Poi riprova.', true);
+      else status('Errore ['+nm+']: '+m, true);
     }
   }
   // gatt.connect() su Windows può restare appeso all'infinito se la fascia è
@@ -1106,7 +1109,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v7';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v8';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused };
