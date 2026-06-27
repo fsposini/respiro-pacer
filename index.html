@@ -416,9 +416,28 @@ const Voice = (() => {
   if('speechSynthesis' in window){load();speechSynthesis.onvoiceschanged=load;
     document.getElementById('voiceSelect').addEventListener('change',e=>{chosen=voices[e.target.value];
       try{localStorage.setItem(NAME_KEY,chosen?chosen.name:'');}catch(err){}});}
-  return{say(t){if(!enabled||!chosen)return;speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(t);u.voice=chosen;u.lang='it-IT';u.rate=0.9;u.volume=vol;u.pitch=1;speechSynthesis.speak(u);},
-    setEnabled(v){enabled=v;if(!v)speechSynthesis.cancel();},setVol(v){vol=v;}};
+  // Sblocco del motore vocale: DEVE essere chiamato dentro un gesto utente (tap),
+  // PRIMA di qualsiasi await. Su iOS/WebKit (anche Bluefy) la sintesi vocale resta
+  // muta finché il PRIMO speak non parte da un gesto: pronunciamo un'utterance
+  // muta per "svegliare" il motore e tenerlo attivo per tutta la sessione.
+  function unlock(){
+    if(!('speechSynthesis' in window))return;
+    try{
+      speechSynthesis.resume();
+      const u=new SpeechSynthesisUtterance('​'); // larghezza zero → di fatto muto
+      u.volume=0;u.rate=2;if(chosen)u.voice=chosen;u.lang='it-IT';
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  return{say(t){if(!enabled)return;
+      // iOS sospende il motore dopo poco: lo "ridestiamo" prima di ogni frase.
+      try{speechSynthesis.resume();}catch(e){}
+      try{speechSynthesis.cancel();}catch(e){}
+      const u=new SpeechSynthesisUtterance(t);
+      if(chosen)u.voice=chosen;u.lang='it-IT';u.rate=0.9;u.volume=vol;u.pitch=1;
+      try{speechSynthesis.speak(u);}catch(e){}},
+    unlock,
+    setEnabled(v){enabled=v;if(!v){try{speechSynthesis.cancel();}catch(e){}}},setVol(v){vol=v;}};
 })();
 
 /* ---------- WAKE LOCK (schermo acceso durante la sessione) ---------- */
@@ -511,6 +530,11 @@ const App = (() => {
 
   async function start(){
     if(running)return;
+    // VOCE: abilita e SBLOCCA subito il motore TTS, dentro il gesto del tap e
+    // PRIMA dell'await su Audio.start(). Dopo un await iOS non considera più la
+    // chiamata "iniziata dall'utente" e zittisce tutta la voce della sessione.
+    Voice.setEnabled(el('voiceOn').checked);Voice.setVol(+el('voiceVol').value/100);
+    if(el('voiceOn').checked)Voice.unlock();
     mode=document.querySelector('.tab.active').dataset.mode;cycleCount=0;seqIdx=0;pausedAccum=0;
     if(mode==='dynamic'){dyn={start:+el('startRate').value,end:+el('endRate').value,step:+el('stepRate').value,
       stepInterval:+el('stepInterval').value,total:+el('totalDuration').value,rate:+el('startRate').value,lastStep:0};
@@ -518,7 +542,6 @@ const App = (() => {
     await Audio.start(el('ambientType').value);
     Audio.setAmbientEnabled(el('ambientOn').checked);
     Audio.setMasterVol(+el('ambientVol').value/100);
-    Voice.setEnabled(el('voiceOn').checked);Voice.setVol(+el('voiceVol').value/100);
     running=true;paused=false;const now=performance.now();sessionStart=now;startPhase(now);btnState();
     document.body.dataset.running='1';WakeLock.acquire();        // tieni acceso lo schermo durante la sessione
     if(window.HRV)HRV.sessionStart(currentRate());              // avvia registrazione HRV
@@ -574,7 +597,7 @@ const App = (() => {
     el('ambientOn').addEventListener('change',e=>Audio.setAmbientEnabled(e.target.checked));
     el('ambientType').addEventListener('change',e=>Audio.setType(e.target.value));
     el('ambientVol').addEventListener('input',e=>Audio.setMasterVol(+e.target.value/100));
-    el('voiceOn').addEventListener('change',e=>Voice.setEnabled(e.target.checked));
+    el('voiceOn').addEventListener('change',e=>{Voice.setEnabled(e.target.checked);if(e.target.checked)Voice.unlock();});
     el('voiceVol').addEventListener('input',e=>Voice.setVol(+e.target.value/100));
     document.querySelectorAll('input[type="file"]').forEach(inp=>inp.addEventListener('change',async e=>{
       const f=e.target.files[0];if(!f)return;
@@ -1140,7 +1163,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v9';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v10';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused };
