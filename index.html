@@ -268,6 +268,31 @@
     <div class="hrv-cell"><div class="v" id="hrvBeats">—</div><div class="l">Battiti raccolti</div></div>
   </div>
 
+  <style>
+    .hrv-coh{margin-top:10px;padding:12px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}
+    .hrv-coh-cells{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .hrv-coh-cells .hrv-cell{margin:0}
+    .hrv-coh-zonewrap{display:flex;align-items:center;gap:12px;margin-top:12px}
+    .hrv-coh-zone{font-weight:700;font-size:.82rem;padding:4px 12px;border-radius:999px;white-space:nowrap;background:rgba(255,255,255,.06);color:var(--muted)}
+    .hrv-coh-zone.coh-low{background:rgba(239,107,107,.18);color:#ef6b6b}
+    .hrv-coh-zone.coh-med{background:rgba(74,163,224,.18);color:#4aa3e0}
+    .hrv-coh-zone.coh-high{background:rgba(43,212,168,.20);color:#2bd4a8}
+    .hrv-coh-track{flex:1;height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+    .hrv-coh-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#ef6b6b,#4aa3e0,#2bd4a8);transition:width .6s ease}
+    .hrv-coh-hint{font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.4}
+  </style>
+  <div class="hrv-coh">
+    <div class="hrv-coh-cells">
+      <div class="hrv-cell"><div class="v" id="hrvCohRatio">—</div><div class="l">Coherence Ratio (HeartMath)</div></div>
+      <div class="hrv-cell"><div class="v"><span id="hrvCohPct">—</span><span style="font-size:.45em;color:var(--muted)"> / 100</span></div><div class="l">Coerenza normalizzata</div></div>
+    </div>
+    <div class="hrv-coh-zonewrap">
+      <span class="hrv-coh-zone" id="hrvCohZone">—</span>
+      <div class="hrv-coh-track"><div class="hrv-coh-fill" id="hrvCohBar"></div></div>
+    </div>
+    <div class="hrv-coh-hint">Picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
+  </div>
+
   <div class="hrv-wave-wrap">
     <div class="hrv-wave-head">
       <span>Onda della frequenza cardiaca <span style="color:var(--muted);font-weight:400">— coerenza / RSA</span></span>
@@ -634,6 +659,13 @@ const HRV = (() => {
   const CONTACT_TIMEOUT_MS = 5000; // nessun battito per 5 s → segnale assente (contatto)
   const MAX_RECONNECT = 40;        // riprova a lungo: i drop del Polar sono frequenti
 
+  // ---- Coerenza cardiaca (algoritmo HeartMath, McCraty et al.) ----
+  // Coherence Ratio = peakPower / (totalPower − peakPower), dove il picco è il
+  // massimo nella banda 0.04–0.26 Hz e la finestra di picco è larga 0.030 Hz.
+  const COH_WIN_MS    = 64000;     // finestra scorrevole ~64 s (standard HeartMath)
+  const COH_RECALC_MS = 2000;      // ricalcolo della coerenza ogni 2 s
+  const COH_LOW = 0.5, COH_HIGH = 1.0; // soglie zone sul ratio — CALIBRABILI vs emWave
+
   let device = null, gattChar = null, connected = false;
   let capturing = false, paused = false;
   let rr = [];                     // {tcum: ms cumulativi, rr: ms}  (tutta la sessione)
@@ -648,6 +680,10 @@ const HRV = (() => {
   let reconnectTries = 0, reconnectTimer = null, waveRAF = null;
   let canvas = null, cctx = null;
   let connectAt = 0, beatsThisConn = 0, rrSeen = false; // diagnostica
+  // ---- Stato coerenza (live + accumulo di sessione) ----
+  let cohRatio = null, cohPct = null;        // valori live correnti
+  let cohSum = 0, cohN = 0, cohCoherentN = 0; // media e % tempo in coerenza
+  let lastCohAt = 0;                          // throttle del ricalcolo
 
   function logEvent(msg){
     const elLog = el('hrvLog'); if(!elLog) return;
@@ -915,6 +951,8 @@ const HRV = (() => {
   /* --------------------------- Sessione --------------------------- */
   function sessionStart(breathRate){
     rr = []; tcum = 0; paused = false; capturing = true;
+    cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
+    updateCoherenceUI();
     sessionMeta = { start: new Date().toISOString(), breathRate: breathRate || 0 };
     el('hrvResults').classList.remove('show');
     if(!connected) status('⚠️ Fascia non connessa: la sessione di respirazione parte ma l\'HRV non verrà registrato.', true);
@@ -1034,6 +1072,79 @@ const HRV = (() => {
     };
   }
 
+  /* ---------------------- Coerenza HeartMath ---------------------- */
+  // Calcola il Coherence Ratio sull'ultimo segmento (~64 s) del tachogramma.
+  // Stessa pipeline del dominio in frequenza (ricampionamento 4 Hz → Hann → FFT),
+  // ma con zero-padding ×8 per risolvere bene la finestra di picco da 0.030 Hz.
+  function coherence(){
+    if(rr.length < 20) return null;
+    const lastT = rr[rr.length-1].tcum;
+    // coda di ~64 s, solo battiti in range fisiologico (filtro leggero, live)
+    const tail = [];
+    for(let k=rr.length-1; k>=0; k--){
+      if(lastT - rr[k].tcum > COH_WIN_MS) break;
+      const v = rr[k].rr;
+      if(v>=RR_MIN && v<=RR_MAX) tail.push(v);
+    }
+    tail.reverse();
+    if(tail.length < 16) return null;
+    const fs = 4;
+    const t = new Array(tail.length); t[0]=0;
+    for(let k=1;k<tail.length;k++) t[k] = t[k-1] + tail[k-1]/1000;
+    const dur = t[t.length-1];
+    if(dur < 20) return null;                 // servono almeno ~20 s (ideale 64 s)
+    const N = Math.floor(dur*fs);
+    if(N < 16) return null;
+    const x = new Float64Array(N);
+    let j=0;
+    for(let k=0;k<N;k++){
+      const tk = k/fs;
+      while(j < t.length-2 && t[j+1] < tk) j++;
+      const span = t[j+1]-t[j];
+      const f = span>0 ? (tk-t[j])/span : 0;
+      x[k] = tail[j] + f*(tail[j+1]-tail[j]);
+    }
+    let mean=0; for(let k=0;k<N;k++) mean+=x[k]; mean/=N;
+    for(let k=0;k<N;k++){ const w=0.5-0.5*Math.cos(2*Math.PI*k/(N-1)); x[k]=(x[k]-mean)*w; }
+    let Nfft=1; while(Nfft<N) Nfft<<=1; Nfft*=8;   // zero-pad: risoluzione ~0.002 Hz
+    const re=new Float64Array(Nfft), im=new Float64Array(Nfft);
+    for(let k=0;k<N;k++) re[k]=x[k];
+    fft(re, im);
+    const df = fs/Nfft, half = Nfft>>1;
+    const pw = k => re[k]*re[k]+im[k]*im[k];       // PSD relativa (norm. si elide nel rapporto)
+    // picco nella banda di coerenza 0.04–0.26 Hz
+    let kPeak=-1, pPeak=-1;
+    const kLo=Math.max(1,Math.ceil(0.04/df)), kHi=Math.floor(0.26/df);
+    for(let k=kLo;k<=kHi && k<=half;k++){ const p=pw(k); if(p>pPeak){pPeak=p;kPeak=k;} }
+    if(kPeak<1) return null;
+    const fPeak = kPeak*df;
+    // peak power: finestra 0.030 Hz centrata sul picco (±0.015 Hz)
+    let peakP=0;
+    const w0=Math.max(1,Math.round((fPeak-0.015)/df)), w1=Math.round((fPeak+0.015)/df);
+    for(let k=w0;k<=w1 && k<=half;k++) peakP+=pw(k);
+    // total power: 0.0033–0.40 Hz
+    let totP=0;
+    const tLo=Math.max(1,Math.ceil(0.0033/df)), tHi=Math.min(half,Math.floor(0.40/df));
+    for(let k=tLo;k<=tHi;k++) totP+=pw(k);
+    const denom = totP - peakP;
+    if(totP<=0 || denom<=0) return null;
+    return { ratio: peakP/denom, pct: 100*peakP/totP, fPeak };
+  }
+  function cohZone(r){
+    if(r==null) return {txt:'—', cls:''};
+    if(r>=COH_HIGH) return {txt:'Alta', cls:'coh-high'};
+    if(r>=COH_LOW)  return {txt:'Media', cls:'coh-med'};
+    return {txt:'Bassa', cls:'coh-low'};
+  }
+  function updateCoherenceUI(){
+    el('hrvCohRatio').textContent = cohRatio!=null ? cohRatio.toFixed(2) : '—';
+    el('hrvCohPct').textContent   = cohPct!=null ? String(Math.round(cohPct)) : '—';
+    const z = cohZone(cohRatio), zb = el('hrvCohZone');
+    if(zb){ zb.textContent = z.txt; zb.className = 'hrv-coh-zone '+z.cls; }
+    const bar = el('hrvCohBar');
+    if(bar) bar.style.width = (cohPct!=null ? Math.min(100,cohPct) : 0)+'%';
+  }
+
   function analyze(series){
     const filt = filterSeries(series);
     const kept = filt.filter(o=>o.kept);
@@ -1086,6 +1197,20 @@ const HRV = (() => {
     const r = liveRMSSD(); el('hrvRMSSD').textContent = r!=null ? r.toFixed(0) : '—';
     const s = liveRSA();   el('hrvRSA').textContent   = s!=null ? s.toFixed(0) : '—';
     el('hrvBeats').textContent = capturing ? rr.length : (rr.length||'—');
+    // Coerenza HeartMath: ricalcolo throttled e accumulo per la sintesi di sessione
+    if(capturing){
+      const now = performance.now();
+      if(now - lastCohAt > COH_RECALC_MS){
+        lastCohAt = now;
+        const c = coherence();
+        if(c){
+          cohRatio = c.ratio; cohPct = c.pct;
+          cohSum += c.ratio; cohN++;
+          if(c.ratio >= COH_LOW) cohCoherentN++;
+        }
+      }
+    }
+    updateCoherenceUI();
   }
   function fmt(v, d){ return (v==null||!isFinite(v)) ? '—' : v.toFixed(d==null?0:d); }
   function showResults(r){
@@ -1105,10 +1230,16 @@ const HRV = (() => {
     const q = r.quality;
     const relCls = q.reliableFreq ? 'ok' : 'bad';
     const relTxt = q.reliableFreq ? 'sì ✓' : 'no — sotto soglia 95%';
+    const avgR = cohN ? cohSum/cohN : null;
+    const tic  = cohN ? cohCoherentN/cohN*100 : null;
+    const cohLine = avgR!=null
+      ? '<br>Coerenza media (HeartMath): <b class="ok">'+fmt(avgR,2)+'</b> · normalizzata <b>'+fmt(100*avgR/(avgR+1),0)+'/100</b> · in coerenza <b>'+fmt(tic,0)+'%</b> del tempo'
+      : '';
     el('hrvQuality').innerHTML =
       'Durata registrazione: <b>'+r.durationS+' s</b> · Respiro: <b>'+fmt(r.meta.breathRate,1)+'</b> atti/min<br>'+
       'Battiti totali: <b>'+q.total+'</b> · Esclusi (filtro automatico): <b>'+q.excluded+'</b> ('+fmt(100-q.keptPct,1)+'%)<br>'+
       'Recording utilizzabile: <b class="'+relCls+'">'+fmt(q.keptPct,1)+'%</b> · Affidabilità frequenze: <span class="'+relCls+'">'+relTxt+'</span>'+
+      cohLine+
       (f? '' : '<br><span class="bad">Dominio in frequenza non calcolato: registrazione troppo breve (servono ≥20 s utili).</span>');
     el('hrvResults').classList.add('show');
     el('hrvResults').scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -1163,7 +1294,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v10';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v11';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused };
