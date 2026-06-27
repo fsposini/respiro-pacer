@@ -293,6 +293,62 @@
     <div class="hrv-coh-hint">Picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
   </div>
 
+  <style>
+    /* Durante il test clinico: nascondi numeri/onda (il paziente non deve auto-perturbarsi né autodiagnosticarsi) */
+    body[data-hrv-testing="1"] .hrv-live,
+    body[data-hrv-testing="1"] .hrv-coh,
+    body[data-hrv-testing="1"] .hrv-wave-wrap,
+    body[data-hrv-testing="1"] .hrv-results{display:none!important}
+    .hrv-test{margin-top:14px;padding:14px;border-radius:16px;background:rgba(43,212,168,.06);border:1px solid rgba(43,212,168,.22)}
+    .hrv-test h3{margin:0 0 10px;font-size:1rem}
+    .hrv-test label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px}
+    .hrv-test input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:1rem;box-sizing:border-box}
+    .hrv-test-prep{margin:10px 0;font-size:.8rem}
+    .hrv-test-prep summary{cursor:pointer;color:var(--accent2,#2bd4a8)}
+    .hrv-test-prep ul{margin:8px 0 0;padding-left:18px;color:var(--muted);line-height:1.5}
+    .hrv-test .btn{margin-top:8px}
+    .hrv-test-hint{font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.4}
+    .hrv-test-run{text-align:center;padding:6px 0}
+    .hrv-test-orb-wrap{height:200px;display:flex;align-items:center;justify-content:center}
+    #hrvTestOrb{width:130px;height:130px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#7defc9,#2bd4a8 55%,#138a6c);box-shadow:0 0 40px rgba(43,212,168,.45);transform:scale(1)}
+    .hrv-test-phase{font-weight:700;font-size:1.05rem;margin-top:6px}
+    .hrv-test-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:2px 0}
+    .hrv-test-instr{font-size:.85rem;color:var(--muted);max-width:340px;margin:0 auto 12px;line-height:1.45}
+    .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
+    .hrv-test .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+  </style>
+  <div class="hrv-test">
+    <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
+    <div id="hrvTestSetup">
+      <label for="hrvTestCode">Codice paziente (pseudonimo, nessun nome)</label>
+      <input id="hrvTestCode" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false">
+      <details class="hrv-test-prep">
+        <summary>Preparazione — leggere prima di iniziare</summary>
+        <ul>
+          <li>Niente caffè/bevande energetiche e niente pasto nelle 2,5–3 ore precedenti</li>
+          <li>Niente alcol nelle 24 ore precedenti, niente allenamento intenso il giorno prima</li>
+          <li>Vescica vuota, ambiente tranquillo e temperatura gradevole</li>
+          <li>Eventuali β-bloccanti o terapie croniche: <b>NON sospendere</b>, assumere normalmente</li>
+          <li>Indossa la fascia con gli elettrodi inumiditi e attendi l'indicatore “Intervalli RR: sì”</li>
+        </ul>
+      </details>
+      <button id="hrvTestStart" class="btn">Avvia test clinico</button>
+      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
+    </div>
+    <div id="hrvTestRun" class="hrv-test-run" style="display:none">
+      <div class="hrv-test-orb-wrap"><div id="hrvTestOrb"></div></div>
+      <div class="hrv-test-phase" id="hrvTestPhase">—</div>
+      <div class="hrv-test-count" id="hrvTestCount">5:00</div>
+      <div class="hrv-test-instr" id="hrvTestInstr"></div>
+      <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
+    </div>
+    <div id="hrvTestDone" style="display:none">
+      <div class="hrv-test-doneMsg">✓ Test completato. Esporta il file e invialo al medico.</div>
+      <button id="hrvTestExport" class="btn">Esporta file per il medico</button>
+      <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
+    </div>
+  </div>
+
   <div class="hrv-wave-wrap">
     <div class="hrv-wave-head">
       <span>Onda della frequenza cardiaca <span style="color:var(--muted);font-weight:400">— coerenza / RSA</span></span>
@@ -684,6 +740,9 @@ const HRV = (() => {
   let cohRatio = null, cohPct = null;        // valori live correnti
   let cohSum = 0, cohN = 0, cohCoherentN = 0; // media e % tempo in coerenza
   let lastCohAt = 0;                          // throttle del ricalcolo
+  // ---- Stato modalità Test clinico ----
+  let testCode = '';                          // codice paziente (pseudonimo, NO anagrafica)
+  let testPhase = null;                       // 'tonic' | 'phasic' | null → etichetta ogni RR
 
   function logEvent(msg){
     const elLog = el('hrvLog'); if(!elLog) return;
@@ -844,7 +903,7 @@ const HRV = (() => {
     while(wave.length && now - wave[0].t > WAVE_WINDOW_MS) wave.shift();
 
     if(capturing && !paused){
-      for(const v of incoming){ tcum += v; rr.push({tcum, rr: v}); }
+      for(const v of incoming){ tcum += v; rr.push({tcum, rr: v, ph: testPhase}); }
     }
     renderLive();
   }
@@ -1076,17 +1135,9 @@ const HRV = (() => {
   // Calcola il Coherence Ratio sull'ultimo segmento (~64 s) del tachogramma.
   // Stessa pipeline del dominio in frequenza (ricampionamento 4 Hz → Hann → FFT),
   // ma con zero-padding ×8 per risolvere bene la finestra di picco da 0.030 Hz.
-  function coherence(){
-    if(rr.length < 20) return null;
-    const lastT = rr[rr.length-1].tcum;
-    // coda di ~64 s, solo battiti in range fisiologico (filtro leggero, live)
-    const tail = [];
-    for(let k=rr.length-1; k>=0; k--){
-      if(lastT - rr[k].tcum > COH_WIN_MS) break;
-      const v = rr[k].rr;
-      if(v>=RR_MIN && v<=RR_MAX) tail.push(v);
-    }
-    tail.reverse();
+  // Nucleo: Coherence Ratio su una sequenza di RR (ms). La normalizzazione PSD
+  // si elide nel rapporto, quindi conta solo la potenza relativa.
+  function coherenceCore(tail){
     if(tail.length < 16) return null;
     const fs = 4;
     const t = new Array(tail.length); t[0]=0;
@@ -1129,6 +1180,19 @@ const HRV = (() => {
     const denom = totP - peakP;
     if(totP<=0 || denom<=0) return null;
     return { ratio: peakP/denom, pct: 100*peakP/totP, fPeak };
+  }
+  // Coerenza live: ultimi ~64 s del tachogramma (coda scorrevole).
+  function coherence(){
+    if(rr.length < 20) return null;
+    const lastT = rr[rr.length-1].tcum;
+    const tail = [];
+    for(let k=rr.length-1; k>=0; k--){
+      if(lastT - rr[k].tcum > COH_WIN_MS) break;
+      const v = rr[k].rr;
+      if(v>=RR_MIN && v<=RR_MAX) tail.push(v);
+    }
+    tail.reverse();
+    return coherenceCore(tail);
   }
   function cohZone(r){
     if(r==null) return {txt:'—', cls:''};
@@ -1288,21 +1352,179 @@ const HRV = (() => {
     }
   }
 
+  /* ----------------------- Modalità Test clinico ----------------------- */
+  // Pronta = fascia connessa che sta inviando intervalli RR.
+  function isReady(){ return connected && rrSeen; }
+  function beginTest(code){
+    testCode = code || ''; testPhase = null;
+    rr = []; tcum = 0; paused = false; capturing = true;
+    cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
+    updateCoherenceUI();
+  }
+  function setTestPhase(p){ testPhase = p; }
+  function endTest(){ capturing = false; testPhase = null; }
+  // Metriche + colonne IBI/attributo per una fase (emWave-compatibile).
+  function phaseMeta(beats){
+    const filt = filterSeries(beats);              // {tcum,rr,kept}
+    const nn = filt.filter(o=>o.kept).map(o=>o.rr);
+    const td = nn.length>=4 ? timeDomain(nn) : null;
+    const fd = freqDomain(nn);
+    const coh = coherenceCore(nn);
+    let mhrr = '';
+    if(nn.length>=2){ const mn=Math.min.apply(null,nn), mx=Math.max.apply(null,nn); mhrr=(60000/mn)-(60000/mx); }
+    return {
+      ibi: filt.map(o=>o.rr), attr: filt.map(o=>o.kept?'L':'A'),
+      sdnn: td?td.sdnn:'', rmssd: td?td.rmssd:'',
+      tp: fd?fd.totalPower:'', vlf: fd?fd.vlf:'', lf: fd?fd.lf:'', hf: fd?fd.hf:'',
+      coh: coh?coh.pct:'', mhr: td?td.meanHR:'', mhrr
+    };
+  }
+  // Costruisce il CSV stile emWave Pro Plus importabile da HRV Self Coherence.
+  // NESSUNA anagrafica: solo il codice paziente come "Last Name" (pseudonimo).
+  function exportEmwave(){
+    const tonic  = rr.filter(o=>o.ph==='tonic');
+    const phasic = rr.filter(o=>o.ph==='phasic');
+    if(tonic.length<10 && phasic.length<10){ status('Test senza dati sufficienti da esportare.', true); return false; }
+    const sess = [];
+    if(tonic.length)  sess.push({ type:'',              m: phaseMeta(tonic)  });
+    if(phasic.length) sess.push({ type:'Deep Breathing', m: phaseMeta(phasic) });
+    const dateStr = new Date().toISOString().slice(0,10);
+    const num = (v,d)=> (v===''||v==null||isNaN(v)) ? '' : (+v).toFixed(d==null?0:d);
+    // colonne: 0=label; sessione i → IBI col 1+i*2, attributo col 2+i*2
+    const labels = [
+      ['First Name',            ()=> '' ],
+      ['Last Name',             ()=> testCode ],
+      ['Date of Birth',         ()=> '' ],
+      ['Gender',                ()=> '' ],
+      ['Date Created',          ()=> dateStr ],
+      ['Type',                  s => s.type ],
+      ['SDNN',                  s => num(s.m.sdnn,1) ],
+      ['RMSSD',                 s => num(s.m.rmssd,1) ],
+      ['Total Power',           s => num(s.m.tp,0) ],
+      ['Very Low Frequency',    s => num(s.m.vlf,0) ],
+      ['Low Frequency',         s => num(s.m.lf,0) ],
+      ['High Frequency',        s => num(s.m.hf,0) ],
+      ['Normal Coherence',      s => num(s.m.coh,1) ],
+      ['Mean Heart Rate',       s => num(s.m.mhr,0) ],
+      ['Mean Heart Rate Range', s => num(s.m.mhrr,1) ]
+    ];
+    const ncol = 1 + sess.length*2, rows = [];
+    for(const [label,fn] of labels){
+      const row = new Array(ncol).fill('');
+      row[0] = label;
+      sess.forEach((s,i)=>{ row[1+i*2] = fn(s); });
+      rows.push(row);
+    }
+    const hrow = new Array(ncol).fill('');
+    sess.forEach((s,i)=>{ hrow[1+i*2]='LiveIBI'; hrow[2+i*2]='Attribute'; });
+    rows.push(hrow);
+    const maxLen = Math.max.apply(null, sess.map(s=>s.m.ibi.length));
+    for(let r=0;r<maxLen;r++){
+      const row = new Array(ncol).fill('');
+      sess.forEach((s,i)=>{ if(r<s.m.ibi.length){ row[1+i*2]=Math.round(s.m.ibi[r]); row[2+i*2]=s.m.attr[r]; } });
+      rows.push(row);
+    }
+    const csv = rows.map(r=>r.join(',')).join('\r\n');
+    const fname = 'test_HRV_'+((testCode||'paziente').replace(/[^A-Za-z0-9_-]/g,'')||'paziente')+'_'+dateStr+'.csv';
+    dl(fname, csv, 'text/csv');
+    status('File del test esportato: '+fname+'. Invialo al medico.');
+    return true;
+  }
+
   function init(){
     el('hrvConnect').addEventListener('click', connect);
     el('hrvDisconnect').addEventListener('click', disconnect);
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v11';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v12';
     updateConnUI();
   }
-  return { init, sessionStart, sessionEnd, setPaused };
+  return { init, sessionStart, sessionEnd, setPaused,
+           isReady, beginTest, setTestPhase, endTest, exportEmwave };
 })();
 window.HRV = HRV;
 
+/* ================= MODALITÀ TEST CLINICO (tonico 5' + fasico 1') ================= */
+const TestMode = (() => {
+  const el = id => document.getElementById(id);
+  const TONIC_MS = 300000, PHASIC_MS = 60000, BREATH_MS = 10000; // 6 atti/min = ciclo 10 s
+  let raf = null, t0 = 0, phase = null, lastHalf = null;
+
+  function show(which){
+    el('hrvTestSetup').style.display = which==='setup' ? '' : 'none';
+    el('hrvTestRun').style.display   = which==='run'   ? '' : 'none';
+    el('hrvTestDone').style.display  = which==='done'  ? '' : 'none';
+  }
+  function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+  function start(){
+    const code = el('hrvTestCode').value.trim();
+    if(!code){ alert('Inserisci un codice paziente (es. MF-AB12).'); return; }
+    if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
+    if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (vedi indicatore "Intervalli RR: sì") e riprova.'); return; }
+    HRV.beginTest(code);
+    document.body.dataset.hrvTesting = '1';
+    try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
+    try{ WakeLock.acquire(); }catch(e){}
+    show('run');
+    runPhase('tonic');
+  }
+  function runPhase(p){
+    phase = p; t0 = performance.now(); lastHalf = null;
+    HRV.setTestPhase(p);
+    if(p==='tonic'){
+      el('hrvTestPhase').textContent = 'Fase tonica — riposo';
+      el('hrvTestInstr').textContent = 'Seduto comodo, schiena leggermente reclinata, occhi aperti. Rilassati e lascia fluire i pensieri. Non parlare e non muoverti.';
+      el('hrvTestOrb').style.transform = 'scale(1)';
+    } else {
+      el('hrvTestPhase').textContent = 'Fase fasica — respira a 6/min';
+      el('hrvTestInstr').textContent = 'Segui la sfera: inspira mentre si espande, espira mentre si restringe. Respiro lento, regolare, con la pancia.';
+    }
+    loop();
+  }
+  function loop(){
+    const now = performance.now(), elapsed = now - t0;
+    const dur = phase==='tonic' ? TONIC_MS : PHASIC_MS;
+    el('hrvTestCount').textContent = fmt(dur - elapsed);
+    if(phase==='phasic'){
+      const ph = (elapsed % BREATH_MS) / BREATH_MS;          // 0..1
+      const full = (1 - Math.cos(2*Math.PI*ph)) / 2;          // 0..1..0
+      el('hrvTestOrb').style.transform = 'scale('+(0.7 + full*0.9).toFixed(3)+')';
+      const half = ph < 0.5;                                  // prima metà = inspira
+      if(half !== lastHalf){ lastHalf = half; try{ Voice.say(half ? 'Inspira' : 'Espira'); }catch(e){} }
+    }
+    if(elapsed >= dur){
+      if(phase==='tonic'){ runPhase('phasic'); return; }
+      finish(); return;
+    }
+    raf = requestAnimationFrame(loop);
+  }
+  function stopCommon(){
+    HRV.endTest();
+    delete document.body.dataset.hrvTesting;
+    if(raf){ cancelAnimationFrame(raf); raf=null; }
+    try{ WakeLock.release(); }catch(e){}
+    try{ speechSynthesis.cancel(); }catch(e){}
+  }
+  function finish(){ stopCommon(); show('done'); }
+  function abort(){
+    if(!confirm('Interrompere il test? I dati raccolti finora andranno persi.')) return;
+    stopCommon(); show('setup');
+  }
+  function init(){
+    if(!el('hrvTestStart')) return;
+    el('hrvTestStart').addEventListener('click', start);
+    el('hrvTestAbort').addEventListener('click', abort);
+    el('hrvTestExport').addEventListener('click', ()=>{ HRV.exportEmwave(); });
+    el('hrvTestNew').addEventListener('click', ()=> show('setup'));
+  }
+  return { init };
+})();
+
 App.init();
 HRV.init();
+TestMode.init();
 
 /* ---------- SERVICE WORKER (installazione + offline) ---------- */
 if('serviceWorker' in navigator){
