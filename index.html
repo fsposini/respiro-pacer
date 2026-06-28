@@ -731,6 +731,16 @@ const HRV = (() => {
   // funzionano su entrambi i motori.
   const HR_SERVICE = 'heart_rate', HR_CHAR = 'heart_rate_measurement';
   const STORE = 'respiroPacer.hrv.v1';
+  // ---- Piattaforma (per i suggerimenti corretti su browser/Bluetooth) ----
+  // iOS: Safari NON ha Web Bluetooth → serve Bluefy. Android/desktop: Chrome lo
+  // supporta nativamente, nessun browser speciale.
+  const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const IS_ANDROID = /android/i.test(navigator.userAgent);
+  const BROWSER_HINT = IS_IOS
+    ? 'Su iPhone/iPad usa l\'app Bluefy (Safari non supporta il Bluetooth web).'
+    : IS_ANDROID
+      ? 'Su Android apri questa pagina con Google Chrome.'
+      : 'Su PC usa Chrome o Edge.';
   // ---- Invio del test al medico ----
   // URL della Web App Google Apps Script che riceve il CSV e lo deposita nel Drive
   // del Dott. Sposini (cartella unica "HRV pazienti"). Finché è vuoto, il bottone
@@ -812,7 +822,7 @@ const HRV = (() => {
   }
   async function connect(){
     if(!navigator.bluetooth){
-      status('Web Bluetooth non è supportato in questo browser. Su iPhone usa l\'app Bluefy; su PC usa Chrome o Edge.', true);
+      status('Web Bluetooth non è supportato in questo browser. '+BROWSER_HINT, true);
       logEvent('✗ navigator.bluetooth assente (browser senza Web Bluetooth)');
       return;
     }
@@ -842,7 +852,12 @@ const HRV = (() => {
       logEvent('✗ ['+nm+'] '+m+extra);
       if(nm === 'NotFoundError' && /cancel/i.test(m)) status('Selezione annullata. Premi "Connetti fascia" per riprovare.', true);
       else if(nm === 'NotFoundError') status('Nessun dispositivo trovato: indossa la fascia (elettrodi inumiditi) e riprova.', true);
-      else if(nm === 'SecurityError' || nm === 'NotAllowedError' || /2/.test(m)) status('Bluetooth non disponibile per l\'app. Su iPhone: Impostazioni → Bluefy → attiva Bluetooth; verifica che il Bluetooth del telefono sia acceso. Poi riprova.', true);
+      else if(nm === 'SecurityError' || nm === 'NotAllowedError' || /2/.test(m)){
+        const fix = IS_IOS ? 'Impostazioni → Bluefy → attiva Bluetooth'
+                  : IS_ANDROID ? 'Impostazioni → App → Chrome → Autorizzazioni → consenti Dispositivi nelle vicinanze/Bluetooth'
+                  : 'consenti l\'accesso Bluetooth al browser';
+        status('Bluetooth non disponibile per l\'app. '+fix+'; verifica che il Bluetooth del telefono sia acceso. Poi riprova.', true);
+      }
       else status('Errore ['+nm+']: '+m, true);
     }
   }
@@ -1537,7 +1552,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v17';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v18';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
