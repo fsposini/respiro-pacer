@@ -303,6 +303,9 @@
     .hrv-test h3{margin:0 0 10px;font-size:1rem}
     .hrv-test label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px}
     .hrv-test input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:1rem;box-sizing:border-box}
+    .hrv-test-fields{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:9px;margin-top:10px}
+    .hrv-test-fields input,.hrv-test-fields select{width:100%;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box}
+    .hrv-test-fields select{appearance:none}
     .hrv-test-prep{margin:10px 0;font-size:.8rem}
     .hrv-test-prep summary{cursor:pointer;color:var(--accent2,#2bd4a8)}
     .hrv-test-prep ul{margin:8px 0 0;padding-left:18px;color:var(--muted);line-height:1.5}
@@ -327,6 +330,21 @@
     <div id="hrvTestSetup">
       <label for="hrvTestCode">Codice paziente (pseudonimo, nessun nome)</label>
       <input id="hrvTestCode" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false">
+      <div class="hrv-test-fields">
+        <div>
+          <label for="hrvTestSex">Sesso</label>
+          <select id="hrvTestSex"><option value="">—</option><option value="M">Uomo</option><option value="F">Donna</option></select>
+        </div>
+        <div>
+          <label for="hrvTestAge">Età</label>
+          <input id="hrvTestAge" type="number" inputmode="numeric" min="10" max="110" placeholder="anni">
+        </div>
+        <div>
+          <label for="hrvTestPop">Categoria</label>
+          <select id="hrvTestPop"><option value="comune">Comune</option><option value="atleti">Atleta (sport intenso)</option><option value="fumatori">Fumatore</option></select>
+        </div>
+      </div>
+      <div class="hrv-test-hint" style="margin-top:6px">Sesso, età e categoria servono al medico per confrontare i valori con le scale di riferimento corrette. Nessun nome viene inviato.</div>
       <details class="hrv-test-prep">
         <summary>Preparazione — leggere prima di iniziare</summary>
         <ul>
@@ -351,7 +369,7 @@
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
       <label class="hrv-consent">
         <input type="checkbox" id="hrvConsent">
-        <span>Autorizzo il <b>Dott. Federico Sposini</b> a ricevere e trattare i miei dati della variabilità cardiaca (HRV) ai fini del <b>controllo clinico da remoto</b>, ai sensi del Reg. UE 2016/679 (GDPR). I dati sono trasmessi in forma <b>pseudonimizzata</b> (solo codice, nessun nome).</span>
+        <span>Autorizzo il <b>Dott. Federico Sposini</b> a ricevere e trattare i miei dati della variabilità cardiaca (HRV) ai fini del <b>controllo clinico da remoto</b>, ai sensi del Reg. UE 2016/679 (GDPR). I dati sono trasmessi in forma <b>pseudonimizzata</b> (codice, sesso, età e categoria; <b>nessun nome</b>).</span>
       </label>
       <button id="hrvTestSend" class="btn" disabled>Invia i dati al medico</button>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
@@ -758,6 +776,7 @@ const HRV = (() => {
   let lastCohAt = 0;                          // throttle del ricalcolo
   // ---- Stato modalità Test clinico ----
   let testCode = '';                          // codice paziente (pseudonimo, NO anagrafica)
+  let testSex = '', testAge = '', testPop = '';// attributi clinici (NON identificativi)
   let testPhase = null;                       // 'tonic' | 'phasic' | null → etichetta ogni RR
   let consentMark = '';                       // traccia del consenso (es. "Sì · 2026-06-28T…")
   function setConsent(on){ consentMark = on ? ('Sì · '+new Date().toISOString()) : ''; }
@@ -1373,8 +1392,9 @@ const HRV = (() => {
   /* ----------------------- Modalità Test clinico ----------------------- */
   // Pronta = fascia connessa che sta inviando intervalli RR.
   function isReady(){ return connected && rrSeen; }
-  function beginTest(code){
+  function beginTest(code, sex, age, pop){
     testCode = code || ''; testPhase = null; consentMark = '';
+    testSex = sex || ''; testAge = (age!=null?String(age):''); testPop = pop || '';
     rr = []; tcum = 0; paused = false; capturing = true;
     cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
@@ -1417,7 +1437,9 @@ const HRV = (() => {
       ['First Name',            ()=> '' ],
       ['Last Name',             ()=> testCode ],
       ['Date of Birth',         ()=> '' ],
-      ['Gender',                ()=> '' ],
+      ['Gender',                ()=> testSex ],
+      ['Age',                   ()=> testAge ],
+      ['Population',            ()=> testPop ],
       ['Date Created',          ()=> dateStr ],
       ['Type',                  s => s.type ],
       ['SDNN',                  s => num(s.m.sdnn,1) ],
@@ -1515,7 +1537,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v15';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v16';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -1540,9 +1562,14 @@ const TestMode = (() => {
   function start(){
     const code = el('hrvTestCode').value.trim();
     if(!code){ alert('Inserisci un codice paziente (es. MF-AB12).'); return; }
+    const sex = el('hrvTestSex').value;
+    const age = el('hrvTestAge').value.trim();
+    const pop = el('hrvTestPop').value || 'comune';
+    if(!sex){ alert('Seleziona il sesso: serve al medico per la scala di riferimento corretta.'); return; }
+    if(!age || +age<10 || +age>110){ alert('Inserisci l\'età in anni (10–110).'); return; }
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (vedi indicatore "Intervalli RR: sì") e riprova.'); return; }
-    HRV.beginTest(code);
+    HRV.beginTest(code, sex, age, pop);
     document.body.dataset.hrvTesting = '1';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
     try{ WakeLock.acquire(); }catch(e){}
