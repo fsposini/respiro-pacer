@@ -1537,7 +1537,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v16';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v17';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -1551,6 +1551,18 @@ const TestMode = (() => {
   const el = id => document.getElementById(id);
   const TONIC_MS = 300000, PHASIC_MS = 60000, BREATH_MS = 10000; // 6 atti/min = ciclo 10 s
   let raf = null, t0 = 0, phase = null, lastHalf = null;
+  // Profilo paziente memorizzato in locale (SOLO sul telefono del paziente): evita di
+  // reinserire codice/sesso/età/categoria ad ogni test. Nessun nome, mai trasmesso.
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1';
+  function saveProfile(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  function loadProfile(){
+    let p=null; try{ p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); }catch(e){}
+    if(!p) return;
+    if(p.code && el('hrvTestCode')) el('hrvTestCode').value=p.code;
+    if(p.sex  && el('hrvTestSex'))  el('hrvTestSex').value=p.sex;
+    if(p.age  && el('hrvTestAge'))  el('hrvTestAge').value=p.age;
+    if(p.pop  && el('hrvTestPop'))  el('hrvTestPop').value=p.pop;
+  }
 
   function show(which){
     el('hrvTestSetup').style.display = which==='setup' ? '' : 'none';
@@ -1569,6 +1581,7 @@ const TestMode = (() => {
     if(!age || +age<10 || +age>110){ alert('Inserisci l\'età in anni (10–110).'); return; }
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (vedi indicatore "Intervalli RR: sì") e riprova.'); return; }
+    saveProfile({ code, sex, age, pop });   // ricorda i dati per i test successivi
     HRV.beginTest(code, sex, age, pop);
     document.body.dataset.hrvTesting = '1';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
@@ -1620,6 +1633,7 @@ const TestMode = (() => {
   }
   function init(){
     if(!el('hrvTestStart')) return;
+    loadProfile();   // precarica codice/sesso/età/categoria dai test precedenti
     el('hrvTestStart').addEventListener('click', start);
     el('hrvTestAbort').addEventListener('click', abort);
     const consent = el('hrvConsent'), sendBtn = el('hrvTestSend');
