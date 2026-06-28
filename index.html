@@ -1368,17 +1368,17 @@ const HRV = (() => {
     const filt = filterSeries(beats);              // {tcum,rr,kept}
     const nn = filt.filter(o=>o.kept).map(o=>o.rr);
     const td = nn.length>=4 ? timeDomain(nn) : null;
-    const coh = coherenceCore(nn);
     let mhrr = '';
     if(nn.length>=2){ const mn=Math.min.apply(null,nn), mx=Math.max.apply(null,nn); mhrr=(60000/mn)-(60000/mx); }
     // MANUALE PURO: nessun battito pre-marcato come artefatto (tutti 'L') → sarà il
-    // medico a escludere gli ectopici a video nell'HRV test. Frequenze lasciate in
-    // bianco: le calcola (e calibra su scala emWave) l'HRV test dai battiti puliti.
+    // medico a escludere gli ectopici a video nell'HRV test. Frequenze E coerenza
+    // lasciate in bianco: le calcola (e calibra su scala emWave) l'HRV test dai
+    // battiti puliti, ricalcolandole ad ogni correzione manuale.
     return {
       ibi: filt.map(o=>o.rr), attr: filt.map(()=>'L'),
       sdnn: td?td.sdnn:'', rmssd: td?td.rmssd:'',
       tp: '', vlf: '', lf: '', hf: '',
-      coh: coh?coh.pct:'', mhr: td?td.meanHR:'', mhrr
+      coh: '', mhr: td?td.meanHR:'', mhrr
     };
   }
   // Costruisce il CSV stile emWave Pro Plus importabile da HRV Self Coherence.
@@ -1439,7 +1439,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v13';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v14';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
