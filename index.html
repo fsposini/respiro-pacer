@@ -315,6 +315,11 @@
     .hrv-test-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:2px 0}
     .hrv-test-instr{font-size:.85rem;color:var(--muted);max-width:340px;margin:0 auto 12px;line-height:1.45}
     .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
+    .hrv-consent{display:flex;gap:9px;align-items:flex-start;text-align:left;font-size:.78rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 12px;margin:0 auto 12px;max-width:380px}
+    .hrv-consent input{margin-top:2px;flex:0 0 auto;width:18px;height:18px}
+    .hrv-consent b{color:var(--text,#e8eef0)}
+    .hrv-test .btn:disabled{opacity:.45;cursor:not-allowed}
+    .hrv-send-status{font-size:.8rem;margin:10px auto 4px;max-width:380px;min-height:1.1em}
     .hrv-test .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
   </style>
   <div class="hrv-test">
@@ -343,8 +348,13 @@
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="hrvTestDone" style="display:none">
-      <div class="hrv-test-doneMsg">✓ Test completato. Esporta il file e invialo al medico.</div>
-      <button id="hrvTestExport" class="btn">Esporta file per il medico</button>
+      <div class="hrv-test-doneMsg">✓ Test completato.</div>
+      <label class="hrv-consent">
+        <input type="checkbox" id="hrvConsent">
+        <span>Autorizzo il <b>Dott. Federico Sposini</b> a ricevere e trattare i miei dati della variabilità cardiaca (HRV) ai fini del <b>controllo clinico da remoto</b>, ai sensi del Reg. UE 2016/679 (GDPR). I dati sono trasmessi in forma <b>pseudonimizzata</b> (solo codice, nessun nome).</span>
+      </label>
+      <button id="hrvTestSend" class="btn" disabled>Invia i dati al medico</button>
+      <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
     </div>
   </div>
@@ -703,6 +713,12 @@ const HRV = (() => {
   // funzionano su entrambi i motori.
   const HR_SERVICE = 'heart_rate', HR_CHAR = 'heart_rate_measurement';
   const STORE = 'respiroPacer.hrv.v1';
+  // ---- Invio del test al medico ----
+  // URL della Web App Google Apps Script che riceve il CSV e lo deposita nel Drive
+  // del Dott. Sposini (cartella unica "HRV pazienti"). Finché è vuoto, il bottone
+  // "Invia" ripiega sulla tendina di condivisione iOS. Incollare qui l'URL dopo il
+  // deploy dello script (…/exec).
+  const DOCTOR_UPLOAD_URL = '';
 
   // ---- Parametri filtro ----
   const MED_WIN = 9, THRESH = 0.20, RR_MIN = 300, RR_MAX = 2000;
@@ -743,6 +759,8 @@ const HRV = (() => {
   // ---- Stato modalità Test clinico ----
   let testCode = '';                          // codice paziente (pseudonimo, NO anagrafica)
   let testPhase = null;                       // 'tonic' | 'phasic' | null → etichetta ogni RR
+  let consentMark = '';                       // traccia del consenso (es. "Sì · 2026-06-28T…")
+  function setConsent(on){ consentMark = on ? ('Sì · '+new Date().toISOString()) : ''; }
 
   function logEvent(msg){
     const elLog = el('hrvLog'); if(!elLog) return;
@@ -1356,7 +1374,7 @@ const HRV = (() => {
   // Pronta = fascia connessa che sta inviando intervalli RR.
   function isReady(){ return connected && rrSeen; }
   function beginTest(code){
-    testCode = code || ''; testPhase = null;
+    testCode = code || ''; testPhase = null; consentMark = '';
     rr = []; tcum = 0; paused = false; capturing = true;
     cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
@@ -1383,10 +1401,12 @@ const HRV = (() => {
   }
   // Costruisce il CSV stile emWave Pro Plus importabile da HRV Self Coherence.
   // NESSUNA anagrafica: solo il codice paziente come "Last Name" (pseudonimo).
-  function exportEmwave(){
+  // Costruisce il CSV del test (stile emWave Pro Plus) senza inviarlo.
+  // Ritorna {csv, fname} oppure null se i dati sono insufficienti.
+  function buildEmwaveCSV(){
     const tonic  = rr.filter(o=>o.ph==='tonic');
     const phasic = rr.filter(o=>o.ph==='phasic');
-    if(tonic.length<10 && phasic.length<10){ status('Test senza dati sufficienti da esportare.', true); return false; }
+    if(tonic.length<10 && phasic.length<10){ return null; }
     const sess = [];
     if(tonic.length)  sess.push({ type:'',              m: phaseMeta(tonic)  });
     if(phasic.length) sess.push({ type:'Deep Breathing', m: phaseMeta(phasic) });
@@ -1408,7 +1428,9 @@ const HRV = (() => {
       ['High Frequency',        s => num(s.m.hf,0) ],
       ['Normal Coherence',      s => num(s.m.coh,1) ],
       ['Mean Heart Rate',       s => num(s.m.mhr,0) ],
-      ['Mean Heart Rate Range', s => num(s.m.mhrr,1) ]
+      ['Mean Heart Rate Range', s => num(s.m.mhrr,1) ],
+      // riga extra ignorata dal parser dell'HRV test: traccia il consenso col dato
+      ['Consenso trattamento',  ()=> consentMark ]
     ];
     const ncol = 1 + sess.length*2, rows = [];
     for(const [label,fn] of labels){
@@ -1428,8 +1450,62 @@ const HRV = (() => {
     }
     const csv = rows.map(r=>r.join(',')).join('\r\n');
     const fname = 'test_HRV_'+((testCode||'paziente').replace(/[^A-Za-z0-9_-]/g,'')||'paziente')+'_'+dateStr+'.csv';
-    dl(fname, csv, 'text/csv');
-    status('File del test esportato: '+fname+'. Invialo al medico.');
+    return { csv, fname };
+  }
+  // Tendina di condivisione iOS (Web Share Level 2) → l'utente sceglie il canale.
+  // Ripiego: download del file.
+  async function shareCSV(csv, fname){
+    const type = 'text/csv';
+    try{
+      const file = new File([csv], fname, { type });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title:'Dati del test HRV', text:'Dati HRV per il controllo da remoto.' });
+        return true;
+      }
+    }catch(e){ if(e && e.name==='AbortError') return false; /* annullato dall'utente */ }
+    dl(fname, csv, type);
+    return true;
+  }
+  // Invio diretto al Drive del medico via Apps Script (se configurato). Niente
+  // preflight CORS: corpo url-encoded + no-cors. La risposta è opaca, quindi il
+  // successo è "la richiesta è partita"; in caso di errore di rete → fallback share.
+  async function uploadToDoctor(csv, fname){
+    if(!DOCTOR_UPLOAD_URL) return false;
+    const body = new URLSearchParams({
+      fname, data: csv, code: testCode || '',
+      consent: '1', ts: new Date().toISOString()
+    });
+    await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
+    return true;
+  }
+  function sendStatus(msg, warn){
+    const e = el('hrvSendStatus'); if(!e) return;
+    e.textContent = msg; e.style.color = warn ? 'var(--hold)' : 'var(--good, #1b8a5a)';
+  }
+  // Invio completo gestito dal flusso UI (consenso già verificato a monte).
+  async function sendToDoctor(){
+    const built = buildEmwaveCSV();
+    if(!built){ sendStatus('Test senza dati sufficienti da inviare.', true); return false; }
+    if(DOCTOR_UPLOAD_URL){
+      sendStatus('Invio in corso…');
+      try{
+        await uploadToDoctor(built.csv, built.fname);
+        sendStatus('Dati inviati al medico ✓');
+        return true;
+      }catch(e){
+        sendStatus('Connessione assente: apro la condivisione per inviarlo a mano…', true);
+      }
+    }
+    const ok = await shareCSV(built.csv, built.fname);
+    if(ok) sendStatus('Scegli come inviare il file al medico (Drive, AirDrop, ecc.).');
+    return ok;
+  }
+  // Compatibilità: vecchio export = download diretto.
+  function exportEmwave(){
+    const built = buildEmwaveCSV();
+    if(!built){ status('Test senza dati sufficienti da esportare.', true); return false; }
+    dl(built.fname, built.csv, 'text/csv');
+    status('File del test esportato: '+built.fname+'.');
     return true;
   }
 
@@ -1439,11 +1515,12 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v14';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v15';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
-           isReady, beginTest, setTestPhase, endTest, exportEmwave };
+           isReady, beginTest, setTestPhase, endTest, exportEmwave,
+           sendToDoctor, setConsent };
 })();
 window.HRV = HRV;
 
@@ -1518,8 +1595,25 @@ const TestMode = (() => {
     if(!el('hrvTestStart')) return;
     el('hrvTestStart').addEventListener('click', start);
     el('hrvTestAbort').addEventListener('click', abort);
-    el('hrvTestExport').addEventListener('click', ()=>{ HRV.exportEmwave(); });
-    el('hrvTestNew').addEventListener('click', ()=> show('setup'));
+    const consent = el('hrvConsent'), sendBtn = el('hrvTestSend');
+    if(consent && sendBtn){
+      consent.addEventListener('change', ()=>{
+        sendBtn.disabled = !consent.checked;
+        HRV.setConsent(consent.checked);
+      });
+    }
+    if(sendBtn) sendBtn.addEventListener('click', async ()=>{
+      if(!consent || !consent.checked){ return; }
+      sendBtn.disabled = true;
+      try{ await HRV.sendToDoctor(); } finally { sendBtn.disabled = false; }
+    });
+    el('hrvTestNew').addEventListener('click', ()=>{
+      if(consent){ consent.checked = false; }
+      if(sendBtn){ sendBtn.disabled = true; }
+      const ss = el('hrvSendStatus'); if(ss) ss.textContent = '';
+      HRV.setConsent(false);
+      show('setup');
+    });
   }
   return { init };
 })();
