@@ -352,7 +352,14 @@
     .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
     .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
     .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
-    .cam-sig{font-size:.82rem;color:var(--hold);min-height:1.1em;margin-bottom:6px}
+    .cam-preview-wrap{position:relative;width:132px;height:99px;margin:4px auto 8px}
+    .cam-preview{width:132px;height:99px;border-radius:14px;object-fit:cover;background:#000;border:2px solid rgba(120,170,255,.4);display:block}
+    .cam-dot{position:absolute;top:8px;right:8px;width:14px;height:14px;border-radius:50%;background:#777;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+    .cam-dot.ok{background:#1fd17a;box-shadow:0 0 10px #1fd17a}
+    .cam-dot.weak{background:#e8820c}
+    .cam-sig{font-size:.85rem;color:var(--hold);min-height:1.1em;margin-bottom:6px}
+    .cam-stopbtn{margin-top:10px;width:100%;max-width:300px;padding:14px 18px;border:none;border-radius:12px;background:#e0584f;color:#fff;font-size:1.05rem;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(224,88,79,.4)}
+    .cam-stopbtn:active{transform:translateY(1px)}
     .cam-orb-wrap{height:200px;display:flex;align-items:center;justify-content:center;margin:4px 0}
     #camOrb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #aee4ff, #4a90d9 70%);box-shadow:0 0 40px rgba(120,170,255,.5);transform:scale(0.7);transition:transform .05s linear}
     .cam-phase{font-weight:700;font-size:1.1rem;min-height:1.3em}
@@ -459,13 +466,16 @@
       <button id="camStart" class="btn">Avvia allenamento</button>
     </div>
     <div id="camRun" style="display:none">
-      <video id="camVideo" playsinline muted style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
-      <div class="cam-sig" id="camSig">Posiziona il dito sulla fotocamera…</div>
+      <div class="cam-preview-wrap">
+        <video id="camVideo" playsinline muted class="cam-preview"></video>
+        <span class="cam-dot" id="camDot"></span>
+      </div>
+      <div class="cam-sig" id="camSig">Avvicina il dito alla fotocamera…</div>
       <div class="cam-orb-wrap"><div id="camOrb"></div></div>
       <div class="cam-phase" id="camPhase">—</div>
       <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
       <div class="cam-count" id="camCount"></div>
-      <button id="camStop" class="btn ghost">Termina</button>
+      <button id="camStop" class="cam-stopbtn">Termina sessione</button>
     </div>
     <div id="camDone" style="display:none">
       <div id="camSummary"></div>
@@ -1664,7 +1674,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v21';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v22';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -1969,11 +1979,15 @@ const CameraCoherence = (() => {
   let ppg=[];                       // {t, v} rosso medio grezzo
   let acArr=[];                     // {t, ac} segnale detrendizzato
   let rr=[];                        // {t, ibi}
-  let lastPeakT=0, hrEMA=0;
+  let recentIbis=[];                // ultimi IBI accettati (per mediana FC + scarto outlier)
+  let fingerPresent=false;
+  let lastPeakT=0;
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
 
   function show(w){ ['Setup','Run','Done'].forEach(s=>{ const e=el('cam'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  function median(a){ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y), n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
+  function hrNow(){ return recentIbis.length? 60000/median(recentIbis) : 0; }
   function zoneOf(ratio){ if(ratio>=1.0) return {txt:'Alta', col:'#1b8a5a'}; if(ratio>=0.5) return {txt:'Media', col:'#e8820c'}; return {txt:'Bassa', col:'#b3201e'}; }
 
   /* ---- avvio ---- */
@@ -1988,10 +2002,11 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    ppg=[]; acArr=[]; rr=[]; lastPeakT=0; hrEMA=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    ppg=[]; acArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
     try{ WakeLock.acquire(); }catch(e){}
-    el('camSig').textContent='Posiziona il dito sulla fotocamera e resta fermo…';
+    el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
     show('Run'); t0=performance.now();
     sampleLoop(); orbLoop();
@@ -2003,30 +2018,40 @@ const CameraCoherence = (() => {
     try{
       cctx.drawImage(video,0,0,canvas.width,canvas.height);
       const d=cctx.getImageData(16,12,32,24).data;          // ROI centrale 32×24
-      let r=0,c=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; c++; }
-      processSample(now, r/c);
+      let r=0,g=0,bl=0,c=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; bl+=d[i+2]; c++; }
+      processSample(now, r/c, g/c, bl/c);
     }catch(e){}
     sampleRAF=requestAnimationFrame(sampleLoop);
   }
-  function processSample(t, v){
-    ppg.push({t,v}); while(ppg.length>2 && t-ppg[0].t>BASELINE_MS) ppg.shift();
+  function processSample(t, r, g, bl){
+    // Dito presente = obiettivo coperto da un dito → predominanza del rosso.
+    fingerPresent = r>25 && r>g+4 && r>bl+8;
+    if(!fingerPresent){ ppg.length=0; acArr.length=0; return; }
+    ppg.push({t,v:r}); while(ppg.length>2 && t-ppg[0].t>BASELINE_MS) ppg.shift();
+    // valore lisciato (media ultimi 3 campioni) per ridurre il rumore ad alta frequenza
+    let sm=0,sc=0; for(let i=ppg.length-1;i>=0 && sc<3;i--){ sm+=ppg[i].v; sc++; } sm/=sc;
+    // baseline mobile (detrend, high-pass ~0.8 Hz)
     let sum=0,c=0; for(let i=0;i<ppg.length;i++){ sum+=ppg[i].v; c++; }
-    const ac = v - (c?sum/c:v);                              // detrend (high-pass ~0.8 Hz)
+    const ac = sm - (c?sum/c:sm);
     acArr.push({t, ac}); while(acArr.length>2 && t-acArr[0].t>3000) acArr.shift();
     if(acArr.length<3) return;
-    // std recente per soglia adattiva (auto-scala con/ senza flash)
     let m=0; for(const o of acArr) m+=o.ac; m/=acArr.length;
     let vsum=0; for(const o of acArr) vsum+=(o.ac-m)*(o.ac-m); const std=Math.sqrt(vsum/acArr.length);
-    // massimo locale a 3 punti
+    // massimo locale a 3 punti: soglia più alta + refrattario 350ms (max ~170 bpm)
     const a=acArr[acArr.length-3], b=acArr[acArr.length-2], cc=acArr[acArr.length-1];
-    if(b.ac>a.ac && b.ac>=cc.ac && b.ac> Math.max(0.5, 0.8*std) && (b.t-lastPeakT)>300){
-      if(lastPeakT){ const ibi=b.t-lastPeakT; if(ibi>300 && ibi<2000) onBeat(b.t, ibi); }
+    if(b.ac>a.ac && b.ac>=cc.ac && b.ac> Math.max(0.7, 1.0*std) && (b.t-lastPeakT)>350){
+      if(lastPeakT){ acceptBeat(b.t, b.t-lastPeakT); }
       lastPeakT=b.t;
     }
   }
-  function onBeat(t, ibi){
+  // Accetta un battito solo se l'IBI è fisiologico e coerente con quelli recenti
+  // (scarta i salti = falsi picchi che facevano impazzire la FC).
+  function acceptBeat(t, ibi){
+    if(ibi<350 || ibi>1700) return;                          // ~35–170 bpm
+    if(recentIbis.length>=3){ const med=median(recentIbis); if(Math.abs(ibi-med)/med>0.35) return; }
+    recentIbis.push(ibi); if(recentIbis.length>8) recentIbis.shift();
     rr.push({t, ibi}); while(rr.length>2 && t-rr[0].t>70000) rr.shift();
-    const hr=60000/ibi; hrEMA = hrEMA? hrEMA*0.7+hr*0.3 : hr; lastBeatAt=t;
+    lastBeatAt=t;
   }
 
   /* ---- loop respiro + coerenza + timer ---- */
@@ -2036,9 +2061,18 @@ const CameraCoherence = (() => {
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
     if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; try{ Voice.say(bs.text); }catch(e){} }
-    // qualità segnale / FC
-    if(now-lastBeatAt>4000){ el('camSig').textContent='Segnale debole: premi il dito, cerca più luce.'; el('camHR').textContent='—'; }
-    else { el('camSig').textContent=''; el('camHR').textContent=hrEMA?Math.round(hrEMA)+' bpm':'—'; }
+    // stato dito / qualità segnale / FC (mediana = robusta agli artefatti)
+    const dot=el('camDot'), locked=(now-lastBeatAt<3500 && recentIbis.length>=3);
+    if(!fingerPresent){
+      el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
+    } else if(!locked){
+      el('camSig').textContent='Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
+      el('camHR').textContent= recentIbis.length?Math.round(hrNow())+' bpm':'—'; if(dot) dot.className='cam-dot weak';
+    } else {
+      el('camSig').textContent='Dito rilevato ✓ — misurazione in corso';
+      el('camHR').textContent=Math.round(hrNow())+' bpm'; if(dot) dot.className='cam-dot ok';
+    }
     // coerenza ogni 2s
     if(now-lastRecalc>RECALC_MS){
       lastRecalc=now;
