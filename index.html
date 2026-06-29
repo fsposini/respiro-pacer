@@ -603,7 +603,8 @@
         <li>Metodo a sezioni: <b>2 minuti per frequenza</b> (1 minuto di adattamento + 1 di acquisizione), valutando l'aumento di SDNN e la risposta dell'RMSSD.</li>
       </ol>
       <div class="tip">Se la massima potenza LF e la massima pulizia dell'onda non coincidono alla stessa frequenza, entrambe sono valide. Suggerimento circadiano: frequenza leggermente più alta al mattino, leggermente più lenta al pomeriggio/sera.</div>
-      <p>Una volta individuata, impostala nella <b>modalità Statica</b> (es. ciclo da 10 s = 6/min: 5 s inspira + 5 s espira; oppure espirazione più lunga se ti è più naturale) e usala per l'allenamento quotidiano e per l'allenamento con la fotocamera.</p>
+      <p>Una volta individuata, impostala nella <b>modalità Statica</b> (es. ciclo da 10 s = 6/min: 5 s inspira + 5 s espira). Usala per l'allenamento quotidiano e per l'allenamento con la fotocamera.</p>
+      <div class="warn"><b>Coerenza ≠ rilassamento.</b> Nella respirazione di <b>coerenza/risonanza</b> inspirazione ed espirazione hanno la <b>stessa durata, senza pause</b> (respirazione circolare sincrona). L'espirazione più lunga (es. 3:7) appartiene invece alla respirazione <b>rilassante</b>, che ha uno scopo diverso (massimizzare il tono parasimpatico), non quello di alzare la coerenza.</div>
       <a class="guide-top" href="#guideTop">↑ Indice</a>
     </section>
 
@@ -1868,7 +1869,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v24';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v25';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
