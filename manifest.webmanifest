@@ -1,7 +1,7 @@
 {
-  "name": "Respiro Pacer — Dott. Sposini",
-  "short_name": "Respiro Pacer",
-  "description": "Pacer respiratorio per coerenza cardiaca e regolazione del respiro.",
+  "name": "HRV Tool — Dott. Sposini",
+  "short_name": "HRV Tool",
+  "description": "Strumenti per la variabilità della frequenza cardiaca (HRV): pacer del respiro, test tonico/fasico, test del mattino, allenamento di coerenza.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
