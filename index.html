@@ -448,7 +448,7 @@
   <div class="hrv-cam">
     <h3>📷 Allenamento coerenza — fotocamera</h3>
     <div id="camSetup">
-      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore. Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia. Su Android si accende il flash da solo; su iPhone tieniti in <b>buona luce</b>.</div>
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore. La sfera segue la <b>frequenza di risonanza che hai impostato nel pacer qui sopra</b> (inspirazione/espirazione). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia. Su Android si accende il flash da solo; su iPhone tieniti in <b>buona luce</b>.</div>
       <label>Durata</label>
       <div class="cam-durs" id="camDurs">
         <button type="button" data-min="3" class="btn ghost">3 min</button>
@@ -683,6 +683,16 @@ const App = (() => {
   }
   function fullnessFor(name,p){const ease=x=>0.5-0.5*Math.cos(Math.PI*x);
     if(name==='inhale')return ease(p);if(name==='exhale')return 1-ease(p);if(name==='holdFull')return 1;return 0;}
+  // Stato del respiro (pieno 0-1, fase, testo) a un dato tempo, secondo la sequenza
+  // di risonanza IMPOSTATA dall'utente (inspirazione/espirazione/pause). Riusata
+  // dall'allenamento con fotocamera per pulsare alla frequenza personale, NON 6/min.
+  function breathStateAt(ms){
+    const s=staticSeq(), cyc=s.reduce((a,b)=>a+b.dur,0);
+    if(cyc<=0) return {full:0,name:'inhale',text:phaseText.inhale,cycleMs:0};
+    let t=(ms/1000)%cyc;
+    for(const ph of s){ if(t<ph.dur){ const p=ph.dur>0?t/ph.dur:1; return {full:fullnessFor(ph.name,p),name:ph.name,text:phaseText[ph.name],cycleMs:cyc*1000}; } t-=ph.dur; }
+    const last=s[s.length-1]; return {full:fullnessFor(last.name,1),name:last.name,text:phaseText[last.name],cycleMs:cyc*1000};
+  }
 
   /* frequenza SEMPRE visibile: calcolo da impostazioni (idle) o live (run) */
   function updateFreqDisplay(){
@@ -812,7 +822,7 @@ const App = (() => {
     el('voiceSelect').addEventListener('change',saveSettings);
     updateDynCalc();updateFreqDisplay();
   }
-  return{init};
+  return{init, breathStateAt, currentRate};
 })();
 
 /* ================= HRV ENGINE (Polar H10 · Web Bluetooth) ================= */
@@ -1654,7 +1664,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v20';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v21';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2022,10 +2032,10 @@ const CameraCoherence = (() => {
   /* ---- loop respiro + coerenza + timer ---- */
   function orbLoop(){
     const now=performance.now(), elapsed=now-t0;
-    const ph=(elapsed%BREATH_MS)/BREATH_MS, full=(1-Math.cos(2*Math.PI*ph))/2;
-    const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+full*0.9).toFixed(3)+')';
-    const half=ph<0.5;
-    if(half!==lastHalf){ lastHalf=half; el('camPhase').textContent=half?'Inspira':'Espira'; try{ Voice.say(half?'Inspira':'Espira'); }catch(e){} }
+    // Respiro alla frequenza di RISONANZA impostata nel pacer (non 6/min fisso)
+    const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
+    const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
+    if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; try{ Voice.say(bs.text); }catch(e){} }
     // qualità segnale / FC
     if(now-lastBeatAt>4000){ el('camSig').textContent='Segnale debole: premi il dito, cerca più luce.'; el('camHR').textContent='—'; }
     else { el('camSig').textContent=''; el('camHR').textContent=hrEMA?Math.round(hrEMA)+' bpm':'—'; }
