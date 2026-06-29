@@ -344,6 +344,26 @@
     .morn-trend{margin-top:14px}
     .morn-trend svg{width:100%;height:auto;display:block;background:rgba(0,0,0,.2);border-radius:10px}
     .morn-trend .lbl{font-size:.72rem;color:var(--muted);margin-top:6px}
+    /* ---- Allenamento coerenza con fotocamera ---- */
+    .hrv-cam{margin-top:14px;padding:14px;border-radius:16px;background:rgba(120,170,255,.07);border:1px solid rgba(120,170,255,.26);text-align:center}
+    .hrv-cam h3{margin:0 0 10px;font-size:1rem}
+    .hrv-cam .btn{margin-top:8px}
+    .hrv-cam .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+    .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+    .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
+    .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
+    .cam-sig{font-size:.82rem;color:var(--hold);min-height:1.1em;margin-bottom:6px}
+    .cam-orb-wrap{height:200px;display:flex;align-items:center;justify-content:center;margin:4px 0}
+    #camOrb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #aee4ff, #4a90d9 70%);box-shadow:0 0 40px rgba(120,170,255,.5);transform:scale(0.7);transition:transform .05s linear}
+    .cam-phase{font-weight:700;font-size:1.1rem;min-height:1.3em}
+    .cam-live{font-size:.92rem;margin:8px 0;color:var(--muted)}
+    .cam-live b{color:var(--text,#e8eef0)}
+    .cam-zone{display:inline-block;padding:1px 10px;border-radius:16px;font-size:.72rem;font-weight:700;color:#fff;margin-left:4px}
+    .cam-count{font-variant-numeric:tabular-nums;font-size:1.6rem;font-weight:700;margin:2px 0}
+    .cam-sum-chip{display:inline-block;font-weight:800;font-size:18px;padding:7px 18px;border-radius:24px;color:#fff}
+    .cam-sum-row{font-size:1rem;margin:12px 0 4px}
+    .cam-sum-row b{font-size:1.35rem}
+    .cam-sum-sub{font-size:.85rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
   </style>
   <div class="hrv-test">
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
@@ -422,6 +442,34 @@
       <div id="mornVerdict"></div>
       <div id="mornTrend"></div>
       <button id="mornNew" class="btn ghost">Chiudi</button>
+    </div>
+  </div>
+
+  <div class="hrv-cam">
+    <h3>📷 Allenamento coerenza — fotocamera</h3>
+    <div id="camSetup">
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore. Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia. Su Android si accende il flash da solo; su iPhone tieniti in <b>buona luce</b>.</div>
+      <label>Durata</label>
+      <div class="cam-durs" id="camDurs">
+        <button type="button" data-min="3" class="btn ghost">3 min</button>
+        <button type="button" data-min="5" class="btn ghost cam-sel">5 min</button>
+        <button type="button" data-min="10" class="btn ghost">10 min</button>
+        <button type="button" data-min="0" class="btn ghost">Libero</button>
+      </div>
+      <button id="camStart" class="btn">Avvia allenamento</button>
+    </div>
+    <div id="camRun" style="display:none">
+      <video id="camVideo" playsinline muted style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
+      <div class="cam-sig" id="camSig">Posiziona il dito sulla fotocamera…</div>
+      <div class="cam-orb-wrap"><div id="camOrb"></div></div>
+      <div class="cam-phase" id="camPhase">—</div>
+      <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
+      <div class="cam-count" id="camCount"></div>
+      <button id="camStop" class="btn ghost">Termina</button>
+    </div>
+    <div id="camDone" style="display:none">
+      <div id="camSummary"></div>
+      <button id="camNew" class="btn ghost">Chiudi</button>
     </div>
   </div>
 
@@ -1606,12 +1654,12 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v19';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v20';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent, beginMorning, endMorning };
+           sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore };
 })();
 window.HRV = HRV;
 
@@ -1895,10 +1943,160 @@ const MorningTest = (() => {
   return { init };
 })();
 
+/* ============ ALLENAMENTO COERENZA CON FOTOCAMERA (PPG dal dito) ============ */
+/* Sorgente del battito = fotocamera (fotopletismografia): per ALLENARE la coerenza */
+/* ovunque, senza fascia. NON è una misura di precisione. Su Android usa il flash;   */
+/* su iPhone il web non controlla il flash → serve buona luce. Riusa il calcolo di   */
+/* coerenza HeartMath del modulo HRV (HRV.cohOf).                                     */
+const CameraCoherence = (() => {
+  const el = id => document.getElementById(id);
+  const BREATH_MS = 10000;          // 6 atti/min = risonanza
+  const COH_WIN_MS = 64000, RECALC_MS = 2000;
+  const BASELINE_MS = 1200;         // detrend: rimuove deriva/respiro, tiene il polso
+  let chosenMin = 5;
+  let stream=null, track=null, video=null, canvas=null, cctx=null;
+  let sampleRAF=null, orbRAF=null, t0=0, lastHalf=null, lastRecalc=0;
+  let ppg=[];                       // {t, v} rosso medio grezzo
+  let acArr=[];                     // {t, ac} segnale detrendizzato
+  let rr=[];                        // {t, ibi}
+  let lastPeakT=0, hrEMA=0;
+  let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
+
+  function show(w){ ['Setup','Run','Done'].forEach(s=>{ const e=el('cam'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
+  function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  function zoneOf(ratio){ if(ratio>=1.0) return {txt:'Alta', col:'#1b8a5a'}; if(ratio>=0.5) return {txt:'Media', col:'#e8820c'}; return {txt:'Bassa', col:'#b3201e'}; }
+
+  /* ---- avvio ---- */
+  async function start(){
+    if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
+    if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Questo browser non dà accesso alla fotocamera.'); return; }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:320}, height:{ideal:240} }, audio:false });
+    }catch(e){ alert('Fotocamera non disponibile ('+((e&&e.name)||e)+'). Consenti l\'accesso alla fotocamera e riprova.'); return; }
+    track = stream.getVideoTracks()[0];
+    try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
+    video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
+    canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
+    ppg=[]; acArr=[]; rr=[]; lastPeakT=0; hrEMA=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
+    try{ WakeLock.acquire(); }catch(e){}
+    el('camSig').textContent='Posiziona il dito sulla fotocamera e resta fermo…';
+    el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
+    show('Run'); t0=performance.now();
+    sampleLoop(); orbLoop();
+  }
+
+  /* ---- campionamento PPG e rilevamento battito ---- */
+  function sampleLoop(){
+    const now=performance.now();
+    try{
+      cctx.drawImage(video,0,0,canvas.width,canvas.height);
+      const d=cctx.getImageData(16,12,32,24).data;          // ROI centrale 32×24
+      let r=0,c=0; for(let i=0;i<d.length;i+=4){ r+=d[i]; c++; }
+      processSample(now, r/c);
+    }catch(e){}
+    sampleRAF=requestAnimationFrame(sampleLoop);
+  }
+  function processSample(t, v){
+    ppg.push({t,v}); while(ppg.length>2 && t-ppg[0].t>BASELINE_MS) ppg.shift();
+    let sum=0,c=0; for(let i=0;i<ppg.length;i++){ sum+=ppg[i].v; c++; }
+    const ac = v - (c?sum/c:v);                              // detrend (high-pass ~0.8 Hz)
+    acArr.push({t, ac}); while(acArr.length>2 && t-acArr[0].t>3000) acArr.shift();
+    if(acArr.length<3) return;
+    // std recente per soglia adattiva (auto-scala con/ senza flash)
+    let m=0; for(const o of acArr) m+=o.ac; m/=acArr.length;
+    let vsum=0; for(const o of acArr) vsum+=(o.ac-m)*(o.ac-m); const std=Math.sqrt(vsum/acArr.length);
+    // massimo locale a 3 punti
+    const a=acArr[acArr.length-3], b=acArr[acArr.length-2], cc=acArr[acArr.length-1];
+    if(b.ac>a.ac && b.ac>=cc.ac && b.ac> Math.max(0.5, 0.8*std) && (b.t-lastPeakT)>300){
+      if(lastPeakT){ const ibi=b.t-lastPeakT; if(ibi>300 && ibi<2000) onBeat(b.t, ibi); }
+      lastPeakT=b.t;
+    }
+  }
+  function onBeat(t, ibi){
+    rr.push({t, ibi}); while(rr.length>2 && t-rr[0].t>70000) rr.shift();
+    const hr=60000/ibi; hrEMA = hrEMA? hrEMA*0.7+hr*0.3 : hr; lastBeatAt=t;
+  }
+
+  /* ---- loop respiro + coerenza + timer ---- */
+  function orbLoop(){
+    const now=performance.now(), elapsed=now-t0;
+    const ph=(elapsed%BREATH_MS)/BREATH_MS, full=(1-Math.cos(2*Math.PI*ph))/2;
+    const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+full*0.9).toFixed(3)+')';
+    const half=ph<0.5;
+    if(half!==lastHalf){ lastHalf=half; el('camPhase').textContent=half?'Inspira':'Espira'; try{ Voice.say(half?'Inspira':'Espira'); }catch(e){} }
+    // qualità segnale / FC
+    if(now-lastBeatAt>4000){ el('camSig').textContent='Segnale debole: premi il dito, cerca più luce.'; el('camHR').textContent='—'; }
+    else { el('camSig').textContent=''; el('camHR').textContent=hrEMA?Math.round(hrEMA)+' bpm':'—'; }
+    // coerenza ogni 2s
+    if(now-lastRecalc>RECALC_MS){
+      lastRecalc=now;
+      const tail=[]; for(let i=rr.length-1;i>=0;i--){ if(now-rr[i].t>COH_WIN_MS) break; const x=rr[i].ibi; if(x>=300&&x<=2000) tail.push(x); }
+      tail.reverse();
+      const co=(tail.length>=16)?HRV.cohOf(tail):null;
+      if(co){ const z=zoneOf(co.ratio);
+        el('camCoh').textContent=Math.round(co.pct); const zEl=el('camZone'); zEl.textContent=z.txt; zEl.style.background=z.col;
+        cohSum+=co.pct; cohN++; if(co.ratio>=0.5) cohInZone++; if(co.pct>peakCoh) peakCoh=co.pct;
+      }
+    }
+    if(chosenMin>0){
+      const left=chosenMin*60000-elapsed; el('camCount').textContent=fmt(left);
+      if(left<=0){ finish(); return; }
+    } else { el('camCount').textContent=fmt(elapsed)+'  (libero)'; }
+    orbRAF=requestAnimationFrame(orbLoop);
+  }
+
+  /* ---- chiusura e riepilogo ---- */
+  function stopAll(){
+    if(sampleRAF){ cancelAnimationFrame(sampleRAF); sampleRAF=null; }
+    if(orbRAF){ cancelAnimationFrame(orbRAF); orbRAF=null; }
+    try{ if(track){ try{ track.applyConstraints({advanced:[{torch:false}]}); }catch(e){} } }catch(e){}
+    try{ if(stream) stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+    try{ speechSynthesis.cancel(); }catch(e){}
+    try{ WakeLock.release(); }catch(e){}
+    stream=null; track=null;
+  }
+  function finish(){
+    const dur=(performance.now()-t0);
+    stopAll();
+    const avg=cohN?cohSum/cohN:0, inZone=cohN?cohInZone/cohN*100:0;
+    let lvl, col;
+    if(avg>=50){ lvl='Coerenza alta'; col='#1b8a5a'; }
+    else if(avg>=30){ lvl='Coerenza media'; col='#e8820c'; }
+    else { lvl='Coerenza bassa'; col='#b3201e'; }
+    const host=el('camSummary');
+    if(cohN<3){
+      host.innerHTML='<div class="cam-sum-row">Sessione di <b>'+fmt(dur).trim()+'</b>.</div>'
+        +'<div class="cam-sum-sub">Segnale insufficiente per valutare la coerenza: la prossima volta tieni il dito fermo sulla fotocamera, in buona luce (o usa la fascia). L\'allenamento del respiro vale comunque.</div>';
+    } else {
+      host.innerHTML='<div><span class="cam-sum-chip" style="background:'+col+'">'+lvl+'</span></div>'
+        +'<div class="cam-sum-row">Coerenza media <b style="color:'+col+'">'+Math.round(avg)+'</b> · in coerenza il <b>'+Math.round(inZone)+'%</b> del tempo</div>'
+        +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>';
+    }
+    show('Done');
+  }
+  function stop(){ if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish(); }
+
+  function init(){
+    if(!el('camStart')) return;
+    el('camDurs').addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      chosenMin=+b.getAttribute('data-min');
+      [].forEach.call(el('camDurs').children, x=>x.classList.toggle('cam-sel', x===b));
+    });
+    el('camStart').addEventListener('click', start);
+    el('camStop').addEventListener('click', stop);
+    el('camNew').addEventListener('click', ()=>{ stopAll(); show('Setup'); });
+  }
+  return { init };
+})();
+
 App.init();
 HRV.init();
 TestMode.init();
 MorningTest.init();
+CameraCoherence.init();
 
 /* ---------- SERVICE WORKER (installazione + offline) ---------- */
 if('serviceWorker' in navigator){
