@@ -455,7 +455,7 @@
   <div class="hrv-cam">
     <h3>📷 Allenamento coerenza — fotocamera</h3>
     <div id="camSetup">
-      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore. La sfera segue la <b>frequenza di risonanza che hai impostato nel pacer qui sopra</b> (inspirazione/espirazione). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia. Su Android si accende il flash da solo; su iPhone tieniti in <b>buona luce</b>.</div>
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer qui sopra</b>. Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
       <label>Durata</label>
       <div class="cam-durs" id="camDurs">
         <button type="button" data-min="3" class="btn ghost">3 min</button>
@@ -1674,7 +1674,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v22';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v23';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -1976,18 +1976,17 @@ const CameraCoherence = (() => {
   let chosenMin = 5;
   let stream=null, track=null, video=null, canvas=null, cctx=null;
   let sampleRAF=null, orbRAF=null, t0=0, lastHalf=null, lastRecalc=0;
-  let ppg=[];                       // {t, v} rosso medio grezzo
-  let acArr=[];                     // {t, ac} segnale detrendizzato
+  let raw=[];                       // {t, v} canale PPG grezzo (verde o rosso)
+  let bpArr=[];                     // {t, bp} segnale filtrato passa-banda
   let rr=[];                        // {t, ibi}
-  let recentIbis=[];                // ultimi IBI accettati (per mediana FC + scarto outlier)
-  let fingerPresent=false;
-  let lastPeakT=0;
+  let recentIbis=[];                // ultimi IBI accettati (per scarto outlier)
+  let fingerPresent=false, lastPeakT=0;
+  let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
 
   function show(w){ ['Setup','Run','Done'].forEach(s=>{ const e=el('cam'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
   function median(a){ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y), n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
-  function hrNow(){ return recentIbis.length? 60000/median(recentIbis) : 0; }
   function zoneOf(ratio){ if(ratio>=1.0) return {txt:'Alta', col:'#1b8a5a'}; if(ratio>=0.5) return {txt:'Media', col:'#e8820c'}; return {txt:'Bassa', col:'#b3201e'}; }
 
   /* ---- avvio ---- */
@@ -2002,7 +2001,7 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    ppg=[]; acArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
     try{ WakeLock.acquire(); }catch(e){}
@@ -2024,34 +2023,53 @@ const CameraCoherence = (() => {
     sampleRAF=requestAnimationFrame(sampleLoop);
   }
   function processSample(t, r, g, bl){
-    // Dito presente = obiettivo coperto da un dito → predominanza del rosso.
-    fingerPresent = r>25 && r>g+4 && r>bl+8;
-    if(!fingerPresent){ ppg.length=0; acArr.length=0; return; }
-    ppg.push({t,v:r}); while(ppg.length>2 && t-ppg[0].t>BASELINE_MS) ppg.shift();
-    // valore lisciato (media ultimi 3 campioni) per ridurre il rumore ad alta frequenza
-    let sm=0,sc=0; for(let i=ppg.length-1;i>=0 && sc<3;i--){ sm+=ppg[i].v; sc++; } sm/=sc;
-    // baseline mobile (detrend, high-pass ~0.8 Hz)
-    let sum=0,c=0; for(let i=0;i<ppg.length;i++){ sum+=ppg[i].v; c++; }
-    const ac = sm - (c?sum/c:sm);
-    acArr.push({t, ac}); while(acArr.length>2 && t-acArr[0].t>3000) acArr.shift();
-    if(acArr.length<3) return;
-    let m=0; for(const o of acArr) m+=o.ac; m/=acArr.length;
-    let vsum=0; for(const o of acArr) vsum+=(o.ac-m)*(o.ac-m); const std=Math.sqrt(vsum/acArr.length);
-    // massimo locale a 3 punti: soglia più alta + refrattario 350ms (max ~170 bpm)
-    const a=acArr[acArr.length-3], b=acArr[acArr.length-2], cc=acArr[acArr.length-1];
-    if(b.ac>a.ac && b.ac>=cc.ac && b.ac> Math.max(0.7, 1.0*std) && (b.t-lastPeakT)>350){
-      if(lastPeakT){ acceptBeat(b.t, b.t-lastPeakT); }
-      lastPeakT=b.t;
+    // Dito presente = obiettivo coperto (predominanza del rosso, con torcia molto luminoso).
+    fingerPresent = r>40 && r>g+4 && r>bl+8;
+    if(!fingerPresent){ raw.length=0; bpArr.length=0; hrAuto=0; hrStrength=0; return; }
+    const v = (g>12)? g : r;                                  // VERDE = miglior segnale PPG; ripiego rosso
+    raw.push({t,v}); while(raw.length>2 && t-raw[0].t>8000) raw.shift();
+    // passa-banda: media corta (~160ms) − media lunga (baseline ~1100ms)
+    let lp=0,lc=0; for(let i=raw.length-1;i>=0 && t-raw[i].t<160;i--){ lp+=raw[i].v; lc++; } lp/=(lc||1);
+    let b=0,bc=0; for(let i=0;i<raw.length;i++){ if(t-raw[i].t<=BASELINE_MS){ b+=raw[i].v; bc++; } } b/=(bc||1);
+    bpArr.push({t, bp:lp-b}); while(bpArr.length>2 && t-bpArr[0].t>8000) bpArr.shift();
+    // FC robusta via AUTOCORRELAZIONE, ogni 300ms (immune ai falsi picchi)
+    if(t-lastHrCalc>300){ lastHrCalc=t; const e=estimateHR(); hrAuto=e.hr; hrStrength=e.strength; }
+    // rilevamento battiti per la coerenza, AGGANCIATO alla FC stimata
+    if(bpArr.length<5) return;
+    let m=0; for(const o of bpArr) m+=o.bp; m/=bpArr.length;
+    let vs=0; for(const o of bpArr) vs+=(o.bp-m)*(o.bp-m); const std=Math.sqrt(vs/bpArr.length);
+    const expIbi=(hrAuto>=40&&hrAuto<=180)?60000/hrAuto:0;
+    const refr=expIbi?Math.max(300,0.55*expIbi):350;
+    const a=bpArr[bpArr.length-3], bb=bpArr[bpArr.length-2], cc=bpArr[bpArr.length-1];
+    if(bb.bp>a.bp && bb.bp>=cc.bp && bb.bp> Math.max(0.5, 0.9*std) && (bb.t-lastPeakT)>refr){
+      if(lastPeakT){ acceptBeat(bb.t, bb.t-lastPeakT, expIbi); }
+      lastPeakT=bb.t;
     }
   }
-  // Accetta un battito solo se l'IBI è fisiologico e coerente con quelli recenti
-  // (scarta i salti = falsi picchi che facevano impazzire la FC).
-  function acceptBeat(t, ibi){
-    if(ibi<350 || ibi>1700) return;                          // ~35–170 bpm
-    if(recentIbis.length>=3){ const med=median(recentIbis); if(Math.abs(ibi-med)/med>0.35) return; }
+  function acceptBeat(t, ibi, expIbi){
+    if(ibi<330 || ibi>1700) return;
+    if(expIbi && Math.abs(ibi-expIbi)/expIbi>0.35) return;     // coerente con la FC stimata
     recentIbis.push(ibi); if(recentIbis.length>8) recentIbis.shift();
     rr.push({t, ibi}); while(rr.length>2 && t-rr[0].t>70000) rr.shift();
     lastBeatAt=t;
+  }
+  // FC via autocorrelazione del segnale filtrato: trova la periodicità dominante
+  // (40–176 bpm) e ne ritorna la "forza" (0-1) come indice di qualità del segnale.
+  function estimateHR(){
+    const n=bpArr.length; if(n<40) return {hr:0,strength:0};
+    const dur=(bpArr[n-1].t-bpArr[0].t)/1000; if(dur<4) return {hr:0,strength:0};
+    const dt=dur/(n-1);
+    let mean=0; for(const o of bpArr) mean+=o.bp; mean/=n;
+    const x=bpArr.map(o=>o.bp-mean);
+    let e0=0; for(let i=0;i<n;i++) e0+=x[i]*x[i]; if(e0<=0) return {hr:0,strength:0};
+    const minLag=Math.max(1,Math.round(0.34/dt)), maxLag=Math.round(1.5/dt);
+    let bestLag=-1, best=-1e18;
+    for(let lag=minLag; lag<=maxLag && lag<n; lag++){
+      let s=0; for(let i=0;i+lag<n;i++) s+=x[i]*x[i+lag];
+      if(s>best){ best=s; bestLag=lag; }
+    }
+    if(bestLag<1) return {hr:0,strength:0};
+    return { hr:60/(bestLag*dt), strength:best/e0 };
   }
 
   /* ---- loop respiro + coerenza + timer ---- */
@@ -2061,17 +2079,18 @@ const CameraCoherence = (() => {
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
     if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; try{ Voice.say(bs.text); }catch(e){} }
-    // stato dito / qualità segnale / FC (mediana = robusta agli artefatti)
-    const dot=el('camDot'), locked=(now-lastBeatAt<3500 && recentIbis.length>=3);
+    // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
+    // periodicità è forte → niente numeri sballati tipo 163)
+    const dot=el('camDot'), locked=(hrStrength>0.4 && hrAuto>=40 && hrAuto<=180);
     if(!fingerPresent){
       el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
       el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
     } else if(!locked){
       el('camSig').textContent='Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
-      el('camHR').textContent= recentIbis.length?Math.round(hrNow())+' bpm':'—'; if(dot) dot.className='cam-dot weak';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot weak';
     } else {
       el('camSig').textContent='Dito rilevato ✓ — misurazione in corso';
-      el('camHR').textContent=Math.round(hrNow())+' bpm'; if(dot) dot.className='cam-dot ok';
+      el('camHR').textContent=Math.round(hrAuto)+' bpm'; if(dot) dot.className='cam-dot ok';
     }
     // coerenza ogni 2s
     if(now-lastRecalc>RECALC_MS){
