@@ -324,6 +324,26 @@
     .hrv-test .btn:disabled{opacity:.45;cursor:not-allowed}
     .hrv-send-status{font-size:.8rem;margin:10px auto 4px;max-width:380px;min-height:1.1em}
     .hrv-test .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+    /* ---- Test del mattino ---- */
+    .hrv-morning{margin-top:14px;padding:14px;border-radius:16px;background:rgba(255,193,84,.07);border:1px solid rgba(255,193,84,.28);text-align:center}
+    .hrv-morning h3{margin:0 0 10px;font-size:1rem}
+    .hrv-morning .btn{margin-top:8px}
+    .hrv-morning .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+    .hrv-morning .btn:disabled{opacity:.45;cursor:not-allowed}
+    .morn-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:6px 0}
+    .morn-taco{width:100%;height:auto;display:block;background:rgba(0,0,0,.25);border-radius:10px;margin:8px 0;touch-action:manipulation}
+    .morn-editstat{font-size:.82rem;color:var(--muted);margin:4px 0}
+    .morn-editbtns{display:flex;gap:8px;justify-content:center;margin-bottom:6px}
+    .morn-editbtns .btn{margin-top:0;flex:1;max-width:160px}
+    .morn-verdict{padding:6px 0 4px}
+    .morn-chip{display:inline-block;color:#fff;font-weight:800;font-size:20px;padding:8px 20px;border-radius:26px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+    .morn-rmssd{font-size:1.05rem;margin:12px 0 4px}
+    .morn-rmssd b{font-size:1.5rem}
+    .morn-sub{font-size:.88rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
+    .morn-collect{font-size:1.05rem;font-weight:700;margin:10px 0}
+    .morn-trend{margin-top:14px}
+    .morn-trend svg{width:100%;height:auto;display:block;background:rgba(0,0,0,.2);border-radius:10px}
+    .morn-trend .lbl{font-size:.72rem;color:var(--muted);margin-top:6px}
   </style>
   <div class="hrv-test">
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
@@ -374,6 +394,34 @@
       <button id="hrvTestSend" class="btn" disabled>Invia i dati al medico</button>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
+    </div>
+  </div>
+
+  <div class="hrv-morning">
+    <h3>🌅 Test del mattino — 1 minuto</h3>
+    <div id="mornSetup">
+      <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
+      <button id="mornStart" class="btn">Avvia test del mattino</button>
+    </div>
+    <div id="mornRun" style="display:none">
+      <div class="morn-count" id="mornCount">1:00</div>
+      <div class="hrv-test-hint">Stai fermo e rilassato, respira normalmente. Non parlare.</div>
+      <button id="mornAbort" class="btn ghost">Interrompi</button>
+    </div>
+    <div id="mornEdit" style="display:none">
+      <div class="hrv-test-hint">Pulisci eventuali artefatti: <b>tocca i battiti anomali</b> (extrasistoli, movimento) per escluderli. La linea mostra il tracciato battito-battito.</div>
+      <svg id="mornTaco" viewBox="0 0 720 220" class="morn-taco"></svg>
+      <div class="morn-editstat" id="mornEditStat"></div>
+      <div class="morn-editbtns">
+        <button id="mornAuto" class="btn ghost">Auto-segnala</button>
+        <button id="mornAll" class="btn ghost">Includi tutti</button>
+      </div>
+      <button id="mornSave" class="btn">Salva e calcola la readiness</button>
+    </div>
+    <div id="mornResult" style="display:none">
+      <div id="mornVerdict"></div>
+      <div id="mornTrend"></div>
+      <button id="mornNew" class="btn ghost">Chiudi</button>
     </div>
   </div>
 
@@ -1416,6 +1464,12 @@ const HRV = (() => {
   }
   function setTestPhase(p){ testPhase = p; }
   function endTest(){ capturing = false; testPhase = null; }
+  // ---- Test del mattino: cattura grezza di 1 minuto ----
+  function beginMorning(){
+    testCode = ''; testPhase = 'morning'; consentMark = '';
+    rr = []; tcum = 0; paused = false; capturing = true;
+  }
+  function endMorning(){ capturing = false; testPhase = null; return rr.map(o=>o.rr); }
   // Metriche + colonne IBI/attributo per una fase (emWave-compatibile).
   function phaseMeta(beats){
     const filt = filterSeries(beats);              // {tcum,rr,kept}
@@ -1552,12 +1606,12 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v18';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v19';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent };
+           sendToDoctor, setConsent, beginMorning, endMorning };
 })();
 window.HRV = HRV;
 
@@ -1674,9 +1728,177 @@ const TestMode = (() => {
   return { init };
 })();
 
+/* ================= TEST DEL MATTINO (readiness 1 min con fascia) ================= */
+/* lnRMSSD del giorno confrontato con la banda di normalità personale (media ± DS    */
+/* su finestra mobile 60 gg). Verdetto allenabile/alleggerire/recupero dopo ≥7 misure.*/
+const MorningTest = (() => {
+  const el = id => document.getElementById(id);
+  const KEY = 'respiroPacer.morning.v1';
+  const DUR_MS = 60000, WINDOW_DAYS = 60, MIN_READINGS = 7;
+  const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
+  let beats = [], raf = null, t0 = 0;
+
+  function show(which){
+    ['Setup','Run','Edit','Result'].forEach(s=>{ const e=el('morn'+s); if(e) e.style.display = (s===which)?'':'none'; });
+  }
+  function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  function loadHist(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+  function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
+
+  /* ---- avvio e cattura 1 minuto ---- */
+  function start(){
+    if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
+    if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
+    if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
+    HRV.beginMorning();
+    try{ WakeLock.acquire(); }catch(e){}
+    show('Run'); t0=performance.now(); loop();
+  }
+  function loop(){
+    const left = DUR_MS-(performance.now()-t0);
+    el('mornCount').textContent = fmt(left);
+    if(left<=0){ finishCapture(); return; }
+    raf = requestAnimationFrame(loop);
+  }
+  function stopRaf(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
+  function abort(){
+    if(!confirm('Interrompere il test del mattino? La misura andrà persa.')) return;
+    stopRaf(); HRV.endMorning(); try{ WakeLock.release(); }catch(e){} show('Setup');
+  }
+  function finishCapture(){
+    stopRaf();
+    const rrArr = HRV.endMorning();
+    try{ WakeLock.release(); }catch(e){}
+    if(rrArr.length < 30){ alert('Troppi pochi battiti raccolti ('+rrArr.length+'): verifica il contatto della fascia e ripeti.'); show('Setup'); return; }
+    beats = rrArr.map(v=>{ const hard = v<300||v>2000; return { rr:v, excl:hard, hard }; });
+    show('Edit'); drawTaco(); updateStat();
+  }
+
+  /* ---- editor battiti (pulizia manuale artefatti) ---- */
+  function keptRR(){ return beats.filter(b=>!b.excl).map(b=>b.rr); }
+  function rmssdOf(nn){ if(nn.length<3) return NaN; let ss=0; for(let i=1;i<nn.length;i++){ const d=nn[i]-nn[i-1]; ss+=d*d; } return Math.sqrt(ss/(nn.length-1)); }
+  function scaleY(){ const v=beats.map(b=>b.rr); const lo=Math.min(Math.min.apply(null,v),500), hi=Math.max(Math.max.apply(null,v),1100); return {lo,hi}; }
+  function X(i){ const n=beats.length; return PADX + (n<=1?0:i/(n-1))*(VB_W-2*PADX); }
+  function Y(v,sc){ return PADT + (1-(v-sc.lo)/(sc.hi-sc.lo))*(VB_H-PADT-PADB); }
+  function drawTaco(){
+    const sc=scaleY(); let s='';
+    const kept=beats.map((b,i)=>({b,i})).filter(o=>!o.b.excl);
+    if(kept.length>1) s+='<polyline fill="none" stroke="#2bd4a8" stroke-width="1.6" points="'+kept.map(o=>X(o.i).toFixed(1)+','+Y(o.b.rr,sc).toFixed(1)).join(' ')+'"/>';
+    beats.forEach((b,i)=>{
+      const cx=X(i), cy=Y(b.rr,sc);
+      if(b.excl){
+        s+='<line x1="'+(cx-4).toFixed(1)+'" y1="'+(cy-4).toFixed(1)+'" x2="'+(cx+4).toFixed(1)+'" y2="'+(cy+4).toFixed(1)+'" stroke="#ff5a52" stroke-width="2"/>'
+          +'<line x1="'+(cx-4).toFixed(1)+'" y1="'+(cy+4).toFixed(1)+'" x2="'+(cx+4).toFixed(1)+'" y2="'+(cy-4).toFixed(1)+'" stroke="#ff5a52" stroke-width="2"/>';
+      } else {
+        s+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3.2" fill="#2bd4a8"/>';
+      }
+    });
+    el('mornTaco').innerHTML=s;
+  }
+  function onTacoClick(e){
+    const svg=el('mornTaco'), rect=svg.getBoundingClientRect();
+    const px=(e.clientX-rect.left)/rect.width*VB_W, py=(e.clientY-rect.top)/rect.height*VB_H;
+    const sc=scaleY(); let best=-1, bd=1e9;
+    beats.forEach((b,i)=>{ const dx=X(i)-px, dy=Y(b.rr,sc)-py, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=i; } });
+    if(best<0 || bd>32*32) return;
+    const b=beats[best]; if(b.hard) return;   // fuori range fisiologico: resta sempre escluso
+    b.excl=!b.excl; drawTaco(); updateStat();
+  }
+  function updateStat(){
+    const nn=keptRR(), nExcl=beats.length-nn.length, r=rmssdOf(nn);
+    el('mornEditStat').innerHTML='<b>'+nn.length+'</b> battiti validi · <b style="color:#ff7a73">'+nExcl+'</b> esclusi'+(isNaN(r)?'':' · RMSSD <b>'+r.toFixed(0)+'</b> ms');
+  }
+  function autoFlag(){
+    const vals=beats.map(b=>b.rr), n=vals.length, half=4;
+    beats.forEach((b,i)=>{
+      if(b.hard){ b.excl=true; return; }
+      const a=Math.max(0,i-half), c=Math.min(n,i+half+1), w=vals.slice(a,c).slice().sort((x,y)=>x-y), med=w[w.length>>1];
+      b.excl = med>0 && Math.abs(b.rr-med)/med>0.20;
+    });
+    drawTaco(); updateStat();
+  }
+  function includeAll(){ beats.forEach(b=>b.excl=b.hard); drawTaco(); updateStat(); }
+
+  /* ---- salvataggio, baseline e verdetto ---- */
+  function save(){
+    const nn=keptRR();
+    if(nn.length<20){ alert('Troppi pochi battiti validi dopo la pulizia: ripeti la misura.'); return; }
+    const rmssd=rmssdOf(nn), ln=Math.log(rmssd), hr=60000/(nn.reduce((s,v)=>s+v,0)/nn.length);
+    const d=new Date().toISOString().slice(0,10);
+    let h=loadHist().filter(e=>e.d!==d);            // una misura per giorno (l'ultima vince)
+    h.push({ d, rmssd:+rmssd.toFixed(1), ln, hr:Math.round(hr) });
+    h.sort((a,b)=> a.d<b.d?-1:1);
+    saveHist(h);
+    renderResult(h, {rmssd, ln});
+    show('Result');
+  }
+  function baseline(h){
+    const cutoff=Date.now()-WINDOW_DAYS*864e5;
+    const vals=h.filter(e=>new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
+    if(vals.length<MIN_READINGS) return null;
+    const m=vals.reduce((s,x)=>s+x,0)/vals.length;
+    const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
+    return { m, sd, n:vals.length };
+  }
+  function classify(ln, b){
+    if(ln >= b.m-0.5*b.sd) return { big:'Allenabile', col:'#1b8a5a', sub:'Il sistema nervoso ha recuperato: oggi puoi sostenere carico e picchi di allenamento.' };
+    if(ln >= b.m-1.0*b.sd) return { big:'Alleggerire', col:'#e8820c', sub:'Recupero solo parziale: allenati in leggerezza, evita i picchi di intensità.' };
+    return { big:'Recupero', col:'#b3201e', sub:'HRV sotto la tua norma: sistema affaticato. Oggi dedica la giornata al recupero.' };
+  }
+  function renderResult(h, today){
+    const b=baseline(h), host=el('mornVerdict');
+    if(!b){
+      const need=Math.max(0,MIN_READINGS-h.length);
+      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+h.length+'/'+MIN_READINGS+'</div>'
+        +'<div class="morn-rmssd">RMSSD di oggi: <b>'+today.rmssd.toFixed(0)+'</b> ms</div>'
+        +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>';
+      renderTrend(h, null); return;
+    }
+    const v=classify(today.ln, b), baseRmssd=Math.exp(b.m);
+    host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:'+v.col+'">'+v.big+'</span></div>'
+      +'<div class="morn-rmssd">RMSSD oggi <b style="color:'+v.col+'">'+today.rmssd.toFixed(0)+'</b> ms · tua media '+baseRmssd.toFixed(0)+' ms</div>'
+      +'<div class="morn-sub">'+v.sub+'</div>';
+    renderTrend(h, b);
+  }
+  function renderTrend(h, b){
+    const host=el('mornTrend'), data=h.slice(-30), n=data.length;
+    if(n<2){ host.innerHTML=''; return; }
+    const W=720,H=140,px=8,pt=12,pb=18, lns=data.map(e=>e.ln);
+    let lo=Math.min.apply(null,lns), hi=Math.max.apply(null,lns);
+    if(b){ lo=Math.min(lo,b.m-1.2*b.sd); hi=Math.max(hi,b.m+1.2*b.sd); }
+    const pad=(hi-lo)*0.1||0.2; lo-=pad; hi+=pad;
+    const x=i=> px+(n<=1?0:i/(n-1))*(W-2*px);
+    const y=v=> pt+(1-(v-lo)/(hi-lo))*(H-pt-pb);
+    let s='';
+    if(b){
+      const yTop=y(b.m+0.5*b.sd), yBot=y(b.m-0.5*b.sd);
+      s+='<rect x="'+px+'" y="'+yTop.toFixed(1)+'" width="'+(W-2*px)+'" height="'+(yBot-yTop).toFixed(1)+'" fill="rgba(27,138,90,.22)"/>'
+        +'<line x1="'+px+'" y1="'+y(b.m).toFixed(1)+'" x2="'+(W-px)+'" y2="'+y(b.m).toFixed(1)+'" stroke="rgba(255,255,255,.4)" stroke-dasharray="4 4" stroke-width="1"/>'
+        +'<line x1="'+px+'" y1="'+y(b.m-b.sd).toFixed(1)+'" x2="'+(W-px)+'" y2="'+y(b.m-b.sd).toFixed(1)+'" stroke="rgba(232,130,12,.55)" stroke-dasharray="3 3" stroke-width="1"/>';
+    }
+    s+='<polyline fill="none" stroke="#2bd4a8" stroke-width="2" points="'+data.map((e,i)=>x(i).toFixed(1)+','+y(e.ln).toFixed(1)).join(' ')+'"/>';
+    data.forEach((e,i)=>{ const last=i===n-1; s+='<circle cx="'+x(i).toFixed(1)+'" cy="'+y(e.ln).toFixed(1)+'" r="'+(last?4:2.4)+'" fill="'+(last?'#fff':'#2bd4a8')+'"/>'; });
+    host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'"><rect width="'+W+'" height="'+H+'" fill="transparent"/>'+s+'</svg>'
+      +'<div class="lbl">Andamento lnRMSSD ultimi '+n+' giorni'+(b?' · banda verde = tua normalità (media ± 0,5 DS), linea arancio = soglia recupero (−1 DS)':'')+'</div>';
+  }
+
+  function init(){
+    if(!el('mornStart')) return;
+    el('mornStart').addEventListener('click', start);
+    el('mornAbort').addEventListener('click', abort);
+    el('mornTaco').addEventListener('click', onTacoClick);
+    el('mornAuto').addEventListener('click', autoFlag);
+    el('mornAll').addEventListener('click', includeAll);
+    el('mornSave').addEventListener('click', save);
+    el('mornNew').addEventListener('click', ()=> show('Setup'));
+  }
+  return { init };
+})();
+
 App.init();
 HRV.init();
 TestMode.init();
+MorningTest.init();
 
 /* ---------- SERVICE WORKER (installazione + offline) ---------- */
 if('serviceWorker' in navigator){
