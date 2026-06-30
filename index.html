@@ -353,6 +353,8 @@
     .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
     .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
     .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
+    .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
+    .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
     .cam-preview-wrap{position:relative;width:132px;height:99px;margin:4px auto 8px}
     .cam-preview{width:132px;height:99px;border-radius:14px;object-fit:cover;background:#000;border:2px solid rgba(120,170,255,.4);display:block}
     .cam-dot{position:absolute;top:8px;right:8px;width:14px;height:14px;border-radius:50%;background:#777;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
@@ -487,7 +489,14 @@
         <button type="button" data-min="10" class="btn ghost">10 min</button>
         <button type="button" data-min="0" class="btn ghost">Libero</button>
       </div>
+      <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
+      <input id="camCode" class="cam-code" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <label class="hrv-consent" id="camConsentWrap">
+        <input type="checkbox" id="camConsent">
+        <span>Acconsento all'invio al mio medico del <b>riepilogo dell'allenamento</b> (data, orario, durata, livello di coerenza), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome né dato clinico. Consenso richiesto una volta sola.</span>
+      </label>
       <button id="camStart" class="btn">Avvia allenamento</button>
+      <div class="cam-sendnote" id="camSendNote"></div>
     </div>
     <div id="camRun" style="display:none">
       <div class="cam-preview-wrap">
@@ -1057,7 +1066,7 @@ const HRV = (() => {
   // del Dott. Sposini (cartella unica "HRV pazienti"). Finché è vuoto, il bottone
   // "Invia" ripiega sulla tendina di condivisione iOS. Incollare qui l'URL dopo il
   // deploy dello script (…/exec).
-  const DOCTOR_UPLOAD_URL = '';
+  const DOCTOR_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbwaGhCyJK7FP4DkP7yrS79O93-op90ZAFczJpiRYYAehfPXORKmBpnhN-yewxkIMrODSA/exec';
 
   // ---- Parametri filtro ----
   const MED_WIN = 9, THRESH = 0.20, RR_MIN = 300, RR_MAX = 2000;
@@ -1832,6 +1841,16 @@ const HRV = (() => {
     await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
     return true;
   }
+  // Invio del riepilogo di una sessione di ALLENAMENTO COERENZA (una riga, niente CSV).
+  // Lo riceve lo stesso GAS (kind='coerenza') e lo accoda al foglio "coerenza_pazienti".
+  // Pseudonimizzato: solo il codice paziente + metriche di allenamento, nessun dato clinico.
+  async function uploadCoherence(fields){
+    if(!DOCTOR_UPLOAD_URL) return false;
+    const body = new URLSearchParams(Object.assign({ kind:'coerenza', consent:'1' }, fields));
+    await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
+    return true;
+  }
+  function hasUploadUrl(){ return !!DOCTOR_UPLOAD_URL; }
   function sendStatus(msg, warn){
     const e = el('hrvSendStatus'); if(!e) return;
     e.textContent = msg; e.style.color = warn ? 'var(--hold)' : 'var(--good, #1b8a5a)';
@@ -1869,12 +1888,13 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v25';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v26';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore };
+           sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
+           uploadCoherence, hasUploadUrl };
 })();
 window.HRV = HRV;
 
@@ -2178,6 +2198,15 @@ const CameraCoherence = (() => {
   let fingerPresent=false, lastPeakT=0;
   let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
+  let hrSum=0, hrN=0;                          // FC media della sessione (per il report)
+  let sessionWallStart=0;                      // ora di inizio (orologio reale, per il report)
+  const PROFILE_KEY='respiroPacer.testProfile.v1';   // codice paziente condiviso col Test clinico
+  const COH_CONSENT_KEY='respiroPacer.cohConsent.v1';
+
+  function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
+  function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  function consentTs(){ try{ return localStorage.getItem(COH_CONSENT_KEY)||''; }catch(e){ return ''; } }
+  function grantConsent(){ try{ localStorage.setItem(COH_CONSENT_KEY, new Date().toISOString()); }catch(e){} }
 
   function show(w){ ['Setup','Run','Done'].forEach(s=>{ const e=el('cam'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
@@ -2188,6 +2217,16 @@ const CameraCoherence = (() => {
   async function start(){
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
+    // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
+    // si allena comunque, ma il riepilogo non viene inviato.
+    const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
+    if(code) saveCode(code);
+    if(code && !consentTs()){
+      const c=el('camConsent');
+      if(!c || !c.checked){ alert('Per inviare il riepilogo al medico spunta il consenso. Senza codice/consenso puoi comunque allenarti: i dati non verranno inviati.'); return; }
+      grantConsent();
+      const wrap=el('camConsentWrap'); if(wrap) wrap.style.display='none';
+    }
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Questo browser non dà accesso alla fotocamera.'); return; }
     try{
       stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:320}, height:{ideal:240} }, audio:false });
@@ -2196,7 +2235,8 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
     try{ WakeLock.acquire(); }catch(e){}
@@ -2296,6 +2336,7 @@ const CameraCoherence = (() => {
       if(co){ const z=zoneOf(co.ratio);
         el('camCoh').textContent=Math.round(co.pct); const zEl=el('camZone'); zEl.textContent=z.txt; zEl.style.background=z.col;
         cohSum+=co.pct; cohN++; if(co.ratio>=0.5) cohInZone++; if(co.pct>peakCoh) peakCoh=co.pct;
+        if(locked){ hrSum+=hrAuto; hrN++; }   // FC media solo su segnale agganciato
       }
     }
     if(chosenMin>0){
@@ -2315,6 +2356,31 @@ const CameraCoherence = (() => {
     try{ WakeLock.release(); }catch(e){}
     stream=null; track=null;
   }
+  // Invia al medico il riepilogo pseudonimizzato della sessione (una riga sul foglio
+  // "coerenza_pazienti"). Solo se c'è codice paziente + consenso + URL del GAS configurato.
+  async function sendReport(durMs, avg, inZone){
+    const code=getCode();
+    if(!code || !consentTs() || !HRV.hasUploadUrl()) return null;
+    const rate=(App&&App.currentRate)?App.currentRate():0;   // atti/min impostati nel pacer
+    const start=new Date(sessionWallStart);
+    const pad=n=>String(n).padStart(2,'0');
+    const local=start.getFullYear()+'-'+pad(start.getMonth()+1)+'-'+pad(start.getDate())+' '+pad(start.getHours())+':'+pad(start.getMinutes());
+    const fields={
+      code,
+      ts: start.toISOString(),
+      local,                                            // data e ora leggibili (fuso del paziente)
+      ora: pad(start.getHours())+':'+pad(start.getMinutes()),
+      durata_min: (durMs/60000).toFixed(1),
+      atti_min: rate? rate.toFixed(1) : '',
+      coh_media: Math.round(avg),
+      pct_coerenza: Math.round(inZone),
+      coh_picco: Math.round(peakCoh),
+      fc_media: hrN? Math.round(hrSum/hrN) : '',
+      campioni: cohN,
+      sorgente: 'fotocamera'
+    };
+    try{ await HRV.uploadCoherence(fields); return true; }catch(e){ return false; }
+  }
   function finish(){
     const dur=(performance.now()-t0);
     stopAll();
@@ -2330,14 +2396,33 @@ const CameraCoherence = (() => {
     } else {
       host.innerHTML='<div><span class="cam-sum-chip" style="background:'+col+'">'+lvl+'</span></div>'
         +'<div class="cam-sum-row">Coerenza media <b style="color:'+col+'">'+Math.round(avg)+'</b> · in coerenza il <b>'+Math.round(inZone)+'%</b> del tempo</div>'
-        +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>';
+        +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>'
+        +'<div class="cam-sum-sub" id="camSendStatus"></div>';
     }
     show('Done');
+    // Report al medico (in background, non blocca la chiusura).
+    const st=()=>el('camSendStatus');
+    if(cohN>=3){
+      const code=getCode();
+      if(code && consentTs() && HRV.hasUploadUrl()){
+        if(st()) st().textContent='Invio del riepilogo al medico…';
+        sendReport(dur, avg, inZone).then(ok=>{ if(st()) st().textContent = ok ? '✓ Riepilogo inviato al medico ('+code+').' : 'Riepilogo non inviato: riprova con connessione attiva.'; });
+      } else if(code && consentTs() && !HRV.hasUploadUrl()){
+        if(st()) st().textContent='(Invio al medico non ancora attivo su questa app.)';
+      }
+    }
   }
   function stop(){ if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish(); }
 
   function init(){
     if(!el('camStart')) return;
+    // precarica il codice paziente (condiviso col Test clinico) e nasconde il consenso se già dato
+    const codeInput=el('camCode'); if(codeInput) codeInput.value=getCode();
+    const wrap=el('camConsentWrap'); if(wrap && consentTs()) wrap.style.display='none';
+    const note=el('camSendNote');
+    if(note){ note.textContent = HRV.hasUploadUrl()
+      ? 'Col codice paziente, a fine sessione il riepilogo (pseudonimizzato) viene inviato al medico.'
+      : ''; }
     el('camDurs').addEventListener('click', e=>{
       const b=e.target.closest('button'); if(!b) return;
       chosenMin=+b.getAttribute('data-min');

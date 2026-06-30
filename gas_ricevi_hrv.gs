@@ -22,21 +22,37 @@
  * matita → Nuova versione (così l'URL /exec resta lo stesso).
  */
 
-var FOLDER_ID = 'INCOLLA_QUI_ID_CARTELLA';   // ← ID della cartella Drive "HRV pazienti"
+var FOLDER_ID = '1rxRFjDMlJ9y5Teo607LEa-BjtI66PaYA';   // ← cartella Drive "HRV pazienti"
 
 function doPost(e) {
   try {
     var p = (e && e.parameter) ? e.parameter : {};
-    var csv     = p.data    || '';
-    var fname   = (p.fname  || 'test_HRV.csv').replace(/[^A-Za-z0-9_.\-]/g, '_');
+    var kind    = p.kind    || 'test';
     var code    = p.code    || 'senza-codice';
     var consent = p.consent || '';
     var ts      = p.ts      || new Date().toISOString();
 
-    if (!csv) return _json({ ok: false, error: 'nessun dato' });
     if (consent !== '1') return _json({ ok: false, error: 'consenso mancante' });
 
     var folder = DriveApp.getFolderById(FOLDER_ID);
+
+    // ── Allenamento di COERENZA: una riga sul foglio "coerenza_pazienti" ──
+    // Nessun file per sessione (eviterebbe di intasare la cartella). Solo metriche
+    // pseudonimizzate: codice paziente + parametri dell'allenamento, nessun dato clinico.
+    if (kind === 'coerenza') {
+      var row = [
+        p.local || ts, code, p.durata_min || '', p.atti_min || '',
+        p.coh_media || '', p.pct_coerenza || '', p.coh_picco || '',
+        p.fc_media || '', p.sorgente || '', p.campioni || '', ts
+      ];
+      _cohRow(folder, row);
+      return _json({ ok: true, kind: 'coerenza' });
+    }
+
+    // ── Test HRV clinico: un file CSV per test (comportamento originale) ──
+    var csv     = p.data    || '';
+    var fname   = (p.fname  || 'test_HRV.csv').replace(/[^A-Za-z0-9_.\-]/g, '_');
+    if (!csv) return _json({ ok: false, error: 'nessun dato' });
     var blob = Utilities.newBlob(csv, 'text/csv', fname);
     var file = folder.createFile(blob);
     file.setDescription('Paziente ' + code + ' · consenso ' + consent + ' · ' + ts);
@@ -52,6 +68,26 @@ function doPost(e) {
 
 function doGet() {                       // verifica rapida che l'app sia viva
   return _json({ ok: true, service: 'ricevi-hrv' });
+}
+
+// Accoda una sessione di coerenza al foglio "coerenza_pazienti" (creato al volo nella
+// stessa cartella). Una riga per sessione: il medico vede a colpo d'occhio quanto, quando
+// e con che livello di coerenza si allena ogni paziente nel tempo.
+function _cohRow(folder, row) {
+  var it = folder.getFilesByName('coerenza_pazienti');
+  var ss;
+  if (it.hasNext()) ss = SpreadsheetApp.open(it.next());
+  else {
+    ss = SpreadsheetApp.create('coerenza_pazienti');
+    var f = DriveApp.getFileById(ss.getId());
+    folder.addFile(f); DriveApp.getRootFolder().removeFile(f);
+    ss.getActiveSheet().appendRow([
+      'data e ora', 'codice', 'durata (min)', 'atti/min',
+      'coerenza media', '% in coerenza', 'coerenza picco',
+      'FC media', 'sorgente', 'campioni', 'ts ISO'
+    ]);
+  }
+  ss.getActiveSheet().appendRow(row);
 }
 
 function _logRow(folder, row) {
