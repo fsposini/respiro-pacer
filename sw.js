@@ -1,7 +1,8 @@
-// Service worker minimo: cache-first per funzionamento offline.
-// L'app è un singolo file autonomo (audio e immagini incorporati),
-// quindi basta mettere in cache i pochi file statici.
-const CACHE = 'respiro-pacer-v28-grafici-heartmath';
+// Service worker: network-first per l'HTML, cache-first per gli asset statici.
+// Così l'app (singolo index.html) prende sempre l'ultima versione quando sei
+// online, e funziona offline grazie alla copia in cache. Niente più versioni
+// "incastrate": basta riaprire l'app da connessi.
+const CACHE = 'respiro-pacer-v29-net-first';
 const ASSETS = [
   './',
   './index.html',
@@ -26,10 +27,25 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const req = e.request;
+  // L'HTML (navigazioni e index.html) va preso dalla rete quando possibile,
+  // così gli aggiornamenti compaiono subito. Offline → copia in cache.
+  const isHTML = req.mode === 'navigate' || /\/$|index\.html$/.test(new URL(req.url).pathname);
+  if (isHTML) {
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+  // Asset statici (icone, manifest): cache-first.
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       return res;
     }).catch(() => caches.match('./index.html')))
   );
