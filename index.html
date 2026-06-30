@@ -355,6 +355,11 @@
     .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
     .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
     .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
+    .cam-graph{margin:8px auto 2px;max-width:340px}
+    .cam-graph-lbl{font-size:.72rem;color:var(--muted);text-align:left;margin:0 2px 3px}
+    .cam-graph-lbl i{font-style:normal}
+    .cam-canvas{width:100%;display:block;border-radius:10px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.10)}
+    .cam-graph-note{font-size:.7rem;color:var(--muted);text-align:left;margin:3px 2px 0;line-height:1.3}
     .cam-preview-wrap{position:relative;width:132px;height:99px;margin:4px auto 8px}
     .cam-preview{width:132px;height:99px;border-radius:14px;object-fit:cover;background:#000;border:2px solid rgba(120,170,255,.4);display:block}
     .cam-dot{position:absolute;top:8px;right:8px;width:14px;height:14px;border-radius:50%;background:#777;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
@@ -507,6 +512,15 @@
       <div class="cam-orb-wrap"><div id="camOrb"></div></div>
       <div class="cam-phase" id="camPhase">—</div>
       <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
+      <div class="cam-graph">
+        <div class="cam-graph-lbl">Polso — picchi del battito</div>
+        <canvas id="camWavePulse" class="cam-canvas" height="70"></canvas>
+      </div>
+      <div class="cam-graph">
+        <div class="cam-graph-lbl">Coerenza — battito <i style="color:#e0584f">●</i> vs respiro guida <i style="color:#7fb2ff">●</i></div>
+        <canvas id="camWaveCoh" class="cam-canvas" height="96"></canvas>
+        <div class="cam-graph-note" id="camCohNote">Quando sei in coerenza, l'onda del battito sale e scende <b>in sincrono</b> col respiro.</div>
+      </div>
       <div class="cam-count" id="camCount"></div>
       <button id="camStop" class="cam-stopbtn">Termina sessione</button>
     </div>
@@ -1888,7 +1902,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v26';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v27';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2198,6 +2212,7 @@ const CameraCoherence = (() => {
   let fingerPresent=false, lastPeakT=0;
   let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
+  let lastDraw=0;                              // throttle del disegno dei grafici
   let hrSum=0, hrN=0;                          // FC media della sessione (per il report)
   let sessionWallStart=0;                      // ora di inizio (orologio reale, per il report)
   const PROFILE_KEY='respiroPacer.testProfile.v1';   // codice paziente condiviso col Test clinico
@@ -2217,6 +2232,9 @@ const CameraCoherence = (() => {
   async function start(){
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
+    // VOCE: sblocco SINCRONO dentro il gesto del tap, PRIMA di qualsiasi await
+    // (su iOS la sintesi resta muta se il primo speak parte dopo un await).
+    try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
     // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
@@ -2235,10 +2253,10 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
     sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
-    try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
+    try{ Voice.unlock(); }catch(e){}   // ridesta il motore (già sbloccato a inizio gesto)
     try{ WakeLock.acquire(); }catch(e){}
     el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
@@ -2339,11 +2357,68 @@ const CameraCoherence = (() => {
         if(locked){ hrSum+=hrAuto; hrN++; }   // FC media solo su segnale agganciato
       }
     }
+    // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
+    if(now-lastDraw>80){ lastDraw=now; try{ drawGraphs(now); }catch(e){} }
     if(chosenMin>0){
       const left=chosenMin*60000-elapsed; el('camCount').textContent=fmt(left);
       if(left<=0){ finish(); return; }
     } else { el('camCount').textContent=fmt(elapsed)+'  (libero)'; }
     orbRAF=requestAnimationFrame(orbLoop);
+  }
+
+  /* ---- grafici live: polso (PPG che scorre) + coerenza (battito vs respiro) ---- */
+  function fitCanvas(cv){
+    const dpr=window.devicePixelRatio||1, w=cv.clientWidth||300, h=cv.clientHeight||cv.height;
+    if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+    const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); return {ctx,w,h};
+  }
+  function drawGraphs(now){
+    // ── 1) Polso: ultimi 6 s del segnale PPG filtrato, con i battiti marcati ──
+    const cv1=el('camWavePulse');
+    if(cv1){
+      const {ctx,w,h}=fitCanvas(cv1); ctx.clearRect(0,0,w,h);
+      const WIN=6000, t1=now-WIN;
+      const pts=bpArr.filter(o=>o.t>=t1);
+      if(pts.length>=4){
+        let mn=1e9,mx=-1e9; for(const o of pts){ if(o.bp<mn)mn=o.bp; if(o.bp>mx)mx=o.bp; }
+        const rng=(mx-mn)||1, pad=6, yOf=v=>h-pad-((v-mn)/rng)*(h-2*pad), xOf=t=>((t-t1)/WIN)*w;
+        ctx.lineWidth=2; ctx.strokeStyle='#3fd07a'; ctx.beginPath();
+        pts.forEach((o,i)=>{ const x=xOf(o.t),y=yOf(o.bp); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+        ctx.fillStyle='rgba(255,255,255,.55)';
+        for(const b of rr){ if(b.t>=t1){ const x=xOf(b.t); ctx.fillRect(x-1,0,2,h); } }
+      } else {
+        ctx.fillStyle='rgba(255,255,255,.4)'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('In attesa del segnale dal dito…', w/2, h/2+4);
+      }
+    }
+    // ── 2) Coerenza: FC istantanea (ultimi 40 s) sovrapposta al respiro guida ──
+    const cv2=el('camWaveCoh');
+    if(cv2){
+      const {ctx,w,h}=fitCanvas(cv2); ctx.clearRect(0,0,w,h);
+      const WIN=40000, t1=now-WIN, pad=8;
+      const xOf=t=>((t-t1)/WIN)*w;
+      // respiro guida (sinusoide alla frequenza di risonanza): full 0..1
+      ctx.lineWidth=2; ctx.strokeStyle='rgba(127,178,255,.85)'; ctx.beginPath();
+      const elapsedNow=now-t0;
+      for(let x=0;x<=w;x+=3){
+        const tt=t1+(x/w)*WIN, ms=elapsedNow-(now-tt);
+        const bs=(App&&App.breathStateAt)?App.breathStateAt(ms):{full:(1-Math.cos(2*Math.PI*((ms%10000)/10000)))/2};
+        const y=h-pad-bs.full*(h-2*pad); x?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.stroke();
+      // FC istantanea dai battiti (60000/ibi), auto-scalata sulla finestra
+      const hp=[]; for(const b of rr){ if(b.t>=t1 && b.ibi>=300 && b.ibi<=2000) hp.push({t:b.t, hr:60000/b.ibi}); }
+      if(hp.length>=3){
+        let mn=1e9,mx=-1e9; for(const o of hp){ if(o.hr<mn)mn=o.hr; if(o.hr>mx)mx=o.hr; }
+        const rng=(mx-mn)||1, yOf=v=>h-pad-((v-mn)/rng)*(h-2*pad);
+        ctx.lineWidth=2.2; ctx.strokeStyle='#e0584f'; ctx.beginPath();
+        hp.forEach((o,i)=>{ const x=xOf(o.t),y=yOf(o.hr); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+        ctx.fillStyle='#e0584f'; for(const o of hp){ const x=xOf(o.t),y=yOf(o.hr); ctx.beginPath(); ctx.arc(x,y,2,0,2*Math.PI); ctx.fill(); }
+      } else {
+        ctx.fillStyle='rgba(255,255,255,.4)'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('Aggancia il battito per vedere l\'onda…', w/2, h/2+4);
+      }
+    }
   }
 
   /* ---- chiusura e riepilogo ---- */
