@@ -495,6 +495,13 @@
         <button type="button" data-min="10" class="btn ghost">10 min</button>
         <button type="button" data-min="0" class="btn ghost">Libero</button>
       </div>
+      <label style="margin-top:8px">Guida al respiro (anche a occhi chiusi)</label>
+      <div class="cam-durs" id="camGuide">
+        <button type="button" data-guide="tono" class="btn ghost cam-sel">🔔 Tono</button>
+        <button type="button" data-guide="voce" class="btn ghost">🗣️ Voce</button>
+        <button type="button" data-guide="muto" class="btn ghost">🔇 Muto</button>
+      </div>
+      <div class="cam-sendnote">Il <b>tono</b> sale in inspirazione e scende in espirazione: funziona su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
       <input id="camCode" class="cam-code" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <label class="hrv-consent" id="camConsentWrap">
@@ -1907,7 +1914,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v29';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v30';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2208,6 +2215,7 @@ const CameraCoherence = (() => {
   const COH_WIN_MS = 64000, RECALC_MS = 2000;
   const BASELINE_MS = 1200;         // detrend: rimuove deriva/respiro, tiene il polso
   let chosenMin = 5;
+  let guideMode = 'tono';                       // guida al respiro: 'tono' | 'voce' | 'muto'
   let stream=null, track=null, video=null, canvas=null, cctx=null;
   let sampleRAF=null, orbRAF=null, t0=0, lastHalf=null, lastRecalc=0;
   let raw=[];                       // {t, v} canale PPG grezzo (verde o rosso)
@@ -2238,9 +2246,10 @@ const CameraCoherence = (() => {
   async function start(){
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
-    // VOCE: sblocco SINCRONO dentro il gesto del tap, PRIMA di qualsiasi await
-    // (su iOS la sintesi resta muta se il primo speak parte dopo un await).
-    try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}
+    // GUIDA AL RESPIRO: attiva tono/voce DENTRO il gesto del tap, PRIMA di ogni await.
+    // Il tono (WebAudio) funziona anche in Bluefy; la voce (TTS) no → default tono.
+    try{ Voice.setEnabled(guideMode==='voce'); Voice.unlock(); }catch(e){}
+    if(guideMode==='tono'){ try{ Audio.start('tone'); Audio.setMasterVol(0.7); }catch(e){} }
     // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
@@ -2337,7 +2346,9 @@ const CameraCoherence = (() => {
     // Respiro alla frequenza di RISONANZA impostata nel pacer (non 6/min fisso)
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
-    if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; try{ Voice.say(bs.text); }catch(e){} }
+    const phaseName=bs.name||(bs.text==='Inspira'?'inhale':'exhale');
+    if(guideMode==='tono'){ try{ Audio.update(bs.full, phaseName); }catch(e){} }
+    if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} } }
     // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
     // periodicità è forte → niente numeri sballati tipo 163)
     const dot=el('camDot'), locked=(hrStrength>0.4 && hrAuto>=40 && hrAuto<=180);
@@ -2451,6 +2462,7 @@ const CameraCoherence = (() => {
     try{ if(track){ try{ track.applyConstraints({advanced:[{torch:false}]}); }catch(e){} } }catch(e){}
     try{ if(stream) stream.getTracks().forEach(t=>t.stop()); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
+    try{ Audio.stop(); }catch(e){}
     try{ WakeLock.release(); }catch(e){}
     stream=null; track=null;
   }
@@ -2525,6 +2537,11 @@ const CameraCoherence = (() => {
       const b=e.target.closest('button'); if(!b) return;
       chosenMin=+b.getAttribute('data-min');
       [].forEach.call(el('camDurs').children, x=>x.classList.toggle('cam-sel', x===b));
+    });
+    const gd=el('camGuide'); if(gd) gd.addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      guideMode=b.getAttribute('data-guide');
+      [].forEach.call(gd.children, x=>x.classList.toggle('cam-sel', x===b));
     });
     el('camStart').addEventListener('click', start);
     el('camStop').addEventListener('click', stop);
