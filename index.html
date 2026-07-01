@@ -497,11 +497,12 @@
       </div>
       <label style="margin-top:8px">Guida al respiro (anche a occhi chiusi)</label>
       <div class="cam-durs" id="camGuide">
-        <button type="button" data-guide="tono" class="btn ghost cam-sel">🔔 Tono</button>
+        <button type="button" data-guide="tono" class="btn ghost cam-sel">〰️ Tono</button>
+        <button type="button" data-guide="campana" class="btn ghost">🎐 Campana</button>
         <button type="button" data-guide="voce" class="btn ghost">🗣️ Voce</button>
         <button type="button" data-guide="muto" class="btn ghost">🔇 Muto</button>
       </div>
-      <div class="cam-sendnote">Il <b>tono</b> sale in inspirazione e scende in espirazione: funziona su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
+      <div class="cam-sendnote">Il <b>tono</b> sale e scende col respiro; la <b>campana</b> fa ding (inspira) e dong (espira). Funzionano su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
       <input id="camCode" class="cam-code" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <label class="hrv-consent" id="camConsentWrap">
@@ -822,8 +823,26 @@ const Audio = (() => {
     envGain.gain.setTargetAtTime(Math.max(0.0001,g),t,0.06);
   }
   function onPhaseStart(phase){ if(nodes._mode==='oneshot'&&phase==='inhale') spawnOneshot(currentType); }
+  // Prepara/riprende il contesto audio (DEVE partire da un gesto utente su iOS).
+  async function prime(){ ensure(); if(ctx.state==='suspended') await ctx.resume(); }
+  // Rintocco tipo campana tibetana: partiali inarmonici + coda lunga. Per la guida
+  // ding/dong (acuto = inspira, grave = espira). Indipendente dal tono continuo.
+  function chime(freq){
+    if(!ctx) return; const t=ctx.currentTime;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.55,t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+2.6);
+    g.connect(master||ctx.destination);
+    [[1,1],[2.76,0.55],[5.40,0.28],[8.93,0.13]].forEach(([mult,amp])=>{
+      const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=freq*mult;
+      const og=ctx.createGain(); og.gain.value=amp; o.connect(og); og.connect(g);
+      o.start(t); o.stop(t+2.7);
+    });
+  }
   return {
     async start(type){ensure();if(ctx.state==='suspended')await ctx.resume();await build(type);started=true;},
+    prime, chime,
     stop(){if(envGain)envGain.gain.setTargetAtTime(0.0001,ctx.currentTime,0.1);clearNodes();started=false;},
     async setType(type){if(started)await build(type);},
     update,onPhaseStart,
@@ -1914,7 +1933,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v30';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v31';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2250,6 +2269,7 @@ const CameraCoherence = (() => {
     // Il tono (WebAudio) funziona anche in Bluefy; la voce (TTS) no → default tono.
     try{ Voice.setEnabled(guideMode==='voce'); Voice.unlock(); }catch(e){}
     if(guideMode==='tono'){ try{ Audio.start('tone'); Audio.setMasterVol(0.7); }catch(e){} }
+    else if(guideMode==='campana'){ try{ Audio.prime(); Audio.setMasterVol(0.8); }catch(e){} }
     // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
@@ -2348,7 +2368,10 @@ const CameraCoherence = (() => {
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
     const phaseName=bs.name||(bs.text==='Inspira'?'inhale':'exhale');
     if(guideMode==='tono'){ try{ Audio.update(bs.full, phaseName); }catch(e){} }
-    if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text; if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} } }
+    if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text;
+      if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} }
+      else if(guideMode==='campana'){ try{ Audio.chime(phaseName==='inhale'?528:352); }catch(e){} }   // ding acuto / dong grave
+    }
     // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
     // periodicità è forte → niente numeri sballati tipo 163)
     const dot=el('camDot'), locked=(hrStrength>0.4 && hrAuto>=40 && hrAuto<=180);
