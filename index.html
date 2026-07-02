@@ -343,6 +343,15 @@
     .morn-rmssd b{font-size:1.5rem}
     .morn-sub{font-size:.88rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
     .morn-collect{font-size:1.05rem;font-weight:700;margin:10px 0}
+    .hrv-alpha{margin-top:14px;padding:14px;border-radius:16px;background:rgba(170,120,255,.08);border:1px solid rgba(170,120,255,.30);text-align:center}
+    .hrv-alpha h3{margin:0 0 10px;font-size:1rem}
+    .hrv-alpha .btn{margin-top:8px}
+    .hrv-alpha .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+    .hrv-alpha-live{font-size:.92rem;color:var(--muted);margin:4px 0}
+    .hrv-alpha-live b{color:var(--text,#e8eef0)}
+    .alpha-scale{position:relative;height:30px;border-radius:8px;margin:12px auto 6px;max-width:360px;background:linear-gradient(90deg,#b3201e 0%,#b3201e 25%,#e8820c 45%,#1b8a5a 70%,#1b8a5a 100%)}
+    .alpha-scale-tick{position:absolute;top:-3px;width:3px;height:36px;background:#fff;box-shadow:0 0 3px rgba(0,0,0,.6)}
+    .alpha-scale-lbl{position:absolute;top:32px;transform:translateX(-50%);font-size:.62rem;color:var(--muted)}
     .morn-trend{margin-top:14px}
     .morn-trend svg{width:100%;height:auto;display:block;background:rgba(0,0,0,.2);border-radius:10px}
     .morn-trend .lbl{font-size:.72rem;color:var(--muted);margin-top:6px}
@@ -482,6 +491,48 @@
       <div id="mornVerdict"></div>
       <div id="mornTrend"></div>
       <button id="mornNew" class="btn ghost">Chiudi</button>
+    </div>
+  </div>
+
+  <div class="hrv-alpha">
+    <h3>📉 DFA α1 — dinamica frazionale (fascia)</h3>
+    <div id="alphaSetup">
+      <div class="hrv-test-hint">Misura a riposo con la fascia: <b>seduto, fermo, respiro spontaneo</b> (non guidato — il pacing altera α1). Attendi “Intervalli RR: sì”. α1 misura l'organizzazione frattale del battito: a riposo ~1,0; riferimenti di soglia aerobica 0,75 e anaerobica 0,5. Molto sensibile agli artefatti: a fine misura pulisci i battiti anomali.</div>
+      <label>Durata</label>
+      <div class="cam-durs" id="alphaDurs">
+        <button type="button" data-min="5" class="btn ghost cam-sel">5 min</button>
+        <button type="button" data-min="6" class="btn ghost">6 min</button>
+      </div>
+      <label for="alphaCode" style="margin-top:8px">Codice atleta (per il report al medico)</label>
+      <input id="alphaCode" class="cam-code" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <label class="hrv-consent" id="alphaConsentWrap">
+        <input type="checkbox" id="alphaConsent">
+        <span>Acconsento all'invio al mio medico del <b>risultato α1</b> (valore, data, FC media), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Una volta sola.</span>
+      </label>
+      <button id="alphaStart" class="btn">Avvia misura α1</button>
+      <div class="cam-sendnote" id="alphaSendNote"></div>
+    </div>
+    <div id="alphaRun" style="display:none">
+      <div class="morn-count" id="alphaCount">5:00</div>
+      <div class="hrv-alpha-live">battiti <b id="alphaBeats">0</b> · α1 provvisorio <b id="alphaLive">—</b></div>
+      <div class="hrv-test-hint">Stai fermo e rilassato, respira normalmente. Non parlare.</div>
+      <button id="alphaAbort" class="btn ghost">Interrompi</button>
+    </div>
+    <div id="alphaEdit" style="display:none">
+      <div class="hrv-test-hint">Pulisci gli artefatti: <b>tocca i battiti anomali</b> (extrasistoli, movimento) per escluderli. α1 si ricalcola ad ogni correzione. α1 è molto sensibile: qui la pulizia conta.</div>
+      <svg id="alphaTaco" viewBox="0 0 720 220" class="morn-taco"></svg>
+      <div class="morn-editstat" id="alphaEditStat"></div>
+      <div class="morn-editbtns">
+        <button id="alphaAuto" class="btn ghost">Auto-segnala</button>
+        <button id="alphaAll" class="btn ghost">Includi tutti</button>
+      </div>
+      <button id="alphaSave" class="btn">Calcola α1</button>
+    </div>
+    <div id="alphaResult" style="display:none">
+      <div id="alphaVerdict"></div>
+      <div id="alphaTrend"></div>
+      <div class="morn-sub" id="alphaSendStatus"></div>
+      <button id="alphaNew" class="btn ghost">Chiudi</button>
     </div>
   </div>
 
@@ -1902,6 +1953,13 @@ const HRV = (() => {
     await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
     return true;
   }
+  // Invio del risultato di una misura DFA α1 (una riga sul foglio "alpha1_atleti").
+  async function uploadAlpha(fields){
+    if(!DOCTOR_UPLOAD_URL) return false;
+    const body = new URLSearchParams(Object.assign({ kind:'alpha1', consent:'1' }, fields));
+    await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
+    return true;
+  }
   function hasUploadUrl(){ return !!DOCTOR_UPLOAD_URL; }
   function sendStatus(msg, warn){
     const e = el('hrvSendStatus'); if(!e) return;
@@ -1940,13 +1998,14 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v32';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v33';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
-           uploadCoherence, hasUploadUrl };
+           uploadCoherence, uploadAlpha, hasUploadUrl,
+           liveRR: ()=> rr.map(o=>o.rr) };
 })();
 window.HRV = HRV;
 
@@ -2226,6 +2285,219 @@ const MorningTest = (() => {
     el('mornAll').addEventListener('click', includeAll);
     el('mornSave').addEventListener('click', save);
     el('mornNew').addEventListener('click', ()=> show('Setup'));
+  }
+  return { init };
+})();
+
+/* ================= DFA α1 — dinamica frazionale (misura a riposo, fascia) ================= */
+/* Scaling exponent short-term (box 4–16 battiti) sul tachogramma pulito. Riferimenti:      */
+/* riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5. Molto sensibile agli         */
+/* artefatti → correzione automatica + pulizia manuale a fine misura, poi calcolo.          */
+const AlphaTest = (() => {
+  const el = id => document.getElementById(id);
+  const KEY = 'respiroPacer.alpha.v1';
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1';      // codice condiviso con gli altri test
+  const CONSENT_KEY = 'respiroPacer.alphaConsent.v1';
+  const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
+  let beats = [], raf = null, t0 = 0, durMin = 5, wallStart = 0, lastLive = 0;
+
+  function show(w){ ['Setup','Run','Edit','Result'].forEach(s=>{ const e=el('alpha'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
+  function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  function loadHist(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+  function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
+  function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
+  function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  function consentTs(){ try{ return localStorage.getItem(CONSENT_KEY)||''; }catch(e){ return ''; } }
+  function grantConsent(){ try{ localStorage.setItem(CONSENT_KEY, new Date().toISOString()); }catch(e){} }
+  function median(a){ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y), n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
+
+  /* ---- MOTORE DFA α1 : integra il segnale centrato, detrend lineare per box (4–16), ---- */
+  /* ---- pendenza log F(n)/log n. Boxes non sovrapposti, entrambe le direzioni.        ---- */
+  function dfaAlpha1(rrv){
+    const N = rrv.length; if(N < 16) return null;
+    let mean=0; for(const v of rrv) mean+=v; mean/=N;
+    const y = new Array(N); let acc=0; for(let i=0;i<N;i++){ acc+=rrv[i]-mean; y[i]=acc; }
+    const logN=[], logF=[];
+    for(let n=4;n<=16;n++){
+      const boxes=Math.floor(N/n); if(boxes<1) continue;
+      let sumSq=0, cnt=0;
+      for(let dir=0; dir<2; dir++){
+        for(let b=0;b<boxes;b++){
+          const start = dir===0 ? b*n : N-(b+1)*n;
+          let sx=0,sy=0,sxx=0,sxy=0;
+          for(let k=0;k<n;k++){ const val=y[start+k]; sx+=k; sy+=val; sxx+=k*k; sxy+=k*val; }
+          const den=(n*sxx-sx*sx)||1e-9, slope=(n*sxy-sx*sy)/den, icpt=(sy-slope*sx)/n;
+          for(let k=0;k<n;k++){ const r=y[start+k]-(icpt+slope*k); sumSq+=r*r; cnt++; }
+        }
+      }
+      const F=Math.sqrt(sumSq/cnt); if(F>0){ logN.push(Math.log10(n)); logF.push(Math.log10(F)); }
+    }
+    const m=logN.length; if(m<3) return null;
+    let sx=0,sy=0,sxx=0,sxy=0; for(let i=0;i<m;i++){ sx+=logN[i]; sy+=logF[i]; sxx+=logN[i]*logN[i]; sxy+=logN[i]*logF[i]; }
+    return (m*sxy-sx*sy)/((m*sxx-sx*sx)||1e-9);
+  }
+  // filtro rapido (per l'α1 provvisorio in corsa): scarta fuori-range + deviazione mediana
+  function quickClean(vals){
+    const n=vals.length, half=4, out=[];
+    for(let i=0;i<n;i++){ const v=vals[i]; if(v<300||v>2000) continue;
+      const a=Math.max(0,i-half), c=Math.min(n,i+half+1); const med=median(vals.slice(a,c));
+      if(med>0 && Math.abs(v-med)/med>0.20) continue; out.push(v); }
+    return out;
+  }
+
+  /* ---- avvio e cattura ---- */
+  function start(){
+    if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
+    if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
+    if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
+    const codeInput=el('alphaCode'), code=codeInput?codeInput.value.trim():'';
+    if(code) saveCode(code);
+    if(code && !consentTs()){
+      const c=el('alphaConsent');
+      if(!c || !c.checked){ alert('Per inviare il risultato al medico spunta il consenso. Senza codice/consenso la misura resta solo sul telefono.'); return; }
+      grantConsent(); const wrap=el('alphaConsentWrap'); if(wrap) wrap.style.display='none';
+    }
+    HRV.beginMorning();                 // riusa la cattura RR generica dalla fascia
+    document.body.dataset.alphaTesting='1';
+    try{ WakeLock.acquire(); }catch(e){}
+    wallStart=Date.now(); lastLive=0;
+    el('alphaBeats').textContent='0'; el('alphaLive').textContent='—';
+    show('Run'); t0=performance.now(); loop();
+  }
+  function loop(){
+    const now=performance.now(), left=durMin*60000-(now-t0);
+    el('alphaCount').textContent=fmt(left);
+    if(now-lastLive>2000){
+      lastLive=now; const vals=HRV.liveRR(); el('alphaBeats').textContent=vals.length;
+      if(vals.length>=40){ const a=dfaAlpha1(quickClean(vals)); if(a!=null) el('alphaLive').textContent=a.toFixed(2); }
+    }
+    if(left<=0){ finishCapture(); return; }
+    raf=requestAnimationFrame(loop);
+  }
+  function stopRaf(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
+  function cleanup(){ stopRaf(); delete document.body.dataset.alphaTesting; try{ WakeLock.release(); }catch(e){} }
+  function abort(){
+    if(!confirm('Interrompere la misura α1? I dati raccolti andranno persi.')) return;
+    HRV.endMorning(); cleanup(); show('Setup');
+  }
+  function finishCapture(){
+    stopRaf();
+    const rrArr=HRV.endMorning(); delete document.body.dataset.alphaTesting; try{ WakeLock.release(); }catch(e){}
+    if(rrArr.length<60){ alert('Troppi pochi battiti raccolti ('+rrArr.length+'): verifica il contatto della fascia e ripeti.'); show('Setup'); return; }
+    beats=rrArr.map(v=>{ const hard=v<300||v>2000; return { rr:v, excl:hard, hard }; });
+    autoFlag();                          // pre-segnala gli artefatti, poi ritocco manuale
+    show('Edit');
+  }
+
+  /* ---- editor battiti (identico nello spirito al test del mattino) ---- */
+  function keptRR(){ return beats.filter(b=>!b.excl).map(b=>b.rr); }
+  function scaleY(){ const v=beats.map(b=>b.rr); const lo=Math.min(Math.min.apply(null,v),500), hi=Math.max(Math.max.apply(null,v),1100); return {lo,hi}; }
+  function X(i){ const n=beats.length; return PADX+(n<=1?0:i/(n-1))*(VB_W-2*PADX); }
+  function Y(v,sc){ return PADT+(1-(v-sc.lo)/(sc.hi-sc.lo))*(VB_H-PADT-PADB); }
+  function drawTaco(){
+    const sc=scaleY(); let s='';
+    const kept=beats.map((b,i)=>({b,i})).filter(o=>!o.b.excl);
+    if(kept.length>1) s+='<polyline fill="none" stroke="#b58cff" stroke-width="1.4" points="'+kept.map(o=>X(o.i).toFixed(1)+','+Y(o.b.rr,sc).toFixed(1)).join(' ')+'"/>';
+    beats.forEach((b,i)=>{ const cx=X(i), cy=Y(b.rr,sc);
+      if(b.excl){ s+='<line x1="'+(cx-4).toFixed(1)+'" y1="'+(cy-4).toFixed(1)+'" x2="'+(cx+4).toFixed(1)+'" y2="'+(cy+4).toFixed(1)+'" stroke="#ff5a52" stroke-width="2"/>'
+          +'<line x1="'+(cx-4).toFixed(1)+'" y1="'+(cy+4).toFixed(1)+'" x2="'+(cx+4).toFixed(1)+'" y2="'+(cy-4).toFixed(1)+'" stroke="#ff5a52" stroke-width="2"/>'; }
+      else { s+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="2.6" fill="#b58cff"/>'; }
+    });
+    el('alphaTaco').innerHTML=s;
+  }
+  function onTacoClick(e){
+    const svg=el('alphaTaco'), rect=svg.getBoundingClientRect();
+    const px=(e.clientX-rect.left)/rect.width*VB_W, py=(e.clientY-rect.top)/rect.height*VB_H;
+    const sc=scaleY(); let best=-1, bd=1e9;
+    beats.forEach((b,i)=>{ const dx=X(i)-px, dy=Y(b.rr,sc)-py, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=i; } });
+    if(best<0 || bd>32*32) return; const b=beats[best]; if(b.hard) return;
+    b.excl=!b.excl; drawTaco(); updateStat();
+  }
+  function updateStat(){
+    const nn=keptRR(), nExcl=beats.length-nn.length, a=dfaAlpha1(nn);
+    el('alphaEditStat').innerHTML='<b>'+nn.length+'</b> battiti validi · <b style="color:#ff7a73">'+nExcl+'</b> esclusi'+(a==null?'':' · α1 <b>'+a.toFixed(2)+'</b>');
+  }
+  function autoFlag(){
+    const vals=beats.map(b=>b.rr), n=vals.length, half=4;
+    beats.forEach((b,i)=>{ if(b.hard){ b.excl=true; return; }
+      const a=Math.max(0,i-half), c=Math.min(n,i+half+1), med=median(vals.slice(a,c));
+      b.excl = med>0 && Math.abs(b.rr-med)/med>0.20;
+    });
+    drawTaco(); updateStat();
+  }
+  function includeAll(){ beats.forEach(b=>b.excl=b.hard); drawTaco(); updateStat(); }
+
+  /* ---- calcolo, interpretazione, storico ---- */
+  function zoneA(a){
+    if(a>=0.9)  return { txt:'Fisiologica', col:'#1b8a5a', sub:'Dinamica del battito ben correlata: organizzazione autonomica tipica del riposo sano.' };
+    if(a>=0.75) return { txt:'Ridotta',     col:'#e8820c', sub:'α1 sotto il riposo ottimale: possibile carico residuo, affaticamento o recupero incompleto.' };
+    if(a>=0.5)  return { txt:'Bassa',       col:'#d9531e', sub:'Bassa correlazione a riposo (zona soglia aerobica): affaticamento marcato o stress — valuta il contesto.' };
+    return { txt:'Decorrelata', col:'#b3201e', sub:'Dinamica quasi casuale (zona soglia anaerobica): a riposo va interpretata con cautela, spesso artefatti residui o forte affaticamento.' };
+  }
+  function save(){
+    const nn=keptRR();
+    if(nn.length<100){ alert('Battiti validi insufficienti ('+nn.length+') per un α1 attendibile: pulisci meno aggressivamente o ripeti la misura.'); return; }
+    const a=dfaAlpha1(nn); if(a==null){ alert('Impossibile calcolare α1: dati insufficienti.'); return; }
+    const hr=60000/(nn.reduce((s,v)=>s+v,0)/nn.length);
+    const ts=new Date(wallStart||Date.now());
+    const rec={ ts:ts.toISOString(), d:ts.toISOString().slice(0,10), alpha:+a.toFixed(3), hr:Math.round(hr), nkept:nn.length, nexcl:beats.length-nn.length };
+    const h=loadHist(); h.push(rec); if(h.length>200) h.shift(); saveHist(h);
+    renderResult(h, rec);
+    show('Result');
+    sendReport(rec);
+  }
+  function renderResult(h, rec){
+    const z=zoneA(rec.alpha), host=el('alphaVerdict');
+    const dom=[0.3,1.3], posOf=v=>Math.max(0,Math.min(100,(v-dom[0])/(dom[1]-dom[0])*100));
+    const refTick=(v,lbl)=>'<div class="alpha-scale-tick" style="left:'+posOf(v).toFixed(1)+'%;background:rgba(255,255,255,.5);height:30px;top:0"></div><div class="alpha-scale-lbl" style="left:'+posOf(v).toFixed(1)+'%">'+lbl+'</div>';
+    host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:'+z.col+'">α1 '+rec.alpha.toFixed(2)+' · '+z.txt+'</span></div>'
+      +'<div class="alpha-scale">'+refTick(0.5,'0,5')+refTick(0.75,'0,75')+refTick(1.0,'1,0')
+      +'<div class="alpha-scale-tick" style="left:'+posOf(rec.alpha).toFixed(1)+'%"></div></div>'
+      +'<div class="morn-rmssd" style="margin-top:22px">FC media <b>'+rec.hr+'</b> bpm · '+rec.nkept+' battiti · '+rec.nexcl+' esclusi</div>'
+      +'<div class="morn-sub">'+z.sub+'</div>'
+      +'<div class="morn-sub" style="margin-top:8px;font-size:.78rem">Riferimenti: riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5. Indice sensibile agli artefatti e con variabilità individuale — leggilo nel contesto clinico, non come valore assoluto.</div>';
+    renderTrend(h);
+  }
+  function renderTrend(h){
+    const host=el('alphaTrend'), data=h.slice(-30), n=data.length;
+    if(n<2){ host.innerHTML=''; return; }
+    const W=720,H=140,px=8,pt=12,pb=18, vs=data.map(e=>e.alpha);
+    let lo=Math.min(0.4,Math.min.apply(null,vs)), hi=Math.max(1.2,Math.max.apply(null,vs));
+    const x=i=> px+(n<=1?0:i/(n-1))*(W-2*px), y=v=> pt+(1-(v-lo)/(hi-lo))*(H-pt-pb);
+    let s='';
+    [[0.75,'rgba(232,130,12,.55)'],[0.5,'rgba(179,32,30,.55)']].forEach(([v,c])=>{
+      s+='<line x1="'+px+'" y1="'+y(v).toFixed(1)+'" x2="'+(W-px)+'" y2="'+y(v).toFixed(1)+'" stroke="'+c+'" stroke-dasharray="3 3" stroke-width="1"/>';
+    });
+    s+='<polyline fill="none" stroke="#b58cff" stroke-width="2" points="'+data.map((e,i)=>x(i).toFixed(1)+','+y(e.alpha).toFixed(1)).join(' ')+'"/>';
+    data.forEach((e,i)=>{ const last=i===n-1; s+='<circle cx="'+x(i).toFixed(1)+'" cy="'+y(e.alpha).toFixed(1)+'" r="'+(last?4:2.4)+'" fill="'+(last?'#fff':'#b58cff')+'"/>'; });
+    host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'"><rect width="'+W+'" height="'+H+'" fill="transparent"/>'+s+'</svg>'
+      +'<div class="lbl">Andamento α1 ultime '+n+' misure · linee tratteggiate = soglie 0,75 e 0,5</div>';
+  }
+  async function sendReport(rec){
+    const code=getCode(), st=el('alphaSendStatus');
+    if(!code || !consentTs() || !HRV.hasUploadUrl()){ if(st) st.textContent=''; return; }
+    const d=new Date(rec.ts), pad=n=>String(n).padStart(2,'0');
+    const local=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    if(st) st.textContent='Invio del risultato al medico…';
+    try{ await HRV.uploadAlpha({ code, ts:rec.ts, local, alpha1:rec.alpha.toFixed(3), fc_media:rec.hr, n_battiti:rec.nkept, n_esclusi:rec.nexcl, durata_min:durMin });
+      if(st) st.textContent='✓ Risultato inviato al medico ('+code+').';
+    }catch(e){ if(st) st.textContent='Risultato non inviato: riprova con connessione attiva.'; }
+  }
+
+  function init(){
+    if(!el('alphaStart')) return;
+    const codeInput=el('alphaCode'); if(codeInput) codeInput.value=getCode();
+    const wrap=el('alphaConsentWrap'); if(wrap && consentTs()) wrap.style.display='none';
+    const note=el('alphaSendNote'); if(note) note.textContent = HRV.hasUploadUrl() ? 'Col codice atleta, a fine misura il risultato α1 viene inviato al medico.' : '';
+    el('alphaDurs').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return;
+      durMin=+b.getAttribute('data-min'); [].forEach.call(el('alphaDurs').children, x=>x.classList.toggle('cam-sel', x===b)); });
+    el('alphaStart').addEventListener('click', start);
+    el('alphaAbort').addEventListener('click', abort);
+    el('alphaTaco').addEventListener('click', onTacoClick);
+    el('alphaAuto').addEventListener('click', autoFlag);
+    el('alphaAll').addEventListener('click', includeAll);
+    el('alphaSave').addEventListener('click', save);
+    el('alphaNew').addEventListener('click', ()=> show('Setup'));
   }
   return { init };
 })();
@@ -2584,6 +2856,7 @@ App.init();
 HRV.init();
 TestMode.init();
 MorningTest.init();
+AlphaTest.init();
 CameraCoherence.init();
 
 /* ---- Guida utente (overlay) ---- */

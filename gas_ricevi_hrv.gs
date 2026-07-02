@@ -49,6 +49,18 @@ function doPost(e) {
       return _json({ ok: true, kind: 'coerenza' });
     }
 
+    // ── DFA α1 (misura a riposo): una riga sul foglio "alpha1_atleti" ──
+    if (kind === 'alpha1') {
+      var arow = [
+        p.local || ts, code, p.alpha1 || '', p.fc_media || '',
+        p.n_battiti || '', p.n_esclusi || '', p.durata_min || '', ts
+      ];
+      _sheetRow(folder, 'alpha1_atleti',
+        ['data e ora', 'codice', 'alpha1', 'FC media', 'battiti', 'esclusi', 'durata (min)', 'ts ISO'],
+        arow);
+      return _json({ ok: true, kind: 'alpha1' });
+    }
+
     // ── Test HRV clinico: un file CSV per test (comportamento originale) ──
     var csv     = p.data    || '';
     var fname   = (p.fname  || 'test_HRV.csv').replace(/[^A-Za-z0-9_.\-]/g, '_');
@@ -70,24 +82,28 @@ function doGet() {                       // verifica rapida che l'app sia viva
   return _json({ ok: true, service: 'ricevi-hrv' });
 }
 
-// Accoda una sessione di coerenza al foglio "coerenza_pazienti" (creato al volo nella
-// stessa cartella). Una riga per sessione: il medico vede a colpo d'occhio quanto, quando
-// e con che livello di coerenza si allena ogni paziente nel tempo.
-function _cohRow(folder, row) {
-  var it = folder.getFilesByName('coerenza_pazienti');
+// Accoda una riga a un foglio dedicato (creato al volo nella stessa cartella, con
+// intestazione se nuovo). Usato per i cruscotti coerenza/α1: una riga per sessione,
+// il medico vede a colpo d'occhio l'attività di ogni paziente/atleta nel tempo.
+function _sheetRow(folder, name, header, row) {
+  var it = folder.getFilesByName(name);
   var ss;
   if (it.hasNext()) ss = SpreadsheetApp.open(it.next());
   else {
-    ss = SpreadsheetApp.create('coerenza_pazienti');
+    ss = SpreadsheetApp.create(name);
     var f = DriveApp.getFileById(ss.getId());
     folder.addFile(f); DriveApp.getRootFolder().removeFile(f);
-    ss.getActiveSheet().appendRow([
-      'data e ora', 'codice', 'durata (min)', 'atti/min',
-      'coerenza media', '% in coerenza', 'coerenza picco',
-      'FC media', 'sorgente', 'campioni', 'ts ISO'
-    ]);
+    ss.getActiveSheet().appendRow(header);
   }
   ss.getActiveSheet().appendRow(row);
+}
+
+function _cohRow(folder, row) {
+  _sheetRow(folder, 'coerenza_pazienti',
+    ['data e ora', 'codice', 'durata (min)', 'atti/min',
+     'coerenza media', '% in coerenza', 'coerenza picco',
+     'FC media', 'sorgente', 'campioni', 'ts ISO'],
+    row);
 }
 
 function _logRow(folder, row) {
