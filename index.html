@@ -1169,7 +1169,7 @@ const HRV = (() => {
   // del Dott. Sposini (cartella unica "HRV pazienti"). Finché è vuoto, il bottone
   // "Invia" ripiega sulla tendina di condivisione iOS. Incollare qui l'URL dopo il
   // deploy dello script (…/exec).
-  const DOCTOR_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbwaGhCyJK7FP4DkP7yrS79O93-op90ZAFczJpiRYYAehfPXORKmBpnhN-yewxkIMrODSA/exec';
+  const DOCTOR_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbxCZSzyXdHN70Fi8iVA7L2fQi_C5N38axZN4mQuO_b76z6mTMEvmUoPhUMsF8POxn50Rg/exec';
 
   // ---- Parametri filtro ----
   const MED_WIN = 9, THRESH = 0.20, RR_MIN = 300, RR_MAX = 2000;
@@ -1998,7 +1998,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v33';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v34';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
