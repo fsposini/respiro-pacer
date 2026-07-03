@@ -1998,7 +1998,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v34';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v35';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2479,7 +2479,7 @@ const AlphaTest = (() => {
     const d=new Date(rec.ts), pad=n=>String(n).padStart(2,'0');
     const local=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
     if(st) st.textContent='Invio del risultato al medico…';
-    try{ await HRV.uploadAlpha({ code, ts:rec.ts, local, alpha1:rec.alpha.toFixed(3), fc_media:rec.hr, n_battiti:rec.nkept, n_esclusi:rec.nexcl, durata_min:durMin });
+    try{ await HRV.uploadAlpha({ code, ts:rec.ts, local, alpha1:rec.alpha.toFixed(3).replace('.',','), fc_media:rec.hr, n_battiti:rec.nkept, n_esclusi:rec.nexcl, durata_min:durMin });
       if(st) st.textContent='✓ Risultato inviato al medico ('+code+').';
     }catch(e){ if(st) st.textContent='Risultato non inviato: riprova con connessione attiva.'; }
   }
