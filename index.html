@@ -422,7 +422,8 @@
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
     <div id="hrvTestSetup">
       <label for="hrvTestCode">Codice paziente (pseudonimo, nessun nome)</label>
-      <input id="hrvTestCode" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false">
+      <input id="hrvTestCode" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false">
+      <div class="code-gen"><span>Nuovo paziente?</span><button type="button" data-gen="HRV" data-for="hrvTestCode">🎲 Genera codice</button></div>
       <div class="hrv-test-fields">
         <div>
           <label for="hrvTestSex">Sesso</label>
@@ -508,8 +509,8 @@
         <button type="button" data-min="6" class="btn ghost">6 min</button>
       </div>
       <label for="alphaCode" style="margin-top:8px">Codice atleta (per il report al medico)</label>
-      <input id="alphaCode" class="cam-code" type="text" placeholder="es. ATL-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <div class="code-gen"><span>Nuovo?</span><button type="button" data-gen="MF" data-for="alphaCode">🎲 Genera MF</button><button type="button" data-gen="ATL" data-for="alphaCode">🎲 Genera ATL</button></div>
+      <input id="alphaCode" class="cam-code" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="code-gen"><span>Nuovo atleta?</span><button type="button" data-gen="HRV" data-for="alphaCode">🎲 Genera codice</button></div>
       <label class="hrv-consent" id="alphaConsentWrap">
         <input type="checkbox" id="alphaConsent">
         <span>Acconsento all'invio al mio medico del <b>risultato α1</b> (valore, data, FC media), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Una volta sola.</span>
@@ -561,8 +562,8 @@
       </div>
       <div class="cam-sendnote">Il <b>tono</b> sale e scende col respiro; la <b>campana</b> fa ding (inspira) e dong (espira). Funzionano su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
-      <input id="camCode" class="cam-code" type="text" placeholder="es. MF-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <div class="code-gen"><span>Nuovo?</span><button type="button" data-gen="MF" data-for="camCode">🎲 Genera MF</button><button type="button" data-gen="ATL" data-for="camCode">🎲 Genera ATL</button></div>
+      <input id="camCode" class="cam-code" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="code-gen"><span>Nuovo paziente?</span><button type="button" data-gen="HRV" data-for="camCode">🎲 Genera codice</button></div>
       <label class="hrv-consent" id="camConsentWrap">
         <input type="checkbox" id="camConsent">
         <span>Acconsento all'invio al mio medico del <b>riepilogo dell'allenamento</b> (data, orario, durata, livello di coerenza), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome né dato clinico. Consenso richiesto una volta sola.</span>
@@ -2004,7 +2005,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v36';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v37';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
