@@ -365,10 +365,6 @@
     .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
     .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
     .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
-    .code-gen{display:flex;gap:6px;justify-content:center;align-items:center;margin:2px 0 4px;flex-wrap:wrap}
-    .code-gen span{font-size:.74rem;color:var(--muted)}
-    .code-gen button{padding:5px 12px;border-radius:8px;border:1px solid rgba(120,170,255,.5);background:rgba(120,170,255,.14);color:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
-    .code-gen button:active{transform:translateY(1px)}
     .cam-graph{margin:8px auto 2px;max-width:340px}
     .cam-graph-lbl{font-size:.72rem;color:var(--muted);text-align:left;margin:0 2px 3px}
     .cam-graph-lbl i{font-style:normal}
@@ -422,8 +418,7 @@
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
     <div id="hrvTestSetup">
       <label for="hrvTestCode">Codice paziente (pseudonimo, nessun nome)</label>
-      <input id="hrvTestCode" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false">
-      <div class="code-gen"><span>Nuovo paziente?</span><button type="button" data-gen="HRV" data-for="hrvTestCode">🎲 Genera codice</button></div>
+      <input id="hrvTestCode" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false">
       <div class="hrv-test-fields">
         <div>
           <label for="hrvTestSex">Sesso</label>
@@ -509,8 +504,7 @@
         <button type="button" data-min="6" class="btn ghost">6 min</button>
       </div>
       <label for="alphaCode" style="margin-top:8px">Codice atleta (per il report al medico)</label>
-      <input id="alphaCode" class="cam-code" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <div class="code-gen"><span>Nuovo atleta?</span><button type="button" data-gen="HRV" data-for="alphaCode">🎲 Genera codice</button></div>
+      <input id="alphaCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <label class="hrv-consent" id="alphaConsentWrap">
         <input type="checkbox" id="alphaConsent">
         <span>Acconsento all'invio al mio medico del <b>risultato α1</b> (valore, data, FC media), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Una volta sola.</span>
@@ -562,8 +556,7 @@
       </div>
       <div class="cam-sendnote">Il <b>tono</b> sale e scende col respiro; la <b>campana</b> fa ding (inspira) e dong (espira). Funzionano su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
-      <input id="camCode" class="cam-code" type="text" placeholder="es. HRV-AB12" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <div class="code-gen"><span>Nuovo paziente?</span><button type="button" data-gen="HRV" data-for="camCode">🎲 Genera codice</button></div>
+      <input id="camCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <label class="hrv-consent" id="camConsentWrap">
         <input type="checkbox" id="camConsent">
         <span>Acconsento all'invio al mio medico del <b>riepilogo dell'allenamento</b> (data, orario, durata, livello di coerenza), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome né dato clinico. Consenso richiesto una volta sola.</span>
@@ -2005,7 +1998,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v37';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v38';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2514,14 +2507,6 @@ const AlphaTest = (() => {
 /* ovunque, senza fascia. NON è una misura di precisione. Su Android usa il flash;   */
 /* su iPhone il web non controlla il flash → serve buona luce. Riusa il calcolo di   */
 /* coerenza HeartMath del modulo HRV (HRV.cohOf).                                     */
-/* Generatore di codice pseudonimo (MF-/ATL- + 4 caratteri non ambigui, niente O/0/I/1). */
-function genCode(prefix){
-  const AL='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s='';
-  const a=new Uint32Array(4); try{ crypto.getRandomValues(a); }catch(e){ for(let i=0;i<4;i++) a[i]=Math.floor(Math.random()*4294967296); }
-  for(let i=0;i<4;i++) s+=AL[a[i]%AL.length];
-  return prefix+'-'+s;
-}
-
 const CameraCoherence = (() => {
   const el = id => document.getElementById(id);
   const BREATH_MS = 10000;          // 6 atti/min = risonanza
@@ -2873,15 +2858,6 @@ TestMode.init();
 MorningTest.init();
 AlphaTest.init();
 CameraCoherence.init();
-
-/* Pulsanti "Genera codice": creano un codice pseudonimo e lo salvano nel profilo locale
-   condiviso (respiroPacer.testProfile.v1), aggiornando il campo di input relativo. */
-document.addEventListener('click', function(e){
-  const b=e.target.closest('[data-gen]'); if(!b) return;
-  const code=genCode(b.getAttribute('data-gen'));
-  const inp=document.getElementById(b.getAttribute('data-for')); if(inp) inp.value=code;
-  try{ const K='respiroPacer.testProfile.v1'; const p=JSON.parse(localStorage.getItem(K)||'null')||{}; p.code=code; localStorage.setItem(K, JSON.stringify(p)); }catch(err){}
-});
 
 /* ---- Guida utente (overlay) ---- */
 (function(){
