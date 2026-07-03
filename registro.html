@@ -74,9 +74,12 @@
   <!-- APP -->
   <div id="app" class="hide">
     <div class="toolbar">
-      <button id="exportBtn">⬇︎ Esporta backup cifrato</button>
+      <button id="exportBtn">⬇︎ Esporta backup</button>
+      <button id="importBtn">⬆︎ Ripristina</button>
       <button id="lockBtn">🔒 Blocca</button>
     </div>
+    <input type="file" id="importFile" accept="application/json,.json" class="hide">
+    <p class="locknote" style="margin:-4px 0 12px">💡 Fai un <b>Esporta backup</b> nella tua cartella Drive dopo ogni nuovo paziente: se perdi il telefono, con <b>Ripristina</b> e la password recuperi tutto su un altro telefono.</p>
 
     <div class="card">
       <b>Aggiungi paziente / atleta</b>
@@ -126,11 +129,12 @@ async function encryptObj(obj){
   const out=new Uint8Array(iv.length+ct.byteLength); out.set(iv,0); out.set(new Uint8Array(ct), iv.length);
   return b2a(out.buffer);
 }
-async function decryptData(b64){
+async function decryptWith(k, b64){
   const raw=a2b(b64), iv=raw.slice(0,12), ct=raw.slice(12);
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv}, k, ct);
   return JSON.parse(new TextDecoder().decode(pt));
 }
+async function decryptData(b64){ return decryptWith(key, b64); }
 async function persist(){ try{ localStorage.setItem(LS_DATA, await encryptObj(entries)); }catch(e){ alert('Errore nel salvataggio: '+e); } }
 
 /* ---------- generatore codice (stesso schema dell'app) ---------- */
@@ -210,6 +214,24 @@ async function exportBackup(){
   a.download='registro_codici_hrv_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
+// Ripristino da backup cifrato: unisce le voci (per codice tiene la più recente).
+async function importBackup(file){
+  let obj; try{ obj=JSON.parse(await file.text()); }catch(e){ alert('File non valido.'); return; }
+  if(!obj || !obj.salt || !obj.data){ alert('Questo file non è un backup del registro.'); return; }
+  const pw=prompt('Password del backup (quella con cui l\'hai esportato):'); if(!pw) return;
+  let imported;
+  try{ const k2=await deriveKey(pw, a2b(obj.salt)); imported=await decryptWith(k2, obj.data); }
+  catch(e){ alert('Password errata o backup danneggiato.'); return; }
+  if(!Array.isArray(imported)){ alert('Backup non valido.'); return; }
+  const byCode={}; entries.forEach(e=>byCode[e.code]=e);
+  let added=0, updated=0;
+  imported.forEach(e=>{ if(!e||!e.code) return; const ex=byCode[e.code];
+    if(!ex){ byCode[e.code]=e; added++; }
+    else if((e.ts||0)>(ex.ts||0)){ byCode[e.code]=e; updated++; } });
+  entries=Object.values(byCode).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  await persist(); render();
+  alert('Ripristino completato: '+added+' nuovi, '+updated+' aggiornati. Totale in registro: '+entries.length+'.');
+}
 
 /* ---------- eventi ---------- */
 $('setBtn').addEventListener('click', doSetup);
@@ -218,6 +240,8 @@ $('unlockPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doUnlock();
 $('saveBtn').addEventListener('click', addEntry);
 $('lockBtn').addEventListener('click', lock);
 $('exportBtn').addEventListener('click', exportBackup);
+$('importBtn').addEventListener('click', ()=> $('importFile').click());
+$('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBackup(f); e.target.value=''; });
 $('search').addEventListener('input', render);
 document.addEventListener('click', e=>{
   const g=e.target.closest('[data-p]'); if(g){ $('fCode').value=genCode(g.getAttribute('data-p')); return; }
