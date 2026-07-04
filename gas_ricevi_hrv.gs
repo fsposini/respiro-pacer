@@ -24,6 +24,13 @@
 
 var FOLDER_ID = '1rxRFjDMlJ9y5Teo607LEa-BjtI66PaYA';   // ← cartella Drive "HRV pazienti"
 
+// ── Avviso readiness su Telegram (stesso bot della segreteria; chat del medico) ──
+// Quando un atleta la mattina ha la readiness in "Recupero", il medico riceve un
+// messaggio sulla propria chat con il SOLO codice pseudonimo, così può decidere di
+// contattarlo (decodifica codice→nome in locale su registro.html). Nessun dato a terzi.
+var TELEGRAM_TOKEN   = '8654529611:AAFbht-y-YsDsRKhpH9fx7q_s-O2JCBPpmI';
+var TELEGRAM_CHAT_ID = '7174842868';
+
 function doPost(e) {
   try {
     var p = (e && e.parameter) ? e.parameter : {};
@@ -59,6 +66,20 @@ function doPost(e) {
         ['data e ora', 'codice', 'alpha1', 'FC media', 'battiti', 'esclusi', 'durata (min)', 'ts ISO'],
         arow);
       return _json({ ok: true, kind: 'alpha1' });
+    }
+
+    // ── Test del mattino (READINESS): una riga sul foglio "readiness_atleti" ──
+    // + avviso Telegram al medico quando il verdetto è "Recupero" (alert=1).
+    if (kind === 'readiness') {
+      var rrow = [
+        p.local || ts, code, p.verdetto || '', p.lnrmssd || '',
+        p.rmssd || '', p.base_rmssd || '', p.fc_media || '', p.alert || '0', ts
+      ];
+      _sheetRow(folder, 'readiness_atleti',
+        ['data e ora', 'codice', 'verdetto', 'lnRMSSD', 'RMSSD', 'RMSSD base', 'FC media', 'alert', 'ts ISO'],
+        rrow);
+      if (p.alert === '1') _notifyReadiness(code, p);
+      return _json({ ok: true, kind: 'readiness' });
     }
 
     // ── Test HRV clinico: un file CSV per test (comportamento originale) ──
@@ -118,6 +139,32 @@ function _logRow(folder, row) {
       ss.getActiveSheet().appendRow(['timestamp', 'codice', 'file', 'fileId']);
     }
     ss.getActiveSheet().appendRow(row);
+  } catch (_) {}
+}
+
+// Avvisa il medico su Telegram che un atleta ha la readiness in calo. Un solo avviso
+// per atleta al giorno (dedup con Script Properties): se ripete la misura, niente doppioni.
+function _notifyReadiness(code, p) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var day = String(p.local || '').slice(0, 10);          // YYYY-MM-DD
+    var key = 'ready_' + code + '_' + day;
+    if (props.getProperty(key)) return;                     // già avvisato oggi per questo atleta
+    props.setProperty(key, '1');
+
+    var msg = '🔴 <b>Readiness in calo</b>\n'
+      + 'Atleta <b>' + code + '</b>\n'
+      + 'RMSSD ' + (p.rmssd || '?') + ' ms · sua media ' + (p.base_rmssd || '?') + ' ms\n'
+      + 'Verdetto: <b>' + (p.verdetto || 'Recupero') + '</b>\n'
+      + (p.local || '') + '\n\n'
+      + 'Valuta se contattare l\'atleta (decodifica il codice su registro.html).';
+
+    UrlFetchApp.fetch('https://api.telegram.org/bot' + TELEGRAM_TOKEN + '/sendMessage', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'HTML' }),
+      muteHttpExceptions: true,
+    });
   } catch (_) {}
 }
 

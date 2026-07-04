@@ -470,6 +470,11 @@
     <h3>🌅 Test del mattino — 1 minuto</h3>
     <div id="mornSetup">
       <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
+      <label for="mornCode" style="margin-top:8px">Codice atleta (per l'avviso al medico, facoltativo)</label>
+      <input id="mornCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <label class="cam-consent" id="mornConsentWrap"><input type="checkbox" id="mornConsent">
+        <span>Acconsento all'invio al mio medico dell'<b>esito della readiness</b> (verdetto, indice HRV, data) in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Serve perché il medico possa <b>avvisarmi se il recupero cala</b>. Consenso richiesto una volta sola.</span>
+      </label>
       <button id="mornStart" class="btn">Avvia test del mattino</button>
     </div>
     <div id="mornRun" style="display:none">
@@ -1960,6 +1965,15 @@ const HRV = (() => {
     await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
     return true;
   }
+  // Invio dell'esito del TEST DEL MATTINO (readiness): una riga sul foglio "readiness_atleti".
+  // Se alert=1 (verdetto Recupero) il GAS avvisa il medico su Telegram. Pseudonimizzato:
+  // solo il codice atleta + indici HRV e verdetto, nessun nome né dato anagrafico.
+  async function uploadReadiness(fields){
+    if(!DOCTOR_UPLOAD_URL) return false;
+    const body = new URLSearchParams(Object.assign({ kind:'readiness', consent:'1' }, fields));
+    await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
+    return true;
+  }
   function hasUploadUrl(){ return !!DOCTOR_UPLOAD_URL; }
   function sendStatus(msg, warn){
     const e = el('hrvSendStatus'); if(!e) return;
@@ -1998,13 +2012,13 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v38';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v39';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
-           uploadCoherence, uploadAlpha, hasUploadUrl,
+           uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl,
            liveRR: ()=> rr.map(o=>o.rr) };
 })();
 window.HRV = HRV;
@@ -2128,6 +2142,8 @@ const TestMode = (() => {
 const MorningTest = (() => {
   const el = id => document.getElementById(id);
   const KEY = 'respiroPacer.morning.v1';
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1';      // codice atleta condiviso con gli altri test
+  const CONSENT_KEY = 'respiroPacer.morningConsent.v1';
   const DUR_MS = 60000, WINDOW_DAYS = 60, MIN_READINGS = 7;
   const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
   let beats = [], raf = null, t0 = 0;
@@ -2138,12 +2154,34 @@ const MorningTest = (() => {
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
   function loadHist(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
   function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
+  function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
+  function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  function consentTs(){ try{ return localStorage.getItem(CONSENT_KEY)||''; }catch(e){ return ''; } }
+  function grantConsent(){ try{ localStorage.setItem(CONSENT_KEY, new Date().toISOString()); }catch(e){} }
+  // Invio al medico dell'esito (pseudonimizzato). Silenzioso: solo se c'è codice + consenso
+  // + URL del GAS. alert=1 quando il verdetto è "Recupero" → il GAS avvisa su Telegram.
+  async function sendReadiness(today, v){
+    const code=getCode();
+    if(!code || !consentTs() || !HRV.hasUploadUrl()) return;
+    const d=new Date(), pad=n=>String(n).padStart(2,'0');
+    const local=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    try{ await HRV.uploadReadiness({
+      code, ts:d.toISOString(), local,
+      lnrmssd:today.ln.toFixed(3).replace('.',','), rmssd:Math.round(today.rmssd), fc_media:today.hr,
+      base_rmssd:v.baseRmssd!=null?Math.round(v.baseRmssd):'',
+      verdetto:v.big, alert:v.big==='Recupero'?'1':'0'
+    }); }catch(e){}
+  }
 
   /* ---- avvio e cattura 1 minuto ---- */
   function start(){
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
+    // Codice atleta + consenso una-tantum per l'avviso al medico (facoltativi). Senza, la misura
+    // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
+    const codeInput=el('mornCode'); if(codeInput && codeInput.value.trim()) saveCode(codeInput.value.trim().toUpperCase());
+    const cons=el('mornConsent'); if(cons && cons.checked && !consentTs()) grantConsent();
     HRV.beginMorning();
     try{ WakeLock.acquire(); }catch(e){}
     show('Run'); t0=performance.now(); loop();
@@ -2225,6 +2263,9 @@ const MorningTest = (() => {
     saveHist(h);
     renderResult(h, {rmssd, ln});
     show('Result');
+    // Invio al medico (pseudonimizzato): riga di readiness sempre, avviso Telegram solo se Recupero.
+    const b=baseline(h);
+    if(b){ const v=classify(ln,b); sendReadiness({rmssd, ln, hr:Math.round(hr)}, {big:v.big, baseRmssd:Math.exp(b.m)}); }
   }
   function baseline(h){
     const cutoff=Date.now()-WINDOW_DAYS*864e5;
@@ -2278,6 +2319,8 @@ const MorningTest = (() => {
 
   function init(){
     if(!el('mornStart')) return;
+    const codeInput=el('mornCode'); if(codeInput) codeInput.value=getCode();
+    const wrap=el('mornConsentWrap'); if(wrap && consentTs()) wrap.style.display='none';
     el('mornStart').addEventListener('click', start);
     el('mornAbort').addEventListener('click', abort);
     el('mornTaco').addEventListener('click', onTacoClick);
