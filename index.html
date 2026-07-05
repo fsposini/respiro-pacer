@@ -347,7 +347,7 @@
     .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
     .btn.ghost{color:var(--text)}   /* testo leggibile: senza colore esplicito iOS colora il testo di blu di sistema, illeggibile su scuro */
     .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
-    .cam-durs .cam-sel{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#06222a;font-weight:700}   /* attivo = verde acqua dell'app, come le tab */
+    .cam-durs .btn.cam-sel{background:linear-gradient(135deg,var(--accent),var(--accent2))!important;border-color:transparent!important;color:#06222a!important;font-weight:700}   /* attivo = verde acqua (specificità alta + !important per battere .hrv-cam .btn.ghost trasparente) */
     .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
     .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
     .cam-graph{margin:8px auto 2px;max-width:340px}
@@ -2000,7 +2000,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v40';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v41';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
