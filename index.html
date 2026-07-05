@@ -891,7 +891,7 @@ const Audio = (() => {
     });
   }
   function ding(){ chime(528); }                                                       // inspira: acuto, breve, brillante
-  function dong(){ chime(264, { decay:4.0, partials:[[1,1],[2,0.40],[3,0.12]] }); }    // espira: un'ottava sotto, lungo, caldo
+  function dong(){ chime(352, { decay:4.0 }); }    // espira: dong originale (352 Hz, timbro campana), solo coda più lunga (2,6→4,0s)
   return {
     async start(type){ensure();if(ctx.state==='suspended')await ctx.resume();await build(type);started=true;},
     prime, chime, ding, dong,
@@ -2000,7 +2000,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v41';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v42';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
