@@ -220,26 +220,10 @@
 
   <!-- COLONNA 3: AUDIO -->
   <div class="panel">
-    <h2>Suono ambientale</h2>
-    <div class="toggle-row"><span>Attiva suono</span><label class="switch"><input type="checkbox" id="ambientOn"><span class="slider"></span></label></div>
-    <div class="field" style="margin-top:10px"><label>Tipo di suono</label>
-      <select id="ambientType">
-        <option value="tone">Tono guida (sale / scende)</option>
-        <option value="bell">Campana ding/dong (inspira / espira)</option>
-        <option value="bowl">Campana tibetana (reale)</option>
-        <option value="ocean">Onde dell'oceano (reale)</option>
-        <option value="breath">Respiro (soft / tuo file)</option>
-      </select>
-    </div>
-    <div class="vol-field"><label>Volume ambientale</label><input type="range" id="ambientVol" min="0" max="100" value="70"></div>
-    <details><summary>Usa i tuoi file audio</summary>
-      <div class="custom-files">
-        <p class="file-note">Carica una tua registrazione (es. un respiro guida ideale). Per renderla permanente, passamela e la incorporo.</p>
-        <label>Respiro <input type="file" accept="audio/*" data-slot="breath"></label>
-        <label>Campana <input type="file" accept="audio/*" data-slot="bowl"></label>
-        <label>Oceano <input type="file" accept="audio/*" data-slot="ocean"></label>
-      </div>
-    </details>
+    <h2>Campana</h2>
+    <div class="toggle-row"><span>Campana (ding / dong)</span><label class="switch"><input type="checkbox" id="ambientOn"><span class="slider"></span></label></div>
+    <input type="hidden" id="ambientType" value="bell">
+    <div class="vol-field" style="margin-top:10px"><label>Volume campana</label><input type="range" id="ambientVol" min="0" max="100" value="70"></div>
     <h2 style="margin-top:16px">Voce guida</h2>
     <div class="toggle-row"><span>Voce italiana</span><label class="switch"><input type="checkbox" id="voiceOn" checked><span class="slider"></span></label></div>
     <div class="field" style="margin-top:10px"><label>Voce</label><select id="voiceSelect"><option>Caricamento voci…</option></select></div>
@@ -361,8 +345,9 @@
     .hrv-cam .btn{margin-top:8px}
     .hrv-cam .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
     .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+    .btn.ghost{color:var(--text)}   /* testo leggibile: senza colore esplicito iOS colora il testo di blu di sistema, illeggibile su scuro */
     .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
-    .cam-durs .cam-sel{background:rgba(120,170,255,.28);border-color:rgba(120,170,255,.6)}
+    .cam-durs .cam-sel{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#06222a;font-weight:700}   /* attivo = verde acqua dell'app, come le tab */
     .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
     .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
     .cam-graph{margin:8px auto 2px;max-width:340px}
@@ -554,12 +539,11 @@
       </div>
       <label style="margin-top:8px">Guida al respiro (anche a occhi chiusi)</label>
       <div class="cam-durs" id="camGuide">
-        <button type="button" data-guide="tono" class="btn ghost cam-sel">〰️ Tono</button>
-        <button type="button" data-guide="campana" class="btn ghost">🎐 Campana</button>
+        <button type="button" data-guide="campana" class="btn ghost cam-sel">🎐 Campana</button>
         <button type="button" data-guide="voce" class="btn ghost">🗣️ Voce</button>
         <button type="button" data-guide="muto" class="btn ghost">🔇 Muto</button>
       </div>
-      <div class="cam-sendnote">Il <b>tono</b> sale e scende col respiro; la <b>campana</b> fa ding (inspira) e dong (espira). Funzionano su ogni telefono. La <b>voce</b> può non funzionare in Bluefy.</div>
+      <div class="cam-sendnote">La <b>campana</b> fa ding (inspira) e dong (espira) e funziona su ogni telefono. La <b>voce</b> dice “Inspira/Espira” ma può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
       <input id="camCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <label class="hrv-consent" id="camConsentWrap">
@@ -884,28 +868,33 @@ const Audio = (() => {
   }
   function onPhaseStart(phase){
     if(nodes._mode==='oneshot'&&phase==='inhale') spawnOneshot(currentType);
-    if(nodes._mode==='bell'){ if(phase==='inhale') chime(528); else if(phase==='exhale') chime(352); }  // ding / dong
+    if(nodes._mode==='bell'){ if(phase==='inhale') ding(); else if(phase==='exhale') dong(); }  // ding / dong
   }
   // Prepara/riprende il contesto audio (DEVE partire da un gesto utente su iOS).
   async function prime(){ ensure(); if(ctx.state==='suspended') await ctx.resume(); }
-  // Rintocco tipo campana tibetana: partiali inarmonici + coda lunga. Per la guida
-  // ding/dong (acuto = inspira, grave = espira). Indipendente dal tono continuo.
-  function chime(freq){
+  // Rintocco campana. ding (acuto=inspira) e dong (grave=espira). opts consente coda
+  // più lunga e armoniche diverse: il dong è un'ottava sotto, più lungo e più caldo
+  // (armoniche morbide invece delle inarmoniche metalliche del ding).
+  function chime(freq, opts){
     if(!ctx) return; const t=ctx.currentTime;
+    const decay = (opts && opts.decay) || 2.6;
+    const partials = (opts && opts.partials) || [[1,1],[2.76,0.55],[5.40,0.28],[8.93,0.13]];
     const g=ctx.createGain();
     g.gain.setValueAtTime(0.0001,t);
     g.gain.exponentialRampToValueAtTime(0.55,t+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+2.6);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+decay);
     g.connect(ambientGain||master||ctx.destination);
-    [[1,1],[2.76,0.55],[5.40,0.28],[8.93,0.13]].forEach(([mult,amp])=>{
+    partials.forEach(([mult,amp])=>{
       const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=freq*mult;
       const og=ctx.createGain(); og.gain.value=amp; o.connect(og); og.connect(g);
-      o.start(t); o.stop(t+2.7);
+      o.start(t); o.stop(t+decay+0.1);
     });
   }
+  function ding(){ chime(528); }                                                       // inspira: acuto, breve, brillante
+  function dong(){ chime(264, { decay:4.0, partials:[[1,1],[2,0.40],[3,0.12]] }); }    // espira: un'ottava sotto, lungo, caldo
   return {
     async start(type){ensure();if(ctx.state==='suspended')await ctx.resume();await build(type);started=true;},
-    prime, chime,
+    prime, chime, ding, dong,
     stop(){if(envGain)envGain.gain.setTargetAtTime(0.0001,ctx.currentTime,0.1);clearNodes();started=false;},
     async setType(type){if(started)await build(type);},
     update,onPhaseStart,
@@ -1102,7 +1091,7 @@ const App = (() => {
 
   /* ---------- PERSISTENZA IMPOSTAZIONI ---------- */
   const SKEY='respiroPacer.settings.v1';
-  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','ambientType','ambientVol','voiceVol'];
+  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','ambientVol','voiceVol'];
   const chkIds=['ambientOn','voiceOn'];
   function activateTab(m){
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===m));
@@ -1132,7 +1121,6 @@ const App = (() => {
     ['inhale','holdFull','exhale','holdEmpty'].forEach(id=>el(id).addEventListener('input',updateFreqDisplay));
     ['startRate','endRate','stepRate'].forEach(id=>el(id).addEventListener('input',()=>{updateDynCalc();updateFreqDisplay();}));
     el('ambientOn').addEventListener('change',e=>Audio.setAmbientEnabled(e.target.checked));
-    el('ambientType').addEventListener('change',e=>Audio.setType(e.target.value));
     el('ambientVol').addEventListener('input',e=>Audio.setMasterVol(+e.target.value/100));
     el('voiceOn').addEventListener('change',e=>{Voice.setEnabled(e.target.checked);if(e.target.checked)Voice.unlock();});
     el('voiceVol').addEventListener('input',e=>Voice.setVol(+e.target.value/100));
@@ -2012,7 +2000,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v39';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v40';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2556,7 +2544,7 @@ const CameraCoherence = (() => {
   const COH_WIN_MS = 64000, RECALC_MS = 2000;
   const BASELINE_MS = 1200;         // detrend: rimuove deriva/respiro, tiene il polso
   let chosenMin = 5;
-  let guideMode = 'tono';                       // guida al respiro: 'tono' | 'voce' | 'muto'
+  let guideMode = 'campana';                    // guida al respiro: 'campana' | 'voce' | 'muto'
   let stream=null, track=null, video=null, canvas=null, cctx=null;
   let sampleRAF=null, orbRAF=null, t0=0, lastHalf=null, lastRecalc=0;
   let raw=[];                       // {t, v} canale PPG grezzo (verde o rosso)
@@ -2587,11 +2575,10 @@ const CameraCoherence = (() => {
   async function start(){
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
-    // GUIDA AL RESPIRO: attiva tono/voce DENTRO il gesto del tap, PRIMA di ogni await.
-    // Il tono (WebAudio) funziona anche in Bluefy; la voce (TTS) no → default tono.
+    // GUIDA AL RESPIRO: attiva campana/voce DENTRO il gesto del tap, PRIMA di ogni await.
+    // La campana (WebAudio) funziona anche in Bluefy; la voce (TTS) no → default campana.
     try{ Voice.setEnabled(guideMode==='voce'); Voice.unlock(); }catch(e){}
-    if(guideMode==='tono'){ try{ Audio.start('tone'); Audio.setMasterVol(0.7); }catch(e){} }
-    else if(guideMode==='campana'){ try{ Audio.prime(); Audio.setMasterVol(0.8); }catch(e){} }
+    if(guideMode==='campana'){ try{ Audio.prime(); Audio.setMasterVol(0.8); }catch(e){} }
     // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
@@ -2689,10 +2676,9 @@ const CameraCoherence = (() => {
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
     const phaseName=bs.name||(bs.text==='Inspira'?'inhale':'exhale');
-    if(guideMode==='tono'){ try{ Audio.update(bs.full, phaseName); }catch(e){} }
     if(bs.text!==lastHalf){ lastHalf=bs.text; el('camPhase').textContent=bs.text;
       if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} }
-      else if(guideMode==='campana'){ try{ Audio.chime(phaseName==='inhale'?528:352); }catch(e){} }   // ding acuto / dong grave
+      else if(guideMode==='campana'){ try{ phaseName==='inhale'?Audio.ding():Audio.dong(); }catch(e){} }   // ding acuto / dong grave (ottava sotto, lungo)
     }
     // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
     // periodicità è forte → niente numeri sballati tipo 163)
