@@ -28,8 +28,12 @@ var FOLDER_ID = '1rxRFjDMlJ9y5Teo607LEa-BjtI66PaYA';   // ← cartella Drive "HR
 // Quando un atleta la mattina ha la readiness in "Recupero", il medico riceve un
 // messaggio sulla propria chat con il SOLO codice pseudonimo, così può decidere di
 // contattarlo (decodifica codice→nome in locale su registro.html). Nessun dato a terzi.
-var TELEGRAM_TOKEN   = '8654529611:AAFbht-y-YsDsRKhpH9fx7q_s-O2JCBPpmI';
-var TELEGRAM_CHAT_ID = '7174842868';
+//
+// ⚠️ Il token del bot NON va scritto qui: questo repository è PUBBLICO. Impostalo una
+// volta sola in Apps Script → ⚙️ Impostazioni progetto → Proprietà script → aggiungi
+// una proprietà con chiave  TELEGRAM_TOKEN  e valore il token dato da BotFather.
+function _telegramToken(){ return PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN') || ''; }
+var TELEGRAM_CHAT_ID = '7174842868';   // id della chat del medico (non è un segreto)
 
 function doPost(e) {
   try {
@@ -150,6 +154,9 @@ function _notifyReadiness(code, p) {
     var day = String(p.local || '').slice(0, 10);          // YYYY-MM-DD
     var key = 'ready_' + code + '_' + day;
     if (props.getProperty(key)) return;                     // già avvisato oggi per questo atleta
+
+    var token = _telegramToken();
+    if (!token) return;                                     // token non ancora impostato nelle Proprietà script
     props.setProperty(key, '1');
 
     var msg = '🔴 <b>Readiness in calo</b>\n'
@@ -159,7 +166,7 @@ function _notifyReadiness(code, p) {
       + (p.local || '') + '\n\n'
       + 'Valuta se contattare l\'atleta (decodifica il codice su registro.html).';
 
-    UrlFetchApp.fetch('https://api.telegram.org/bot' + TELEGRAM_TOKEN + '/sendMessage', {
+    UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'HTML' }),
