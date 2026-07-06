@@ -313,6 +313,7 @@
     /* ---- Test del mattino ---- */
     .hrv-morning{margin-top:14px;padding:14px;border-radius:16px;background:rgba(255,193,84,.07);border:1px solid rgba(255,193,84,.28);text-align:center}
     .hrv-morning h3{margin:0 0 10px;font-size:1rem}
+    .morn-phase{font-size:.72rem;text-transform:uppercase;letter-spacing:1.6px;font-weight:700;margin-bottom:2px;color:var(--muted)}
     .hrv-morning .btn{margin-top:8px}
     .hrv-morning .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
     .hrv-morning .btn:disabled{opacity:.45;cursor:not-allowed}
@@ -463,8 +464,9 @@
       <button id="mornStart" class="btn">Avvia test del mattino</button>
     </div>
     <div id="mornRun" style="display:none">
-      <div class="morn-count" id="mornCount">1:00</div>
-      <div class="hrv-test-hint">Stai fermo e rilassato, respira normalmente. Non parlare.</div>
+      <div class="morn-phase" id="mornPhase">Stabilizzazione</div>
+      <div class="morn-count" id="mornCount">0:25</div>
+      <div class="hrv-test-hint" id="mornHint">Resta fermo e rilassato.</div>
       <button id="mornAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="mornEdit" style="display:none">
@@ -892,9 +894,23 @@ const Audio = (() => {
   }
   function ding(){ chime(528); }                                                       // inspira: acuto, breve, brillante
   function dong(){ chime(352, { decay:4.0 }); }    // espira: dong originale (352 Hz, timbro campana), solo coda più lunga (2,6→4,0s)
+  // Segnali di INIZIO / FINE registrazione per le misurazioni. Sempre udibili (collegati
+  // al master, non al toggle "Campana"). Inizio = due bip che salgono; Fine = arpeggio
+  // di tre note che scende. Suoni scelti da Federico.
+  function beepAt(freq,t0,dur){
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type='sine'; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.3,t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(master||ctx.destination);
+    o.start(t0); o.stop(t0+dur+0.03);
+  }
+  function recStart(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; beepAt(660,t,0.13); beepAt(880,t+0.15,0.15); }          // due bip che salgono
+  function recEnd(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; [783.99,659.25,523.25].forEach((f,i)=>beepAt(f,t+i*0.12,0.18)); }  // arpeggio che scende
   return {
     async start(type){ensure();if(ctx.state==='suspended')await ctx.resume();await build(type);started=true;},
-    prime, chime, ding, dong,
+    prime, chime, ding, dong, recStart, recEnd,
     stop(){if(envGain)envGain.gain.setTargetAtTime(0.0001,ctx.currentTime,0.1);clearNodes();started=false;},
     async setType(type){if(started)await build(type);},
     update,onPhaseStart,
@@ -2000,7 +2016,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v43';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v44';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2132,9 +2148,9 @@ const MorningTest = (() => {
   const KEY = 'respiroPacer.morning.v1';
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';      // codice atleta condiviso con gli altri test
   const CONSENT_KEY = 'respiroPacer.morningConsent.v1';
-  const DUR_MS = 60000, WINDOW_DAYS = 60, MIN_READINGS = 7;
+  const DUR_MS = 60000, STAB_MS = 25000, WINDOW_DAYS = 60, MIN_READINGS = 7;   // STAB_MS: stabilizzazione (scarta artefatti, non registra)
   const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
-  let beats = [], raf = null, t0 = 0;
+  let beats = [], raf = null, t0 = 0, phase = '';   // phase: 'stab' (stabilizzazione) | 'measure'
 
   function show(which){
     ['Setup','Run','Edit','Result'].forEach(s=>{ const e=el('morn'+s); if(e) e.style.display = (s===which)?'':'none'; });
@@ -2170,14 +2186,37 @@ const MorningTest = (() => {
     // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
     const codeInput=el('mornCode'); if(codeInput && codeInput.value.trim()) saveCode(codeInput.value.trim().toUpperCase());
     const cons=el('mornConsent'); if(cons && cons.checked && !consentTs()) grantConsent();
-    HRV.beginMorning();
+    try{ Audio.prime(); }catch(e){}                 // sblocca l'audio nel gesto del tap (i suoni partono dopo, in ritardo)
     try{ WakeLock.acquire(); }catch(e){}
-    show('Run'); t0=performance.now(); loop();
+    show('Run'); startStabilize();
+  }
+  // Fase 1 — STABILIZZAZIONE (25s): la fascia è collegata ma NON si registra; si lascia
+  // assestare il battito e passare gli artefatti da movimento.
+  function startStabilize(){
+    phase='stab'; t0=performance.now();
+    setPhaseUI('Stabilizzazione', 'Resta fermo e rilassato: sto stabilizzando il battito.', 'var(--muted)');
+    loop();
+  }
+  // Fase 2 — REGISTRAZIONE (60s): suono d'inizio, poi cattura vera. Suono di fine a chiusura.
+  function startMeasure(){
+    phase='measure'; try{ Audio.recStart(); }catch(e){}
+    HRV.beginMorning(); t0=performance.now();
+    setPhaseUI('Registrazione', 'Registrazione in corso. Stai fermo, respira normalmente.', '#4fd1c5');
+    loop();
+  }
+  function setPhaseUI(lbl, hint, col){
+    const p=el('mornPhase'); if(p){ p.textContent=lbl; p.style.color=col; }
+    const h=el('mornHint'); if(h) h.textContent=hint;
   }
   function loop(){
-    const left = DUR_MS-(performance.now()-t0);
+    const dur = phase==='stab' ? STAB_MS : DUR_MS;
+    const left = dur-(performance.now()-t0);
     el('mornCount').textContent = fmt(left);
-    if(left<=0){ finishCapture(); return; }
+    if(left<=0){
+      if(phase==='stab'){ startMeasure(); return; }
+      try{ Audio.recEnd(); }catch(e){}
+      finishCapture(); return;
+    }
     raf = requestAnimationFrame(loop);
   }
   function stopRaf(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
