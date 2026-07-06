@@ -1811,9 +1811,21 @@ const HRV = (() => {
     const a = document.createElement('a'); a.href=url; a.download=name; a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 1500);
   }
+  // Condivisione iOS (pannello "Condividi": Salva su File, Mail, AirDrop…). Funziona
+  // anche in Bluefy, dove il download classico spesso non salva nulla. Fallback: dl().
+  async function shareOrDl(name, text, type){
+    try{
+      const file = new File([text], name, { type });
+      if(navigator.canShare && navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title:name });
+        return;
+      }
+    }catch(e){ if(e && e.name==='AbortError') return; }   // annullato dall'utente
+    dl(name, text, type);
+  }
   function exportJSON(){
     const list = load(); if(!list.length){ status('Nessuna sessione da esportare.', true); return; }
-    dl('hrv_sessione_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json',
+    shareOrDl('hrv_sessione_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json',
        JSON.stringify(list[list.length-1], null, 2), 'application/json');
   }
   function exportCSV(){
@@ -1827,7 +1839,7 @@ const HRV = (() => {
         f.vlf?f.vlf.toFixed(0):'', f.lf?f.lf.toFixed(0):'', f.hf?f.hf.toFixed(0):'', f.lfhf?f.lfhf.toFixed(2):'',
         f.lfn?f.lfn.toFixed(1):'', f.hfn?f.hfn.toFixed(1):'', f.totalPower?f.totalPower.toFixed(0):''].join(',');
     });
-    dl('hrv_storico.csv', [head.join(','), ...rows].join('\n'), 'text/csv');
+    shareOrDl('hrv_storico.csv', [head.join(','), ...rows].join('\n'), 'text/csv');
   }
   function clearStore(){
     if(!load().length){ status('Storico già vuoto.'); return; }
@@ -2016,7 +2028,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v44';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v45';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
