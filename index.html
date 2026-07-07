@@ -140,6 +140,27 @@
   .hrv-metric .mv{font-size:1.15rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
   .hrv-metric .mu{font-size:.6rem;color:var(--muted);margin-left:2px}
   .hrv-metric .ml{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+  /* Spettro di potenza (canvas stile emWave) */
+  .hrv-spectrum-wrap{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px}
+  .hrv-spectrum-wrap canvas{display:block;width:100%;height:170px}
+  /* Distribuzione spettro: barra impilata + tabella bande */
+  .hrv-bandbar{display:flex;height:16px;width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
+  .hrv-bandbar .seg{height:100%;transition:width .4s ease}
+  .hrv-bandbar .seg.vlf{background:var(--muted)}
+  .hrv-bandbar .seg.lf{background:var(--accent)}
+  .hrv-bandbar .seg.hf{background:var(--inhale)}
+  .hrv-bands{width:100%;border-collapse:collapse;margin-top:10px;font-size:.72rem;font-variant-numeric:tabular-nums}
+  .hrv-bands th,.hrv-bands td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line)}
+  .hrv-bands th{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:.6rem;font-weight:600}
+  .hrv-bands th:first-child,.hrv-bands td:first-child{text-align:left}
+  .hrv-bands tbody td:first-child{font-weight:700;color:var(--text)}
+  .hrv-bands .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .hrv-bands .dot.vlf{background:var(--muted)}
+  .hrv-bands .dot.lf{background:var(--accent)}
+  .hrv-bands .dot.hf{background:var(--inhale)}
+  .hrv-bands tr.tot td{border-bottom:none;border-top:2px solid var(--line);color:var(--text);font-weight:700}
+  .hrv-bands-note{font-size:.66rem;color:var(--muted);margin-top:8px;line-height:1.6}
+  .hrv-bands-note b{color:var(--text)}
   .hrv-quality{font-size:.7rem;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:10px;
     padding:10px 12px;margin-top:10px;line-height:1.7;font-variant-numeric:tabular-nums}
   .hrv-quality b{color:var(--text)}
@@ -233,7 +254,7 @@
 
 <div class="hrv-panel">
   <div class="hrv-head">
-    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— Polar H10</span> <span id="appVer" style="font-weight:400;color:var(--accent);font-size:.62rem;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px"></span></h2>
+    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— fascia Bluetooth con RR</span> <span id="appVer" style="font-weight:400;color:var(--accent);font-size:.62rem;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px"></span></h2>
     <div class="hrv-conn">
       <span class="hrv-dot" id="hrvDot"></span>
       <span id="hrvConnLabel" style="font-size:.72rem;color:var(--muted)">Non connesso</span>
@@ -241,7 +262,7 @@
       <button class="hrv-btn ghost" id="hrvDisconnect" disabled>Disconnetti</button>
     </div>
   </div>
-  <div class="hrv-status" id="hrvStatus">Collega il Polar H10 e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
+  <div class="hrv-status" id="hrvStatus">Collega la fascia cardio (Polar H10/H9 o altra fascia Bluetooth con RR) e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
   <details class="hrv-diag"><summary>Diagnostica connessione</summary>
     <div class="hrv-diag-row">Intervalli RR dalla fascia: <b id="hrvRRflag">—</b></div>
     <div class="hrv-log" id="hrvLog"></div>
@@ -614,6 +635,18 @@
       <div class="hrv-metric"><div><span class="mv" id="mHFn">—</span><span class="mu">n.u.</span></div><div class="ml">HF norm.</div></div>
       <div class="hrv-metric"><div><span class="mv" id="mTP">—</span><span class="mu">ms²</span></div><div class="ml">Potenza tot.</div></div>
     </div>
+    <h3>Spettro di potenza</h3>
+    <div class="hrv-spectrum-wrap"><canvas id="hrvSpectrum"></canvas></div>
+    <div class="hrv-bands-note" id="hrvSpectrumNote">Potenza (ms²/Hz) per frequenza. Le fasce colorate sono VLF, LF e HF; il picco indica la frequenza dominante. In coerenza il picco si concentra in LF, intorno a 0,10 Hz.</div>
+    <h3>Distribuzione</h3>
+    <div class="hrv-bandbar" id="hrvBandBar" aria-hidden="true">
+      <span class="seg vlf" id="segVLF"></span><span class="seg lf" id="segLF"></span><span class="seg hf" id="segHF"></span>
+    </div>
+    <table class="hrv-bands" id="hrvBands">
+      <thead><tr><th>Banda</th><th>Range (Hz)</th><th>Potenza</th><th>% del totale</th><th>Picco</th></tr></thead>
+      <tbody id="hrvBandsBody"></tbody>
+    </table>
+    <div class="hrv-bands-note">La colonna <b>% del totale</b> mostra come la potenza totale (Total Power) si distribuisce tra le bande. Il <b>picco</b> è la frequenza di massima potenza dentro la banda: in coerenza/risonanza la <b>LF</b> domina, con picco vicino a <b>0,10 Hz</b> (≈6 atti/min).</div>
     <div class="hrv-quality" id="hrvQuality"></div>
     <div class="hrv-exports">
       <button class="hrv-btn" id="hrvExportJSON">Esporta sessione (JSON)</button>
@@ -646,7 +679,18 @@
     <section class="guide-ch" id="g1">
       <h3>1 · Panoramica e primo avvio</h3>
       <p>L'HRV (Heart Rate Variability) è la variazione fisiologica nell'intervallo tra un battito e l'altro. Un cuore sano <b>non è un metronomo</b>: oscilla continuamente, perché riceve in tempo reale informazioni dalle due branche del sistema nervoso autonomo (ortosimpatico e parasimpatico). Più il sistema è ricco e flessibile, più ampia e "caotica" è questa variabilità; la rigidità verso un battito regolare è un segnale di esaurimento, non di efficienza.</p>
-      <p>Per le misure servono gli <b>intervalli battito-battito</b> da una <b>fascia cardio</b> (consigliata Polar H10). L'allenamento di coerenza può funzionare anche con la sola <b>fotocamera</b> del telefono (per allenarsi, non per misurare).</p>
+      <p>Per le misure servono gli <b>intervalli battito-battito</b> da una <b>fascia cardio</b>. L'allenamento di coerenza può funzionare anche con la sola <b>fotocamera</b> del telefono (per allenarsi, non per misurare).</p>
+      <h4>Quali fasce vanno bene</h4>
+      <p>L'app usa lo <b>standard Bluetooth "Heart Rate"</b> e legge i battiti singoli (intervalli RR). Vale quindi <b>una regola sola</b>: funziona qualsiasi <b>fascia Bluetooth che trasmette gli RR</b> (l'HRV, la variabilità). Non basta una fascia che mandi solo i battiti al minuto. Nella scheda tecnica cerca le parole <b>"HRV"</b>, <b>"R-R"</b> o <b>"Bluetooth Smart"</b>. Due paletti: dev'essere <b>Bluetooth</b> (non solo ANT+) e la connessione parte dall'app (non pre-accoppiare la fascia nelle impostazioni del telefono).</p>
+      <ul>
+        <li><b>Fascia toracica di riferimento — Polar H10.</b> È la più accurata per l'HRV e lo standard usato negli studi. Se vuoi il massimo della qualità del segnale, è questa.</li>
+        <li><b>Miglior rapporto qualità/prezzo — Polar H9.</b> Stessa famiglia di sensori dell'H10, dati RR affidabili, costa circa la metà. È la scelta consigliata a chi vuole spendere meno senza rinunciare alla precisione.</li>
+        <li><b>Ultra-economiche (toraciche) — CooSpo H808S / H6, Magene H64.</b> Fasce a basso costo che trasmettono comunque gli RR: adatte per iniziare. Qualità del contatto un po' inferiore, ma clinicamente utilizzabili.</li>
+        <li><b>Altre valide — Garmin HRM-Dual e HRM-Pro, Wahoo TICKR.</b> Sì: anche le fasce toraciche Garmin funzionano, perché trasmettono gli RR via Bluetooth.</li>
+        <li><b>Bracciali ottici — Polar Verity Sense / OH1.</b> Si collegano e danno gli RR, ma essendo ottici sono meno precisi di una fascia toracica: vanno bene per allenarsi, meno per la misura fine.</li>
+        <li><b>Cosa NON funziona:</b> orologi (Apple Watch, Garmin, Fitbit, Samsung) — non si comportano da fascia verso l'app; le vecchie fasce solo-ANT+ (es. Garmin HRM-Run/Tri); qualsiasi dispositivo che mandi solo la frequenza cardiaca senza i battiti singoli.</li>
+      </ul>
+      <div class="tip"><b>In breve:</b> massima precisione → <b>Polar H10</b>; spesa contenuta ma affidabile → <b>Polar H9</b>; budget minimo → <b>CooSpo H808S</b> o <b>Magene H64</b>.</div>
       <h4>Browser e connessione</h4>
       <ul>
         <li><b>iPhone:</b> apri l'app nel browser <b>Bluefy</b> (Safari non supporta il Bluetooth web).</li>
@@ -1276,7 +1320,7 @@ const HRV = (() => {
       return;
     }
     try{
-      status('Apertura elenco dispositivi… scegli il Polar H10.');
+      status('Apertura elenco dispositivi… scegli la tua fascia cardio.');
       logEvent('… apertura selettore dispositivi');
       device = await requestPolar();
       logEvent('✓ scelto: '+(device.name||'dispositivo senza nome'));
@@ -1366,7 +1410,7 @@ const HRV = (() => {
         reconnectTimer = setTimeout(()=>{ openGatt().catch(()=>{ if(wantConnected) onDisconnected(); }); }, backoff);
       }else{
         wantConnected = false; stopWave();
-        status('Riconnessione interrotta dopo molti tentativi. Verifica: fascia indossata con elettrodi inumiditi, batteria del Polar carica, Bluetooth del telefono SPENTO (non solo le app chiuse), e PC vicino. Poi premi "Connetti fascia".', true);
+        status('Riconnessione interrotta dopo molti tentativi. Verifica: fascia indossata con elettrodi inumiditi, batteria della fascia carica, Bluetooth del telefono SPENTO (non solo le app chiuse), e PC vicino. Poi premi "Connetti fascia".', true);
       }
     }else{
       stopWave();
@@ -1614,17 +1658,34 @@ const HRV = (() => {
     fft(re, im);
     const df = fs/Nfft;
     let vlf=0, lf=0, hf=0;
+    // Picco spettrale per banda: frequenza del bin di massima potenza dentro la banda.
+    // Indica dove si concentra l'energia (in coerenza la LF ha il picco vicino a 0,1 Hz).
+    let vlfPk=0, vlfPkF=0, lfPk=0, lfPkF=0, hfPk=0, hfPkF=0;
     for(let k=1;k<=Nfft/2;k++){
       const freq = k*df;
       let p = (re[k]*re[k]+im[k]*im[k])/(fs*N*U) * df;
       if(k !== Nfft/2) p *= 2;                       // spettro one-sided
-      if(freq>=0.003 && freq<0.04) vlf+=p;
-      else if(freq>=0.04 && freq<0.15) lf+=p;
-      else if(freq>=0.15 && freq<0.40) hf+=p;
+      if(freq>=0.003 && freq<0.04){ vlf+=p; if(p>vlfPk){vlfPk=p;vlfPkF=freq;} }
+      else if(freq>=0.04 && freq<0.15){ lf+=p; if(p>lfPk){lfPk=p;lfPkF=freq;} }
+      else if(freq>=0.15 && freq<0.40){ hf+=p; if(p>hfPk){hfPk=p;hfPkF=freq;} }
     }
     const tp = vlf+lf+hf;
+    // Spettro per il grafico (PSD in ms²/Hz vs frequenza), come il pannello emWave.
+    const spectrum = [];
+    for(let k=1;k<=Nfft/2;k++){
+      const freq = k*df;
+      if(freq > 0.45) break;                          // ci basta fino a ~0,4 Hz
+      let p = (re[k]*re[k]+im[k]*im[k])/(fs*N*U) * df;
+      if(k !== Nfft/2) p *= 2;
+      spectrum.push({ f:+freq.toFixed(4), p:+(p/df).toFixed(2) });  // p/df = PSD (ms²/Hz)
+    }
     return {
       vlf, lf, hf, totalPower: tp,
+      spectrum,
+      vlfPct: tp>0 ? vlf/tp*100 : 0,
+      lfPct:  tp>0 ? lf/tp*100  : 0,
+      hfPct:  tp>0 ? hf/tp*100  : 0,
+      vlfPeakHz: vlfPkF, lfPeakHz: lfPkF, hfPeakHz: hfPkF,
       lfhf: hf>0 ? lf/hf : 0,
       lfn: (lf+hf)>0 ? lf/(lf+hf)*100 : 0,
       hfn: (lf+hf)>0 ? hf/(lf+hf)*100 : 0,
@@ -1778,6 +1839,100 @@ const HRV = (() => {
     updateCoherenceUI();
   }
   function fmt(v, d){ return (v==null||!isFinite(v)) ? '—' : v.toFixed(d==null?0:d); }
+  // --- Grafico dello spettro di potenza (stile pannello emWave) ---
+  function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function hexA(hex, a){
+    hex = (hex||'#000').replace('#','');
+    if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const n = parseInt(hex,16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+  }
+  let lastSpectrumF = null;   // ultimo freq per ridisegnare su resize
+  function drawSpectrum(f){
+    lastSpectrumF = f;
+    const cv = el('hrvSpectrum'); if(!cv) return;
+    const wrap = cv.parentElement;
+    const cssW = Math.max(200, wrap.clientWidth - 12), cssH = 170;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.width = cssW+'px'; cv.style.height = cssH+'px';
+    const g = cv.getContext('2d');
+    g.setTransform(dpr,0,0,dpr,0,0);
+    g.clearRect(0,0,cssW,cssH);
+    const spec = (f && f.spectrum) ? f.spectrum.filter(s=>s.f<=0.4) : [];
+    const padL=44, padR=10, padT=10, padB=24;
+    const plotW = cssW-padL-padR, plotH = cssH-padT-padB, fMax=0.4;
+    const X = hz => padL + (hz/fMax)*plotW;
+    if(!spec.length){
+      g.fillStyle=cssVar('--muted'); g.font='12px system-ui'; g.textAlign='center'; g.textBaseline='middle';
+      g.fillText('Spettro non disponibile (registrazione troppo breve).', cssW/2, cssH/2);
+      return;
+    }
+    let pMax=0, pkF=spec[0].f, pkP=0;
+    for(const s of spec){ if(s.p>pMax) pMax=s.p; if(s.p>pkP){pkP=s.p;pkF=s.f;} }
+    if(pMax<=0) pMax=1;
+    const Y = p => padT + plotH - (p/pMax)*plotH;
+    // fasce VLF / LF / HF
+    const bands=[['--muted',0.003,0.04],['--accent',0.04,0.15],['--inhale',0.15,0.40]];
+    for(const [c,a,b] of bands){ g.fillStyle=hexA(cssVar(c),0.16); g.fillRect(X(a),padT,X(b)-X(a),plotH); }
+    // griglia orizzontale + valori Y (ms²/Hz)
+    g.strokeStyle=hexA(cssVar('--line'),0.7); g.fillStyle=cssVar('--muted');
+    g.font='9px system-ui'; g.textAlign='right'; g.textBaseline='middle'; g.lineWidth=1;
+    for(let i=1;i<=3;i++){ const yy=padT+plotH-(i/3)*plotH;
+      g.beginPath(); g.moveTo(padL,yy); g.lineTo(padL+plotW,yy); g.stroke();
+      g.fillText(Math.round(pMax*i/3), padL-5, yy); }
+    // area dello spettro
+    g.beginPath(); g.moveTo(X(spec[0].f), Y(0));
+    for(const s of spec) g.lineTo(X(s.f), Y(s.p));
+    g.lineTo(X(spec[spec.length-1].f), Y(0)); g.closePath();
+    g.fillStyle=hexA(cssVar('--accent'),0.5); g.fill();
+    g.strokeStyle=cssVar('--accent'); g.lineWidth=1.4;
+    g.beginPath(); spec.forEach((s,i)=>{ const xx=X(s.f),yy=Y(s.p); i?g.lineTo(xx,yy):g.moveTo(xx,yy); }); g.stroke();
+    // marker del picco
+    g.strokeStyle=cssVar('--danger'); g.setLineDash([4,3]); g.lineWidth=1;
+    g.beginPath(); g.moveTo(X(pkF),padT); g.lineTo(X(pkF),padT+plotH); g.stroke(); g.setLineDash([]);
+    g.fillStyle=cssVar('--danger'); g.font='10px system-ui'; g.textBaseline='bottom';
+    g.textAlign = X(pkF) > padL+plotW*0.75 ? 'right' : 'left';
+    g.fillText(' picco '+pkF.toFixed(3).replace('.',',')+' Hz ', X(pkF), padT+11);
+    // assi
+    g.strokeStyle=cssVar('--line'); g.lineWidth=1;
+    g.beginPath(); g.moveTo(padL,padT); g.lineTo(padL,padT+plotH); g.lineTo(padL+plotW,padT+plotH); g.stroke();
+    // tacche X (Hz)
+    g.fillStyle=cssVar('--muted'); g.font='10px system-ui'; g.textAlign='center'; g.textBaseline='top';
+    for(let hz=0; hz<=0.4001; hz+=0.1){
+      g.beginPath(); g.moveTo(X(hz),padT+plotH); g.lineTo(X(hz),padT+plotH+3); g.stroke();
+      g.fillText(hz.toFixed(1).replace('.',','), X(hz), padT+plotH+5);
+    }
+    g.textAlign='left'; g.fillText('Hz', padL+plotW-2, padT+plotH+5);
+    g.textAlign='left'; g.textBaseline='top'; g.fillStyle=cssVar('--muted');
+    g.fillText('ms²/Hz', 2, 1);
+  }
+  // Tabella riepilogativa delle bande: potenza, distribuzione % sul Total Power e picco (Hz).
+  function renderBands(f){
+    const body = el('hrvBandsBody');
+    if(!f){
+      el('hrvBandBar').style.display = 'none';
+      body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Registrazione troppo breve per lo spettro (servono ≥20 s utili).</td></tr>';
+      return;
+    }
+    el('hrvBandBar').style.display = 'flex';
+    const bands = [
+      {k:'vlf', cls:'vlf', name:'VLF', range:'0,003–0,04', pw:f.vlf, pct:f.vlfPct, pk:f.vlfPeakHz},
+      {k:'lf',  cls:'lf',  name:'LF',  range:'0,04–0,15',  pw:f.lf,  pct:f.lfPct,  pk:f.lfPeakHz},
+      {k:'hf',  cls:'hf',  name:'HF',  range:'0,15–0,40',  pw:f.hf,  pct:f.hfPct,  pk:f.hfPeakHz}
+    ];
+    el('segVLF').style.width = fmt(f.vlfPct,1)+'%';
+    el('segLF').style.width  = fmt(f.lfPct,1)+'%';
+    el('segHF').style.width  = fmt(f.hfPct,1)+'%';
+    body.innerHTML = bands.map(b =>
+      '<tr><td><span class="dot '+b.cls+'"></span>'+b.name+'</td>'+
+      '<td>'+b.range+'</td>'+
+      '<td>'+fmt(b.pw,0)+' ms²</td>'+
+      '<td>'+fmt(b.pct,1)+' %</td>'+
+      '<td>'+(b.pk>0?fmt(b.pk,3)+' Hz':'—')+'</td></tr>'
+    ).join('') +
+      '<tr class="tot"><td>Total Power</td><td>0,003–0,40</td><td>'+fmt(f.totalPower,0)+' ms²</td><td>100 %</td><td>—</td></tr>';
+  }
   function showResults(r){
     el('mRMSSD').textContent = fmt(r.time.rmssd,1);
     el('mSDNN').textContent  = fmt(r.time.sdnn,1);
@@ -1792,6 +1947,8 @@ const HRV = (() => {
     el('mLFn').textContent = f?fmt(f.lfn,1):'—';
     el('mHFn').textContent = f?fmt(f.hfn,1):'—';
     el('mTP').textContent  = f?fmt(f.totalPower,0):'—';
+    drawSpectrum(f);
+    renderBands(f);
     const q = r.quality;
     const relCls = q.reliableFreq ? 'ok' : 'bad';
     const relTxt = q.reliableFreq ? 'sì ✓' : 'no — sotto soglia 95%';
@@ -1814,9 +1971,12 @@ const HRV = (() => {
   function load(){ try{ return JSON.parse(localStorage.getItem(STORE))||[]; }catch(e){ return []; } }
   function saveSession(r){
     const list = load();
+    // Non persistere lo spettro (array pesante): serve solo per il grafico a video.
+    let freqLite = null;
+    if(r.freq){ freqLite = Object.assign({}, r.freq); delete freqLite.spectrum; }
     list.push({
       id: Date.now(), date: r.meta.start, breathRate: r.meta.breathRate, durationS: r.durationS,
-      time: r.time, freq: r.freq, quality: r.quality, rrRaw: r.rrRaw, rrKept: r.rrKept
+      time: r.time, freq: freqLite, quality: r.quality, rrRaw: r.rrRaw, rrKept: r.rrKept
     });
     try{ localStorage.setItem(STORE, JSON.stringify(list)); }catch(e){
       status('Storico non salvato (memoria piena). Esporta i dati per non perderli.', true);
@@ -1848,13 +2008,16 @@ const HRV = (() => {
   function exportCSV(){
     const list = load(); if(!list.length){ status('Nessuna sessione da esportare.', true); return; }
     const head = ['data','respiro_atti_min','durata_s','battiti_tot','battiti_validi','perc_validi',
-      'RMSSD_ms','SDNN_ms','pNN50_pct','FC_media_bpm','NN_media_ms','VLF_ms2','LF_ms2','HF_ms2','LF_HF','LFn','HFn','TP_ms2'];
+      'RMSSD_ms','SDNN_ms','pNN50_pct','FC_media_bpm','NN_media_ms','VLF_ms2','LF_ms2','HF_ms2','LF_HF','LFn','HFn','TP_ms2',
+      'VLF_pct','LF_pct','HF_pct','VLF_picco_Hz','LF_picco_Hz','HF_picco_Hz'];
     const rows = list.map(s=>{
       const f=s.freq||{};
       return [s.date, s.breathRate, s.durationS, s.quality.total, s.quality.kept, s.quality.keptPct.toFixed(1),
         s.time.rmssd.toFixed(1), s.time.sdnn.toFixed(1), s.time.pnn50.toFixed(1), s.time.meanHR.toFixed(0), s.time.meanNN.toFixed(0),
         f.vlf?f.vlf.toFixed(0):'', f.lf?f.lf.toFixed(0):'', f.hf?f.hf.toFixed(0):'', f.lfhf?f.lfhf.toFixed(2):'',
-        f.lfn?f.lfn.toFixed(1):'', f.hfn?f.hfn.toFixed(1):'', f.totalPower?f.totalPower.toFixed(0):''].join(',');
+        f.lfn?f.lfn.toFixed(1):'', f.hfn?f.hfn.toFixed(1):'', f.totalPower?f.totalPower.toFixed(0):'',
+        f.vlfPct!=null?f.vlfPct.toFixed(1):'', f.lfPct!=null?f.lfPct.toFixed(1):'', f.hfPct!=null?f.hfPct.toFixed(1):'',
+        f.vlfPeakHz?f.vlfPeakHz.toFixed(3):'', f.lfPeakHz?f.lfPeakHz.toFixed(3):'', f.hfPeakHz?f.hfPeakHz.toFixed(3):''].join(',');
     });
     shareOrDl('hrv_storico.csv', [head.join(','), ...rows].join('\n'), 'text/csv');
   }
@@ -2045,7 +2208,11 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v46';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v49';
+    let rsz; window.addEventListener('resize', ()=>{
+      clearTimeout(rsz);
+      rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
+    });
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
