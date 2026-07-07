@@ -1346,7 +1346,8 @@ const HRV = (() => {
   let connectAt = 0, beatsThisConn = 0, rrSeen = false; // diagnostica
   // ---- Stato coerenza (live + accumulo di sessione) ----
   let cohRatio = null, cohPct = null;        // valori live correnti
-  let cohSum = 0, cohN = 0, cohCoherentN = 0; // media e % tempo in coerenza
+  let cohSum = 0, cohN = 0, cohCoherentN = 0; // media (ratio) e % tempo in coerenza
+  let cohPctSum = 0, cohPctMax = 0;           // somma e picco dei pct (0–100), confrontabili con la fotocamera
   let lastCohAt = 0;                          // throttle del ricalcolo
   // ---- Stato modalità Test clinico ----
   let testCode = '';                          // codice paziente (pseudonimo, NO anagrafica)
@@ -1626,7 +1627,7 @@ const HRV = (() => {
   /* --------------------------- Sessione --------------------------- */
   function sessionStart(breathRate){
     rr = []; tcum = 0; paused = false; capturing = true;
-    cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
+    cohRatio = null; cohPct = null; cohSum = 0; cohPctSum = 0; cohPctMax = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
     sessionMeta = { start: new Date().toISOString(), breathRate: breathRate || 0 };
     el('hrvResults').classList.remove('show');
@@ -1653,8 +1654,9 @@ const HRV = (() => {
   async function sendCoherenceSession(report){
     const code = getCode();
     if(!code || !SendConsent.given() || !DOCTOR_UPLOAD_URL) return;
-    const avgR = cohN ? cohSum/cohN : null;
-    const tic  = cohN ? cohCoherentN/cohN*100 : null;
+    const avgR   = cohN ? cohSum/cohN : null;         // ratio HeartMath (0–16), per riferimento
+    const avgPct = cohN ? cohPctSum/cohN : null;      // coerenza media 0–100, confrontabile con la fotocamera
+    const tic    = cohN ? cohCoherentN/cohN*100 : null;
     const f = report.freq || {};
     const d = new Date(), pad=n=>String(n).padStart(2,'0');
     const local = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
@@ -1669,8 +1671,9 @@ const HRV = (() => {
         ora: pad(d.getHours())+':'+pad(d.getMinutes()),
         durata_min: (report.durationS/60).toFixed(1).replace('.',','),
         atti_min: num(report.meta.breathRate, 1),
-        coh_media: num(avgR, 2),
-        coh_norm: avgR!=null ? Math.round(100*avgR/(avgR+1))+'' : '',
+        coh_media: num(avgPct, 0),        // stessa scala 0–100 della fotocamera
+        coh_picco: num(cohPctMax, 0),
+        coh_ratio: num(avgR, 2),          // ratio HeartMath (colonna extra, se presente nel foglio)
         pct_coerenza: num(tic, 0),
         fc_media: num(report.time && report.time.meanHR, 0),
         campioni: cohN,
@@ -1940,7 +1943,8 @@ const HRV = (() => {
         const c = coherence();
         if(c){
           cohRatio = c.ratio; cohPct = c.pct;
-          cohSum += c.ratio; cohN++;
+          cohSum += c.ratio; cohPctSum += c.pct; cohN++;
+          if(c.pct > cohPctMax) cohPctMax = c.pct;
           if(c.ratio >= COH_LOW) cohCoherentN++;
         }
       }
@@ -2172,7 +2176,7 @@ const HRV = (() => {
     testCode = code || ''; testPhase = null; consentMark = '';
     testSex = sex || ''; testAge = (age!=null?String(age):''); testPop = pop || '';
     rr = []; tcum = 0; paused = false; capturing = true;
-    cohRatio = null; cohPct = null; cohSum = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
+    cohRatio = null; cohPct = null; cohSum = 0; cohPctSum = 0; cohPctMax = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
   }
   function setTestPhase(p){ testPhase = p; }
@@ -2345,7 +2349,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v52';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v53';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
