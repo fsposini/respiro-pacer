@@ -174,21 +174,24 @@
   /* Spettro di potenza (canvas stile emWave) */
   .hrv-spectrum-wrap{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 6px 4px}
   .hrv-spectrum-wrap canvas{display:block;width:100%;height:170px}
-  /* Distribuzione spettro: barra impilata + tabella bande */
-  .hrv-bandbar{display:flex;height:16px;width:100%;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
-  .hrv-bandbar .seg{height:100%;transition:width .4s ease}
-  .hrv-bandbar .seg.vlf{background:var(--muted)}
-  .hrv-bandbar .seg.lf{background:var(--accent)}
-  .hrv-bandbar .seg.hf{background:var(--inhale)}
+  /* Distribuzione spettro: torta VLF/LF/HF + tabella bande. Colori clinici: VLF rosso, LF giallo, HF verde. */
+  :root{--band-vlf:#e0564f;--band-lf:#e3b93a;--band-hf:#3fb46a}
+  .hrv-pie-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  .hrv-pie-wrap canvas{flex:0 0 auto;width:150px;height:150px}
+  .hrv-pie-legend{display:flex;flex-direction:column;gap:7px;font-size:.74rem;font-variant-numeric:tabular-nums}
+  .hrv-pie-legend .lg{display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .hrv-pie-legend .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+  .hrv-pie-legend .lg b{color:var(--text)}
+  .hrv-pie-legend .lg span{color:var(--muted)}
   .hrv-bands{width:100%;border-collapse:collapse;margin-top:10px;font-size:.72rem;font-variant-numeric:tabular-nums}
   .hrv-bands th,.hrv-bands td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line)}
   .hrv-bands th{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:.6rem;font-weight:600}
   .hrv-bands th:first-child,.hrv-bands td:first-child{text-align:left}
   .hrv-bands tbody td:first-child{font-weight:700;color:var(--text)}
   .hrv-bands .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-  .hrv-bands .dot.vlf{background:var(--muted)}
-  .hrv-bands .dot.lf{background:var(--accent)}
-  .hrv-bands .dot.hf{background:var(--inhale)}
+  .hrv-bands .dot.vlf{background:var(--band-vlf)}
+  .hrv-bands .dot.lf{background:var(--band-lf)}
+  .hrv-bands .dot.hf{background:var(--band-hf)}
   .hrv-bands tr.tot td{border-bottom:none;border-top:2px solid var(--line);color:var(--text);font-weight:700}
   .hrv-bands-note{font-size:.66rem;color:var(--muted);margin-top:8px;line-height:1.6}
   .hrv-bands-note b{color:var(--text)}
@@ -682,8 +685,9 @@
     <div class="hrv-spectrum-wrap"><canvas id="hrvSpectrum"></canvas></div>
     <div class="hrv-bands-note" id="hrvSpectrumNote">Potenza (ms²/Hz) per frequenza. Le fasce colorate sono VLF, LF e HF; il picco indica la frequenza dominante. In coerenza il picco si concentra in LF, intorno a 0,10 Hz.</div>
     <h3>Distribuzione</h3>
-    <div class="hrv-bandbar" id="hrvBandBar" aria-hidden="true">
-      <span class="seg vlf" id="segVLF"></span><span class="seg lf" id="segLF"></span><span class="seg hf" id="segHF"></span>
+    <div class="hrv-pie-wrap" id="hrvPieWrap">
+      <canvas id="hrvPie" width="150" height="150"></canvas>
+      <div class="hrv-pie-legend" id="hrvPieLegend"></div>
     </div>
     <table class="hrv-bands" id="hrvBands">
       <thead><tr><th>Banda</th><th>Range (Hz)</th><th>Potenza</th><th>% del totale</th><th>Picco</th></tr></thead>
@@ -1956,16 +1960,19 @@ const HRV = (() => {
   function drawSpectrum(f){
     lastSpectrumF = f;
     const cv = el('hrvSpectrum'); if(!cv) return;
-    const wrap = cv.parentElement;
-    const cssW = Math.max(200, wrap.clientWidth - 12), cssH = 170;
+    // Larghezza REALE del canvas (dopo che è visibile). Se non è ancora in layout, ripiego sul contenitore.
+    const rect = cv.getBoundingClientRect();
+    let cssW = Math.round(rect.width);
+    if(!cssW || cssW < 200){ const wrap = cv.parentElement; cssW = Math.max(240, (wrap ? wrap.clientWidth : 320) - 12); }
+    const cssH = 170;
     const dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
-    cv.style.width = cssW+'px'; cv.style.height = cssH+'px';
+    cv.style.height = cssH+'px';                 // larghezza: la dà il CSS (100%), non pinnata
     const g = cv.getContext('2d');
     g.setTransform(dpr,0,0,dpr,0,0);
     g.clearRect(0,0,cssW,cssH);
     const spec = (f && f.spectrum) ? f.spectrum.filter(s=>s.f<=0.4) : [];
-    const padL=44, padR=10, padT=10, padB=24;
+    const padL=38, padR=12, padT=20, padB=22;     // padT: spazio per il valore Y in alto e il marker
     const plotW = cssW-padL-padR, plotH = cssH-padT-padB, fMax=0.4;
     const X = hz => padL + (hz/fMax)*plotW;
     if(!spec.length){
@@ -1977,15 +1984,16 @@ const HRV = (() => {
     for(const s of spec){ if(s.p>pMax) pMax=s.p; if(s.p>pkP){pkP=s.p;pkF=s.f;} }
     if(pMax<=0) pMax=1;
     const Y = p => padT + plotH - (p/pMax)*plotH;
-    // fasce VLF / LF / HF
+    const fmtY = v => v>=1000 ? Math.round(v/1000)+'k' : ''+Math.round(v);
+    // fasce VLF / LF / HF (tenui)
     const bands=[['--muted',0.003,0.04],['--accent',0.04,0.15],['--inhale',0.15,0.40]];
     for(const [c,a,b] of bands){ g.fillStyle=hexA(cssVar(c),0.16); g.fillRect(X(a),padT,X(b)-X(a),plotH); }
-    // griglia orizzontale + valori Y (ms²/Hz)
+    // griglia orizzontale + valori Y (unità ms²/Hz nella didascalia sotto)
     g.strokeStyle=hexA(cssVar('--line'),0.7); g.fillStyle=cssVar('--muted');
     g.font='9px system-ui'; g.textAlign='right'; g.textBaseline='middle'; g.lineWidth=1;
     for(let i=1;i<=3;i++){ const yy=padT+plotH-(i/3)*plotH;
       g.beginPath(); g.moveTo(padL,yy); g.lineTo(padL+plotW,yy); g.stroke();
-      g.fillText(Math.round(pMax*i/3), padL-5, yy); }
+      g.fillText(fmtY(pMax*i/3), padL-4, yy); }
     // area dello spettro
     g.beginPath(); g.moveTo(X(spec[0].f), Y(0));
     for(const s of spec) g.lineTo(X(s.f), Y(s.p));
@@ -1996,39 +2004,63 @@ const HRV = (() => {
     // marker del picco
     g.strokeStyle=cssVar('--danger'); g.setLineDash([4,3]); g.lineWidth=1;
     g.beginPath(); g.moveTo(X(pkF),padT); g.lineTo(X(pkF),padT+plotH); g.stroke(); g.setLineDash([]);
-    g.fillStyle=cssVar('--danger'); g.font='10px system-ui'; g.textBaseline='bottom';
-    g.textAlign = X(pkF) > padL+plotW*0.75 ? 'right' : 'left';
-    g.fillText(' picco '+pkF.toFixed(3).replace('.',',')+' Hz ', X(pkF), padT+11);
+    g.fillStyle=cssVar('--danger'); g.font='10px system-ui'; g.textBaseline='alphabetic';
+    g.textAlign = X(pkF) > padL+plotW*0.7 ? 'right' : 'left';
+    g.fillText((X(pkF)>padL+plotW*0.7?'':' ')+'picco '+pkF.toFixed(3).replace('.',',')+' Hz'+(X(pkF)>padL+plotW*0.7?' ':''), X(pkF), padT-7);
     // assi
     g.strokeStyle=cssVar('--line'); g.lineWidth=1;
     g.beginPath(); g.moveTo(padL,padT); g.lineTo(padL,padT+plotH); g.lineTo(padL+plotW,padT+plotH); g.stroke();
-    // tacche X (Hz)
+    // tacche X (Hz nella didascalia sotto)
     g.fillStyle=cssVar('--muted'); g.font='10px system-ui'; g.textAlign='center'; g.textBaseline='top';
     for(let hz=0; hz<=0.4001; hz+=0.1){
       g.beginPath(); g.moveTo(X(hz),padT+plotH); g.lineTo(X(hz),padT+plotH+3); g.stroke();
       g.fillText(hz.toFixed(1).replace('.',','), X(hz), padT+plotH+5);
     }
-    g.textAlign='left'; g.fillText('Hz', padL+plotW-2, padT+plotH+5);
-    g.textAlign='left'; g.textBaseline='top'; g.fillStyle=cssVar('--muted');
-    g.fillText('ms²/Hz', 2, 1);
+  }
+  // Torta a spicchi della distribuzione: VLF rosso, LF giallo, HF verde.
+  function drawPie(bands){
+    const cv = el('hrvPie'); if(!cv) return;
+    const dpr = window.devicePixelRatio || 1, S = 150;
+    cv.width = Math.round(S*dpr); cv.height = Math.round(S*dpr);
+    cv.style.width = S+'px'; cv.style.height = S+'px';
+    const g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+    g.clearRect(0,0,S,S);
+    const cx=S/2, cy=S/2, R=S/2-4, tot=bands.reduce((s,b)=>s+Math.max(0,b.pct),0) || 100;
+    let a0 = -Math.PI/2;
+    bands.forEach(b=>{
+      const frac = Math.max(0,b.pct)/tot, a1 = a0 + frac*2*Math.PI;
+      g.beginPath(); g.moveTo(cx,cy); g.arc(cx,cy,R,a0,a1); g.closePath();
+      g.fillStyle = cssVar(b.color); g.fill();
+      // etichetta % dentro lo spicchio se abbastanza grande
+      if(frac > 0.08){
+        const am=(a0+a1)/2, lr=R*0.62;
+        g.fillStyle='#0c1620'; g.font='700 12px system-ui'; g.textAlign='center'; g.textBaseline='middle';
+        g.fillText(Math.round(b.pct)+'%', cx+Math.cos(am)*lr, cy+Math.sin(am)*lr);
+      }
+      a0 = a1;
+    });
+    // foro centrale (ciambella) per leggerezza
+    g.beginPath(); g.arc(cx,cy,R*0.42,0,2*Math.PI); g.fillStyle=cssVar('--bg'); g.fill();
   }
   // Tabella riepilogativa delle bande: potenza, distribuzione % sul Total Power e picco (Hz).
   function renderBands(f){
-    const body = el('hrvBandsBody');
+    const body = el('hrvBandsBody'), pieWrap = el('hrvPieWrap');
     if(!f){
-      el('hrvBandBar').style.display = 'none';
+      if(pieWrap) pieWrap.style.display = 'none';
       body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted)">Registrazione troppo breve per lo spettro (servono ≥20 s utili).</td></tr>';
       return;
     }
-    el('hrvBandBar').style.display = 'flex';
+    if(pieWrap) pieWrap.style.display = 'flex';
     const bands = [
-      {k:'vlf', cls:'vlf', name:'VLF', range:'0,003–0,04', pw:f.vlf, pct:f.vlfPct, pk:f.vlfPeakHz},
-      {k:'lf',  cls:'lf',  name:'LF',  range:'0,04–0,15',  pw:f.lf,  pct:f.lfPct,  pk:f.lfPeakHz},
-      {k:'hf',  cls:'hf',  name:'HF',  range:'0,15–0,40',  pw:f.hf,  pct:f.hfPct,  pk:f.hfPeakHz}
+      {k:'vlf', cls:'vlf', color:'--band-vlf', name:'VLF', range:'0,003–0,04', pw:f.vlf, pct:f.vlfPct, pk:f.vlfPeakHz},
+      {k:'lf',  cls:'lf',  color:'--band-lf',  name:'LF',  range:'0,04–0,15',  pw:f.lf,  pct:f.lfPct,  pk:f.lfPeakHz},
+      {k:'hf',  cls:'hf',  color:'--band-hf',  name:'HF',  range:'0,15–0,40',  pw:f.hf,  pct:f.hfPct,  pk:f.hfPeakHz}
     ];
-    el('segVLF').style.width = fmt(f.vlfPct,1)+'%';
-    el('segLF').style.width  = fmt(f.lfPct,1)+'%';
-    el('segHF').style.width  = fmt(f.hfPct,1)+'%';
+    drawPie(bands);
+    const legend = el('hrvPieLegend');
+    if(legend) legend.innerHTML = bands.map(b =>
+      '<div class="lg"><span class="sw" style="background:'+cssVar(b.color)+'"></span><b>'+b.name+'</b> <span>'+fmt(b.pct,1)+'%</span></div>'
+    ).join('');
     body.innerHTML = bands.map(b =>
       '<tr><td><span class="dot '+b.cls+'"></span>'+b.name+'</td>'+
       '<td>'+b.range+'</td>'+
@@ -2052,8 +2084,6 @@ const HRV = (() => {
     el('mLFn').textContent = f?fmt(f.lfn,1):'—';
     el('mHFn').textContent = f?fmt(f.hfn,1):'—';
     el('mTP').textContent  = f?fmt(f.totalPower,0):'—';
-    drawSpectrum(f);
-    renderBands(f);
     const q = r.quality;
     const relCls = q.reliableFreq ? 'ok' : 'bad';
     const relTxt = q.reliableFreq ? 'sì ✓' : 'no — sotto soglia 95%';
@@ -2068,7 +2098,9 @@ const HRV = (() => {
       'Recording utilizzabile: <b class="'+relCls+'">'+fmt(q.keptPct,1)+'%</b> · Affidabilità frequenze: <span class="'+relCls+'">'+relTxt+'</span>'+
       cohLine+
       (f? '' : '<br><span class="bad">Dominio in frequenza non calcolato: registrazione troppo breve (servono ≥20 s utili).</span>');
-    el('hrvResults').classList.add('show');
+    el('hrvResults').classList.add('show');   // prima rendo visibile...
+    renderBands(f);
+    requestAnimationFrame(()=>drawSpectrum(f)); // ...poi disegno, così il canvas ha la larghezza reale
     el('hrvResults').scrollIntoView({behavior:'smooth', block:'nearest'});
   }
 
@@ -2313,7 +2345,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v51';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v52';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
