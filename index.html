@@ -34,6 +34,37 @@
   header .titles p{color:var(--muted);font-size:.72rem;margin-top:1px;letter-spacing:1.4px;text-transform:uppercase}
   header .titles p b{color:var(--accent);font-weight:700}
 
+  /* Barra di stato invio dati (promemoria + gestione consenso) */
+  .consent-bar{display:block;width:100%;max-width:1180px;margin:0 auto 12px;text-align:left;
+    font-size:.78rem;line-height:1.4;padding:9px 14px;border-radius:10px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel);color:var(--text);font-family:inherit}
+  .consent-bar[hidden]{display:none}
+  .consent-bar.on{border-color:rgba(90,209,192,.45);background:rgba(90,209,192,.10)}
+  .consent-bar.off{border-color:rgba(201,169,106,.45);background:rgba(201,169,106,.10)}
+  .consent-bar b{color:var(--accent2)}
+  .consent-bar .cbar-cta{color:var(--accent);font-weight:600;text-decoration:underline;white-space:nowrap}
+  /* Finestra di consenso */
+  .consent-overlay{position:fixed;inset:0;z-index:60;background:rgba(6,14,20,.72);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;padding:18px}
+  .consent-overlay[hidden]{display:none}
+  .consent-card{width:100%;max-width:440px;max-height:90vh;overflow:auto;background:linear-gradient(180deg,var(--panel),var(--bg2));
+    border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow)}
+  .consent-card h2{font-size:1.05rem;color:var(--text);margin-bottom:8px}
+  .consent-card p{font-size:.84rem;color:var(--muted);line-height:1.5;margin-bottom:14px}
+  .consent-card .consent-lbl{display:block;font-size:.72rem;color:var(--text);margin-bottom:5px}
+  .consent-card .cam-code{width:100%;margin-bottom:12px}
+  .consent-card .hrv-consent{max-width:none;margin:0 0 14px}
+  .consent-active{font-size:.78rem;color:var(--accent2);background:rgba(90,209,192,.10);
+    border:1px solid rgba(90,209,192,.35);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
+  .consent-active[hidden]{display:none}
+  .consent-actions{display:flex;gap:10px;flex-wrap:wrap}
+  .consent-actions .btn{flex:1 1 auto;padding:11px 14px;border-radius:10px;border:1px solid transparent;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a;font-weight:600;font-size:.86rem;cursor:pointer}
+  .consent-actions .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--text)}
+  .consent-actions .btn:disabled{opacity:.45;cursor:not-allowed}
+  .consent-revoke{display:block;margin:14px auto 0;background:none;border:none;color:var(--danger);
+    font-size:.78rem;text-decoration:underline;cursor:pointer}
+  .consent-revoke[hidden]{display:none}
   .layout{display:grid;grid-template-columns:290px 1fr 256px;gap:14px;width:100%;max-width:1180px;align-items:stretch}
   @media(max-width:1000px){.layout{grid-template-columns:1fr}}
 
@@ -193,6 +224,29 @@
   <button id="guideBtn" class="guide-btn" type="button" aria-label="Apri la guida">📖 Guida</button>
 </header>
 
+<!-- Barra di stato invio dati (promemoria fisso + gestione consenso) -->
+<button type="button" id="consentBar" class="consent-bar" hidden></button>
+
+<!-- Finestra unica di consenso (primo avvio + gestione) -->
+<div class="consent-overlay" id="consentOverlay" role="dialog" aria-modal="true" aria-label="Invio dei dati al medico" hidden>
+  <div class="consent-card">
+    <h2 id="consentTitle">Farti seguire a distanza</h2>
+    <p id="consentIntro">Il <b>Dott. Federico Sposini</b> può seguirti anche da lontano: con il tuo consenso, l'app gli invia automaticamente i risultati delle tue attività, in forma <b>anonimizzata</b> (solo un codice, <b>nessun nome</b>).</p>
+    <label for="consentCode" class="consent-lbl">Codice paziente</label>
+    <input id="consentCode" type="text" class="cam-code" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
+    <label class="hrv-consent" id="consentCheckWrap">
+      <input type="checkbox" id="consentCheck">
+      <span>Autorizzo l'invio automatico al <b>Dott. Federico Sposini</b>, <b>da questo momento in poi</b>, dei risultati di <b>tutte le attività dell'app</b> — valutazione iniziale (test tonico/fasico), readiness del mattino, α1, coerenza con fascia e con fotocamera — al termine di ogni attività, in forma <b>anonimizzata</b>, <b>per il monitoraggio clinico a distanza</b> (Reg. UE 2016/679). Consenso unico, revocabile in qualsiasi momento.</span>
+    </label>
+    <div class="consent-active" id="consentActiveNote" hidden></div>
+    <div class="consent-actions">
+      <button type="button" id="consentPrimary" class="btn">Attiva l'invio dei dati</button>
+      <button type="button" id="consentSecondary" class="btn ghost">Per ora no</button>
+    </div>
+    <button type="button" id="consentRevoke" class="consent-revoke" hidden>Revoca il consenso</button>
+  </div>
+</div>
+
 <div class="layout">
   <!-- COLONNA 1: IMPOSTAZIONI -->
   <div class="panel">
@@ -328,6 +382,10 @@
     .hrv-consent{display:flex;gap:9px;align-items:flex-start;text-align:left;font-size:.78rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 12px;margin:0 auto 12px;max-width:380px}
     .hrv-consent input{margin-top:2px;flex:0 0 auto;width:18px;height:18px}
     .hrv-consent b{color:var(--text,#e8eef0)}
+    .hrv-doctor{margin-top:10px;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)}
+    .hrv-doctor>label[for]{display:block;font-size:.72rem;color:var(--text);margin-bottom:5px}
+    .hrv-doctor .cam-code{width:100%;margin-bottom:10px}
+    .hrv-doctor .hrv-consent{margin:0;max-width:none}
     .hrv-test .btn:disabled{opacity:.45;cursor:not-allowed}
     .hrv-send-status{font-size:.8rem;margin:10px auto 4px;max-width:380px;min-height:1.1em}
     .hrv-test .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
@@ -463,12 +521,8 @@
     </div>
     <div id="hrvTestDone" style="display:none">
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
-      <label class="hrv-consent">
-        <input type="checkbox" id="hrvConsent">
-        <span>Autorizzo il <b>Dott. Federico Sposini</b> a ricevere e trattare i miei dati della variabilità cardiaca (HRV) ai fini del <b>controllo clinico da remoto</b>, ai sensi del Reg. UE 2016/679 (GDPR). I dati sono trasmessi in forma <b>pseudonimizzata</b> (codice, sesso, età e categoria; <b>nessun nome</b>).</span>
-      </label>
-      <button id="hrvTestSend" class="btn" disabled>Invia i dati al medico</button>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
+      <button id="hrvTestSend" class="btn ghost">Invia i dati al medico</button>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
     </div>
   </div>
@@ -479,9 +533,6 @@
       <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
       <label for="mornCode" style="margin-top:8px">Codice atleta (per l'avviso al medico, facoltativo)</label>
       <input id="mornCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <label class="cam-consent" id="mornConsentWrap"><input type="checkbox" id="mornConsent">
-        <span>Acconsento all'invio al mio medico dell'<b>esito della readiness</b> (verdetto, indice HRV, data) in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Serve perché il medico possa <b>avvisarmi se il recupero cala</b>. Consenso richiesto una volta sola.</span>
-      </label>
       <button id="mornStart" class="btn">Avvia test del mattino</button>
     </div>
     <div id="mornRun" style="display:none">
@@ -518,10 +569,6 @@
       </div>
       <label for="alphaCode" style="margin-top:8px">Codice atleta (per il report al medico)</label>
       <input id="alphaCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <label class="hrv-consent" id="alphaConsentWrap">
-        <input type="checkbox" id="alphaConsent">
-        <span>Acconsento all'invio al mio medico del <b>risultato α1</b> (valore, data, FC media), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome. Una volta sola.</span>
-      </label>
       <button id="alphaStart" class="btn">Avvia misura α1</button>
       <div class="cam-sendnote" id="alphaSendNote"></div>
     </div>
@@ -569,10 +616,6 @@
       <div class="cam-sendnote">La <b>campana</b> fa ding (inspira) e dong (espira) e funziona su ogni telefono. La <b>voce</b> dice “Inspira/Espira” ma può non funzionare in Bluefy.</div>
       <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
       <input id="camCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
-      <label class="hrv-consent" id="camConsentWrap">
-        <input type="checkbox" id="camConsent">
-        <span>Acconsento all'invio al mio medico del <b>riepilogo dell'allenamento</b> (data, orario, durata, livello di coerenza), in forma <b>pseudonimizzata</b>: solo il codice, nessun nome né dato clinico. Consenso richiesto una volta sola.</span>
-      </label>
       <button id="camStart" class="btn">Avvia allenamento</button>
       <div class="cam-sendnote" id="camSendNote"></div>
     </div>
@@ -1212,6 +1255,26 @@ const App = (() => {
   return{init, breathStateAt, currentRate};
 })();
 
+/* ============ Consenso all'invio dati (unico, persistente, "una volta sola") ============ */
+/* Consenso espresso: una volta accordato, ogni attività (coerenza con fascia o fotocamera, */
+/* test clinico) invia da sola il proprio riepilogo pseudonimizzato a fine sessione.         */
+const SendConsent = (() => {
+  const KEY = 'respiroPacer.sendConsent.v1';       // timestamp del consenso attivo
+  const ASKED = 'respiroPacer.consentAsked.v1';    // '1' quando la finestra iniziale è già stata mostrata
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1';
+  return {
+    ts(){ try{ return localStorage.getItem(KEY) || ''; }catch(e){ return ''; } },
+    given(){ return !!this.ts(); },
+    grant(){ try{ if(!localStorage.getItem(KEY)) localStorage.setItem(KEY, new Date().toISOString()); }catch(e){} },
+    revoke(){ try{ localStorage.removeItem(KEY); }catch(e){} },
+    asked(){ try{ return localStorage.getItem(ASKED)==='1'; }catch(e){ return false; } },
+    markAsked(){ try{ localStorage.setItem(ASKED,'1'); }catch(e){} },
+    code(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } },
+    setCode(c){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=c; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  };
+})();
+window.SendConsent = SendConsent;
+
 /* ================= HRV ENGINE (Polar H10 · Web Bluetooth) ================= */
 /* Calcoli secondo Task Force ESC/NASPE 1996. Filtro artefatti: moving median  */
 /* finestra 9 beat, soglia 20% (Kubios/Malik), limiti assoluti 300–2000 ms.    */
@@ -1224,6 +1287,10 @@ const HRV = (() => {
   // funzionano su entrambi i motori.
   const HR_SERVICE = 'heart_rate', HR_CHAR = 'heart_rate_measurement';
   const STORE = 'respiroPacer.hrv.v1';
+  // Codice paziente condiviso con gli altri moduli (stesso profilo locale).
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1';
+  function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
+  function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
   // ---- Piattaforma (per i suggerimenti corretti su browser/Bluetooth) ----
   // iOS: Safari NON ha Web Bluetooth → serve Bluefy. Android/desktop: Chrome lo
   // supporta nativamente, nessun browser speciale.
@@ -1575,6 +1642,44 @@ const HRV = (() => {
     showResults(report);
     saveSession(report);
     status('Sessione completata: '+report.quality.kept+' battiti validi su '+report.quality.total+'. Risultati salvati.');
+    sendCoherenceSession(report);   // invio automatico al medico (se codice + consenso)
+  }
+  // Invio automatico del riepilogo della seduta di coerenza fatta con la FASCIA.
+  // Silenzioso e non bloccante: parte solo con codice paziente + consenso espresso.
+  async function sendCoherenceSession(report){
+    const code = getCode();
+    if(!code || !SendConsent.given() || !DOCTOR_UPLOAD_URL) return;
+    const avgR = cohN ? cohSum/cohN : null;
+    const tic  = cohN ? cohCoherentN/cohN*100 : null;
+    const f = report.freq || {};
+    const d = new Date(), pad=n=>String(n).padStart(2,'0');
+    const local = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    const num = (v,dec)=> (v==null||!isFinite(v)) ? '' : (dec!=null?v.toFixed(dec):''+Math.round(v)).replace('.',',');
+    const stEl = el('hrvStatus');
+    if(stEl) stEl.textContent += ' · Invio al medico…';
+    try{
+      await uploadCoherence({
+        sorgente: 'fascia',
+        code,
+        ts: d.toISOString(), local,
+        ora: pad(d.getHours())+':'+pad(d.getMinutes()),
+        durata_min: (report.durationS/60).toFixed(1).replace('.',','),
+        atti_min: num(report.meta.breathRate, 1),
+        coh_media: num(avgR, 2),
+        coh_norm: avgR!=null ? Math.round(100*avgR/(avgR+1))+'' : '',
+        pct_coerenza: num(tic, 0),
+        fc_media: num(report.time && report.time.meanHR, 0),
+        campioni: cohN,
+        rmssd: num(report.time && report.time.rmssd, 1),
+        sdnn: num(report.time && report.time.sdnn, 1),
+        lf_pct: num(f.lfPct, 1),
+        hf_pct: num(f.hfPct, 1),
+        lf_picco_hz: f.lfPeakHz ? f.lfPeakHz.toFixed(3).replace('.',',') : ''
+      });
+      if(stEl) stEl.textContent = 'Sessione completata e riepilogo inviato al medico ('+code+') ✓';
+    }catch(e){
+      if(stEl) stEl.textContent = 'Sessione salvata. Riepilogo non inviato (connessione assente): riproverà alla prossima seduta.';
+    }
   }
 
   /* ----------------------- Filtro artefatti ----------------------- */
@@ -2208,7 +2313,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v49';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v51';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -2303,7 +2408,17 @@ const TestMode = (() => {
     try{ WakeLock.release(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
   }
-  function finish(){ stopCommon(); show('done'); }
+  function finish(){
+    stopCommon(); show('done');
+    const status = el('hrvSendStatus');
+    if(SendConsent.given()){
+      HRV.setConsent(true);
+      if(status) status.textContent = 'Invio dei dati al medico…';
+      HRV.sendToDoctor();          // consenso unico già dato → invio automatico
+    } else if(status){
+      status.innerHTML = 'Test salvato. <b>Invio non attivo</b>: per farlo arrivare al medico attiva l\'invio dei dati dalla barra in cima all\'app.';
+    }
+  }
   function abort(){
     if(!confirm('Interrompere il test? I dati raccolti finora andranno persi.')) return;
     stopCommon(); show('setup');
@@ -2313,23 +2428,17 @@ const TestMode = (() => {
     loadProfile();   // precarica codice/sesso/età/categoria dai test precedenti
     el('hrvTestStart').addEventListener('click', start);
     el('hrvTestAbort').addEventListener('click', abort);
-    const consent = el('hrvConsent'), sendBtn = el('hrvTestSend');
-    if(consent && sendBtn){
-      consent.addEventListener('change', ()=>{
-        sendBtn.disabled = !consent.checked;
-        HRV.setConsent(consent.checked);
-      });
-    }
+    // Nessuna spunta qui: il consenso è quello unico dell'app. Il tasto "Invia"
+    // resta come riserva (rinvio manuale se offline, o richiamo del consenso).
+    const sendBtn = el('hrvTestSend');
     if(sendBtn) sendBtn.addEventListener('click', async ()=>{
-      if(!consent || !consent.checked){ return; }
+      if(!SendConsent.given()){ ConsentUI && ConsentUI.renderBar(); alert('L\'invio dei dati non è attivo. Attivalo dalla barra "Invio dei dati al medico" in cima all\'app.'); return; }
+      HRV.setConsent(true);
       sendBtn.disabled = true;
       try{ await HRV.sendToDoctor(); } finally { sendBtn.disabled = false; }
     });
     el('hrvTestNew').addEventListener('click', ()=>{
-      if(consent){ consent.checked = false; }
-      if(sendBtn){ sendBtn.disabled = true; }
       const ss = el('hrvSendStatus'); if(ss) ss.textContent = '';
-      HRV.setConsent(false);
       show('setup');
     });
   }
@@ -2356,8 +2465,8 @@ const MorningTest = (() => {
   function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
   function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
   function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
-  function consentTs(){ try{ return localStorage.getItem(CONSENT_KEY)||''; }catch(e){ return ''; } }
-  function grantConsent(){ try{ localStorage.setItem(CONSENT_KEY, new Date().toISOString()); }catch(e){} }
+  function consentTs(){ return SendConsent.ts(); }   // consenso unico dell'app
+  function grantConsent(){ SendConsent.grant(); }
   // Invio al medico dell'esito (pseudonimizzato). Silenzioso: solo se c'è codice + consenso
   // + URL del GAS. alert=1 quando il verdetto è "Recupero" → il GAS avvisa su Telegram.
   async function sendReadiness(today, v){
@@ -2381,7 +2490,6 @@ const MorningTest = (() => {
     // Codice atleta + consenso una-tantum per l'avviso al medico (facoltativi). Senza, la misura
     // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
     const codeInput=el('mornCode'); if(codeInput && codeInput.value.trim()) saveCode(codeInput.value.trim().toUpperCase());
-    const cons=el('mornConsent'); if(cons && cons.checked && !consentTs()) grantConsent();
     try{ Audio.keepAliveOn(); }catch(e){}           // sblocca e TIENE SVEGLIO l'audio nel gesto del tap (i suoni ritardati devono poter partire)
     try{ WakeLock.acquire(); }catch(e){}
     show('Run'); startStabilize();
@@ -2574,8 +2682,8 @@ const AlphaTest = (() => {
   function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
   function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
   function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
-  function consentTs(){ try{ return localStorage.getItem(CONSENT_KEY)||''; }catch(e){ return ''; } }
-  function grantConsent(){ try{ localStorage.setItem(CONSENT_KEY, new Date().toISOString()); }catch(e){} }
+  function consentTs(){ return SendConsent.ts(); }   // consenso unico dell'app
+  function grantConsent(){ SendConsent.grant(); }
   function median(a){ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y), n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; }
 
   /* ---- MOTORE DFA α1 : integra il segnale centrato, detrend lineare per box (4–16), ---- */
@@ -2619,11 +2727,6 @@ const AlphaTest = (() => {
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
     const codeInput=el('alphaCode'), code=codeInput?codeInput.value.trim():'';
     if(code) saveCode(code);
-    if(code && !consentTs()){
-      const c=el('alphaConsent');
-      if(!c || !c.checked){ alert('Per inviare il risultato al medico spunta il consenso. Senza codice/consenso la misura resta solo sul telefono.'); return; }
-      grantConsent(); const wrap=el('alphaConsentWrap'); if(wrap) wrap.style.display='none';
-    }
     HRV.beginMorning();                 // riusa la cattura RR generica dalla fascia
     document.body.dataset.alphaTesting='1';
     try{ WakeLock.acquire(); }catch(e){}
@@ -2799,8 +2902,10 @@ const CameraCoherence = (() => {
 
   function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
   function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
-  function consentTs(){ try{ return localStorage.getItem(COH_CONSENT_KEY)||''; }catch(e){ return ''; } }
-  function grantConsent(){ try{ localStorage.setItem(COH_CONSENT_KEY, new Date().toISOString()); }catch(e){} }
+  // Il consenso alla coerenza è lo stesso consenso unico dell'app (SendConsent):
+  // accordarlo qui sblocca l'invio automatico anche per fascia e test clinico.
+  function consentTs(){ return SendConsent.ts() || (localStorage.getItem(COH_CONSENT_KEY)||''); }
+  function grantConsent(){ SendConsent.grant(); try{ localStorage.setItem(COH_CONSENT_KEY, new Date().toISOString()); }catch(e){} }
 
   function show(w){ ['Setup','Run','Done'].forEach(s=>{ const e=el('cam'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
@@ -2819,12 +2924,6 @@ const CameraCoherence = (() => {
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
     if(code) saveCode(code);
-    if(code && !consentTs()){
-      const c=el('camConsent');
-      if(!c || !c.checked){ alert('Per inviare il riepilogo al medico spunta il consenso. Senza codice/consenso puoi comunque allenarti: i dati non verranno inviati.'); return; }
-      grantConsent();
-      const wrap=el('camConsentWrap'); if(wrap) wrap.style.display='none';
-    }
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Questo browser non dà accesso alla fotocamera.'); return; }
     try{
       stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:320}, height:{ideal:240} }, audio:false });
@@ -3117,12 +3216,82 @@ const CameraCoherence = (() => {
   return { init };
 })();
 
+/* ============ Consenso unico: finestra di primo avvio + barra di stato ============ */
+const ConsentUI = (() => {
+  const el = id => document.getElementById(id);
+  function syncCodeFields(code){
+    ['consentCode','camCode','mornCode','hrvTestCode','alphaCode'].forEach(id=>{ const e=el(id); if(e && !e.value.trim()) e.value=code; });
+  }
+  function renderBar(){
+    const bar = el('consentBar'); if(!bar) return;
+    if(SendConsent.given()){
+      bar.className = 'consent-bar on';
+      bar.innerHTML = '✓ Invio dati attivo — a ogni attività i risultati vanno al tuo medico <b>per il monitoraggio clinico a distanza</b>. <span class="cbar-cta">Gestisci</span>';
+    } else {
+      bar.className = 'consent-bar off';
+      bar.innerHTML = 'Invio dei dati al medico <b style="color:var(--hold)">non attivo</b>. <span class="cbar-cta">Attiva</span>';
+    }
+    bar.hidden = false;
+  }
+  function openModal(){
+    const given = SendConsent.given();
+    el('consentCode').value = SendConsent.code();
+    el('consentTitle').textContent = given ? 'Invio dei dati al medico' : 'Farti seguire a distanza';
+    el('consentIntro').hidden = given;
+    el('consentCode').style.display = given ? 'none' : '';
+    el('consentCheckWrap').hidden = given;
+    el('consentCheck').checked = given;
+    const note = el('consentActiveNote');
+    if(given){
+      note.hidden = false;
+      note.innerHTML = '✓ Consenso attivo dal <b>'+SendConsent.ts().slice(0,10)+'</b>. Codice paziente: <b>'+(SendConsent.code()||'—')+'</b>.<br>I dati partono da soli al termine di ogni attività.';
+    } else {
+      note.hidden = true;
+    }
+    el('consentPrimary').textContent = given ? 'Chiudi' : 'Attiva l\'invio dei dati';
+    el('consentSecondary').hidden = given;
+    el('consentRevoke').hidden = !given;
+    el('consentOverlay').hidden = false;
+  }
+  function closeModal(){ el('consentOverlay').hidden = true; }
+  function init(){
+    const bar = el('consentBar'); if(!bar) return;
+    bar.addEventListener('click', openModal);
+    el('consentPrimary').addEventListener('click', ()=>{
+      if(SendConsent.given()){ closeModal(); return; }              // modalità "Chiudi"
+      const code = el('consentCode').value.trim().toUpperCase();
+      if(!code){ alert('Inserisci il codice paziente che ti ha dato il medico.'); return; }
+      if(!el('consentCheck').checked){ alert('Spunta il consenso per attivare l\'invio, oppure scegli «Per ora no».'); return; }
+      SendConsent.setCode(code); SendConsent.grant(); SendConsent.markAsked();
+      syncCodeFields(code);
+      closeModal(); renderBar();
+    });
+    el('consentSecondary').addEventListener('click', ()=>{
+      const code = el('consentCode').value.trim().toUpperCase();
+      if(code){ SendConsent.setCode(code); syncCodeFields(code); }
+      SendConsent.markAsked();
+      closeModal(); renderBar();
+    });
+    el('consentRevoke').addEventListener('click', ()=>{
+      if(!confirm('Vuoi revocare il consenso? Da ora i tuoi dati non verranno più inviati al medico.')) return;
+      SendConsent.revoke();
+      closeModal(); renderBar();
+    });
+    el('consentOverlay').addEventListener('click', e=>{ if(e.target===el('consentOverlay') && SendConsent.given()) closeModal(); });
+    renderBar();
+    if(!SendConsent.asked()) openModal();   // prima volta in assoluto
+  }
+  return { init, renderBar };
+})();
+window.ConsentUI = ConsentUI;
+
 App.init();
 HRV.init();
 TestMode.init();
 MorningTest.init();
 AlphaTest.init();
 CameraCoherence.init();
+ConsentUI.init();
 
 /* ---- Guida utente (overlay) ---- */
 (function(){

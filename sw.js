@@ -2,7 +2,7 @@
 // Così l'app (singolo index.html) prende sempre l'ultima versione quando sei
 // online, e funziona offline grazie alla copia in cache. Niente più versioni
 // "incastrate": basta riaprire l'app da connessi.
-const CACHE = 'respiro-pacer-v49-fasce-compatibili';
+const CACHE = 'respiro-pacer-v51-consenso-unico';
 const ASSETS = [
   './',
   './index.html',
