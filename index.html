@@ -805,7 +805,7 @@ const SAMPLES = {
 
 /* ---------- AUDIO ENGINE ---------- */
 const Audio = (() => {
-  let ctx, master, ambientGain, envGain, started=false;
+  let ctx, master, ambientGain, envGain, started=false, keepNode=null;
   let currentType=null, nodes={}, buffers={}, customBuffers={};
   function ensure(){
     if(ctx) return;
@@ -908,9 +908,26 @@ const Audio = (() => {
   }
   function recStart(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; beepAt(660,t,0.13); beepAt(880,t+0.15,0.15); }          // due bip che salgono
   function recEnd(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; [783.99,659.25,523.25].forEach((f,i)=>beepAt(f,t+i*0.12,0.18)); }  // arpeggio che scende
+  // Keep-alive: su iOS il contesto audio si sospende dopo qualche secondo di silenzio
+  // (es. la stabilizzazione), e poi il suono ritardato non parte. Un oscillatore muto
+  // (20 Hz, gain quasi zero) tiene il contesto attivo per tutta la misurazione.
+  function keepAliveOn(){
+    ensure(); if(ctx.state==='suspended') ctx.resume();
+    if(keepNode) return;
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type='sine'; o.frequency.value=20; g.gain.value=0.0001;
+    o.connect(g); g.connect(master||ctx.destination); o.start();
+    keepNode={o,g};
+  }
+  function keepAliveOff(){
+    if(!keepNode) return;
+    try{ keepNode.o.stop(); }catch(e){}
+    try{ keepNode.o.disconnect(); keepNode.g.disconnect(); }catch(e){}
+    keepNode=null;
+  }
   return {
     async start(type){ensure();if(ctx.state==='suspended')await ctx.resume();await build(type);started=true;},
-    prime, chime, ding, dong, recStart, recEnd,
+    prime, chime, ding, dong, recStart, recEnd, keepAliveOn, keepAliveOff,
     stop(){if(envGain)envGain.gain.setTargetAtTime(0.0001,ctx.currentTime,0.1);clearNodes();started=false;},
     async setType(type){if(started)await build(type);},
     update,onPhaseStart,
@@ -2028,7 +2045,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v45';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v46';
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
@@ -2160,7 +2177,7 @@ const MorningTest = (() => {
   const KEY = 'respiroPacer.morning.v1';
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';      // codice atleta condiviso con gli altri test
   const CONSENT_KEY = 'respiroPacer.morningConsent.v1';
-  const DUR_MS = 60000, STAB_MS = 25000, WINDOW_DAYS = 60, MIN_READINGS = 7;   // STAB_MS: stabilizzazione (scarta artefatti, non registra)
+  const DUR_MS = 60000, STAB_MS = 30000, WINDOW_DAYS = 60, MIN_READINGS = 7;   // STAB_MS: stabilizzazione 30s (scarta artefatti, non registra)
   const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
   let beats = [], raf = null, t0 = 0, phase = '';   // phase: 'stab' (stabilizzazione) | 'measure'
 
@@ -2198,7 +2215,7 @@ const MorningTest = (() => {
     // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
     const codeInput=el('mornCode'); if(codeInput && codeInput.value.trim()) saveCode(codeInput.value.trim().toUpperCase());
     const cons=el('mornConsent'); if(cons && cons.checked && !consentTs()) grantConsent();
-    try{ Audio.prime(); }catch(e){}                 // sblocca l'audio nel gesto del tap (i suoni partono dopo, in ritardo)
+    try{ Audio.keepAliveOn(); }catch(e){}           // sblocca e TIENE SVEGLIO l'audio nel gesto del tap (i suoni ritardati devono poter partire)
     try{ WakeLock.acquire(); }catch(e){}
     show('Run'); startStabilize();
   }
@@ -2234,12 +2251,13 @@ const MorningTest = (() => {
   function stopRaf(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
   function abort(){
     if(!confirm('Interrompere il test del mattino? La misura andrà persa.')) return;
-    stopRaf(); HRV.endMorning(); try{ WakeLock.release(); }catch(e){} show('Setup');
+    stopRaf(); HRV.endMorning(); try{ WakeLock.release(); }catch(e){} try{ Audio.keepAliveOff(); }catch(e){} show('Setup');
   }
   function finishCapture(){
     stopRaf();
     const rrArr = HRV.endMorning();
     try{ WakeLock.release(); }catch(e){}
+    try{ Audio.keepAliveOff(); }catch(e){}
     if(rrArr.length < 30){ alert('Troppi pochi battiti raccolti ('+rrArr.length+'): verifica il contatto della fascia e ripeti.'); show('Setup'); return; }
     beats = rrArr.map(v=>{ const hard = v<300||v>2000; return { rr:v, excl:hard, hard }; });
     show('Edit'); drawTaco(); updateStat();
