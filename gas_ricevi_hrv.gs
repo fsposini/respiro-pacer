@@ -54,7 +54,8 @@ function doPost(e) {
       var row = [
         p.local || ts, code, p.durata_min || '', p.atti_min || '',
         p.coh_media || '', p.pct_coerenza || '', p.coh_picco || '',
-        p.fc_media || '', p.sorgente || '', p.campioni || '', ts
+        p.fc_media || '', p.sorgente || '', p.campioni || '', ts,
+        p.rmssd || '', p.lf_pct || '', p.hf_pct || ''   // ← RMSSD, LF%, HF% (fascia)
       ];
       _cohRow(folder, row);
       return _json({ ok: true, kind: 'coerenza' });
@@ -120,14 +121,23 @@ function _sheetRow(folder, name, header, row) {
     folder.addFile(f); DriveApp.getRootFolder().removeFile(f);
     ss.getActiveSheet().appendRow(header);
   }
-  ss.getActiveSheet().appendRow(row);
+  var sheet = ss.getActiveSheet();
+  // Se il foglio esisteva già con meno colonne, aggiunge in coda le intestazioni
+  // mancanti (es. le nuove RMSSD/LF%/HF%): così non serve toccarle a mano.
+  var lastCol = sheet.getLastColumn();
+  if (lastCol > 0 && lastCol < header.length) {
+    sheet.getRange(1, lastCol + 1, 1, header.length - lastCol)
+         .setValues([header.slice(lastCol)]);
+  }
+  sheet.appendRow(row);
 }
 
 function _cohRow(folder, row) {
   _sheetRow(folder, 'coerenza_pazienti',
     ['data e ora', 'codice', 'durata (min)', 'atti/min',
      'coerenza media', '% in coerenza', 'coerenza picco',
-     'FC media', 'sorgente', 'campioni', 'ts ISO'],
+     'FC media', 'sorgente', 'campioni', 'ts ISO',
+     'RMSSD (ms)', 'LF%', 'HF%'],   // ← colonne aggiunte (solo per le righe "fascia")
     row);
 }
 
