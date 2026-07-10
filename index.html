@@ -2405,7 +2405,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v55';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v56';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -2431,6 +2431,13 @@ const TestMode = (() => {
   // reinserire codice/sesso/età/categoria ad ogni test. Nessun nome, mai trasmesso.
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';
   function saveProfile(p){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
+  // Aggiorna UN solo campo del profilo senza toccare gli altri: così una correzione
+  // (es. età 52 → 51) si salva subito, anche senza avviare un test o collegare la fascia.
+  function mergeProfile(campo, valore){
+    try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{};
+      if(valore==='' || valore==null) delete p[campo]; else p[campo]=valore;
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){}
+  }
   function loadProfile(){
     let p=null; try{ p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); }catch(e){}
     if(!p) return;
@@ -2539,6 +2546,11 @@ const TestMode = (() => {
   function init(){
     if(!el('hrvTestStart')) return;
     loadProfile();   // precarica codice/sesso/età/categoria dai test precedenti
+    // Salvataggio immediato a ogni modifica: il dato corretto resta anche senza test.
+    el('hrvTestCode') && el('hrvTestCode').addEventListener('input',  e=>mergeProfile('code', e.target.value.trim()));
+    el('hrvTestSex')  && el('hrvTestSex').addEventListener('change', e=>mergeProfile('sex',  e.target.value));
+    el('hrvTestAge')  && el('hrvTestAge').addEventListener('input',  e=>mergeProfile('age',  e.target.value.trim()));
+    el('hrvTestPop')  && el('hrvTestPop').addEventListener('change', e=>mergeProfile('pop',  e.target.value));
     el('hrvTestStart').addEventListener('click', start);
     el('hrvTestAbort').addEventListener('click', abort);
     // Nessuna spunta qui: il consenso è quello unico dell'app. Il tasto "Invia"
