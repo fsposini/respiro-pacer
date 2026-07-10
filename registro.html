@@ -92,10 +92,8 @@
     <div class="card">
       <b>Aggiungi paziente / atleta</b>
       <label>Codice</label>
-      <input id="fCode" type="text" placeholder="incolla il codice del paziente, o generane uno" autocapitalize="characters" spellcheck="false">
-      <div class="gen">
-        <button type="button" data-p="HRV">🎲 Genera codice</button>
-      </div>
+      <input id="fCode" type="text" placeholder="incolla il codice generato sul PC (es. MF-XXXXXX)" autocapitalize="characters" spellcheck="false">
+      <p class="locknote" style="margin:6px 0 4px">Il codice si genera <b>una sola volta sul PC</b> (nuovo_paziente.py) e si incolla qui: così lo stesso codice vale per l'anonimizzazione e per l'app. Non generarne uno nuovo sul telefono.</p>
       <label>Categoria</label>
       <select id="fCat"><option value="Paziente">Paziente</option><option value="Atleta">Atleta</option></select>
       <label>Nome e cognome</label>
@@ -172,13 +170,8 @@ async function decryptWith(k, b64){
 async function decryptData(b64){ return decryptWith(key, b64); }
 async function persist(){ try{ localStorage.setItem(LS_DATA, await encryptObj(entries)); }catch(e){ alert('Errore nel salvataggio: '+e); } }
 
-/* ---------- generatore codice (stesso schema dell'app) ---------- */
-function genCode(prefix){
-  const AL='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s='';
-  const a=new Uint32Array(4); crypto.getRandomValues(a);
-  for(let i=0;i<4;i++) s+=AL[a[i]%AL.length];
-  return prefix+'-'+s;
-}
+/* Nessun generatore di codici qui: il codice nasce una sola volta sul PC
+   (nuovo_paziente.py) ed è la fonte unica per anonimizzazione e app. */
 
 /* ---------- schermate ---------- */
 function show(which){ ['setup','unlock','app'].forEach(s=>$(s).classList.toggle('hide', s!==which)); }
@@ -352,7 +345,6 @@ $('importBtn').addEventListener('click', ()=> $('importFile').click());
 $('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBackup(f); e.target.value=''; });
 $('search').addEventListener('input', render);
 document.addEventListener('click', e=>{
-  const g=e.target.closest('[data-p]'); if(g){ $('fCode').value=genCode(g.getAttribute('data-p')); return; }
   const c=e.target.closest('[data-copy]'); if(c){ const t=c.getAttribute('data-copy'); (navigator.clipboard?navigator.clipboard.writeText(t):0); c.textContent='Copiato ✓'; setTimeout(()=>c.textContent='Copia codice',1200); return; }
   const d=e.target.closest('[data-del]'); if(d){ delEntry(d.getAttribute('data-del')); return; }
 });
