@@ -62,6 +62,25 @@
     background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a;font-weight:600;font-size:.86rem;cursor:pointer}
   .consent-actions .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--text)}
   .consent-actions .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ---- Cancello di attivazione (blocca l'intera app finché il codice non è validato dal medico) ---- */
+  .activation-gate{position:fixed;inset:0;z-index:200;background:radial-gradient(120% 120% at 50% 0%,var(--bg2),#06121a 70%);
+    display:none;align-items:center;justify-content:center;padding:20px}
+  body.locked .activation-gate{display:flex}
+  body.locked .layout,body.locked .consent-bar,body.locked .consent-overlay{display:none!important}
+  .activation-card{width:100%;max-width:420px;text-align:center;background:linear-gradient(180deg,var(--panel),var(--bg2));
+    border:1px solid var(--line);border-radius:18px;padding:26px 22px;box-shadow:var(--shadow)}
+  .activation-card .act-logo{font-size:1.6rem;margin-bottom:6px}
+  .activation-card h2{font-size:1.12rem;color:var(--text);margin-bottom:8px}
+  .activation-card p{font-size:.84rem;color:var(--muted);line-height:1.5;margin-bottom:16px}
+  .activation-card .cam-code{width:100%;text-align:center;letter-spacing:2px;font-size:1.05rem;margin-bottom:12px}
+  .activation-card .btn{width:100%;padding:12px 14px;border-radius:11px;border:1px solid transparent;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a;font-weight:700;font-size:.92rem;cursor:pointer}
+  .activation-card .btn:disabled{opacity:.5;cursor:not-allowed}
+  .act-status{min-height:1.2em;font-size:.82rem;margin-top:12px;line-height:1.45}
+  .act-status.err{color:#ff8a80}
+  .act-status.ok{color:var(--accent2)}
+  .act-foot{font-size:.72rem;color:var(--muted);margin-top:16px;line-height:1.5}
   .consent-revoke{display:block;margin:14px auto 0;background:none;border:none;color:var(--danger);
     font-size:.78rem;text-decoration:underline;cursor:pointer}
   .consent-revoke[hidden]{display:none}
@@ -217,7 +236,22 @@
     border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:130px;overflow:auto;white-space:pre-wrap}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<!-- Cancello di attivazione: l'app resta bloccata finché il codice paziente non è
+     validato dal medico e legato a QUESTO dispositivo. -->
+<div class="activation-gate" id="activationGate" role="dialog" aria-modal="true" aria-label="Attivazione dell'app">
+  <div class="activation-card">
+    <div class="act-logo">🫁</div>
+    <h2>Attiva Respiro Pacer</h2>
+    <p>Questa app è riservata ai pazienti seguiti dal <b>Dott. Federico Sposini</b>. Inserisci il <b>codice</b> che ti è stato consegnato per attivarla su questo dispositivo.</p>
+    <input id="actCode" type="text" class="cam-code" placeholder="CODICE PAZIENTE" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text">
+    <button type="button" id="actBtn" class="btn">Attiva su questo dispositivo</button>
+    <div class="act-status" id="actStatus"></div>
+    <div class="act-foot">Il codice funziona su un solo dispositivo. Se hai cambiato telefono o ricevi un errore, contatta il medico.</div>
+  </div>
+</div>
+
 <header>
   <img src="data:image/png;base64,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" alt="Logo">
   <div class="titles">
@@ -399,6 +433,8 @@
     .hrv-morning .btn{margin-top:8px}
     .hrv-morning .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
     .hrv-morning .btn:disabled{opacity:.45;cursor:not-allowed}
+    .morn-histrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:.86rem;text-align:left}
+    .morn-histrow .btn{margin-top:0;padding:4px 10px;font-size:.78rem}
     .morn-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:6px 0}
     .morn-taco{width:100%;height:auto;display:block;background:rgba(0,0,0,.25);border-radius:10px;margin:8px 0;touch-action:manipulation}
     .morn-editstat{font-size:.82rem;color:var(--muted);margin:4px 0}
@@ -513,12 +549,12 @@
         </ul>
       </details>
       <button id="hrvTestStart" class="btn">Avvia test clinico</button>
-      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
+      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Il test inizia con <b>30 secondi di stabilizzazione</b> (non si registra): la registrazione parte al segnale acustico e finisce con un secondo segnale. Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
     </div>
     <div id="hrvTestRun" class="hrv-test-run" style="display:none">
       <div class="hrv-test-orb-wrap"><div id="hrvTestOrb"></div></div>
       <div class="hrv-test-phase" id="hrvTestPhase">—</div>
-      <div class="hrv-test-count" id="hrvTestCount">5:00</div>
+      <div class="hrv-test-count" id="hrvTestCount">0:30</div>
       <div class="hrv-test-instr" id="hrvTestInstr"></div>
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
     </div>
@@ -537,6 +573,14 @@
       <label for="mornCode" style="margin-top:8px">Codice atleta (per l'avviso al medico, facoltativo)</label>
       <input id="mornCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
       <button id="mornStart" class="btn">Avvia test del mattino</button>
+      <div class="morn-editbtns">
+        <button id="mornHistBtn" class="btn ghost">Storico misure</button>
+        <button id="mornExport" class="btn ghost">Esporta CSV</button>
+      </div>
+      <div id="mornHistBox" style="display:none">
+        <div id="mornHistList"></div>
+        <div class="hrv-test-hint">Il CSV contiene anche i battiti grezzi di ogni misura: servono al medico per verificare un valore anomalo.</div>
+      </div>
     </div>
     <div id="mornRun" style="display:none">
       <div class="morn-phase" id="mornPhase">Stabilizzazione</div>
@@ -576,9 +620,10 @@
       <div class="cam-sendnote" id="alphaSendNote"></div>
     </div>
     <div id="alphaRun" style="display:none">
-      <div class="morn-count" id="alphaCount">5:00</div>
+      <div class="morn-phase" id="alphaPhase">Stabilizzazione</div>
+      <div class="morn-count" id="alphaCount">0:30</div>
       <div class="hrv-alpha-live">battiti <b id="alphaBeats">0</b> · α1 provvisorio <b id="alphaLive">—</b></div>
-      <div class="hrv-test-hint">Stai fermo e rilassato, respira normalmente. Non parlare.</div>
+      <div class="hrv-test-hint" id="alphaHint">Resta fermo e rilassato: sto stabilizzando il battito.</div>
       <button id="alphaAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="alphaEdit" style="display:none">
@@ -997,8 +1042,19 @@ const Audio = (() => {
     o.connect(g); g.connect(master||ctx.destination);
     o.start(t0); o.stop(t0+dur+0.03);
   }
-  function recStart(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; beepAt(660,t,0.13); beepAt(880,t+0.15,0.15); }          // due bip che salgono
-  function recEnd(){ ensure(); if(ctx.state==='suspended')ctx.resume(); const t=ctx.currentTime; [783.99,659.25,523.25].forEach((f,i)=>beepAt(f,t+i*0.12,0.18)); }  // arpeggio che scende
+  // Schedula una sequenza di bip. Due accortezze indispensabili perché il suono si senta
+  // SEMPRE e non solo alla prima misurazione:
+  //  1) ctx.resume() è asincrono: se il contesto è sospeso va ASPETTATO, altrimenti
+  //     ctx.currentTime è ancora fermo e i bip cadono in un istante già passato;
+  //  2) mai schedulare a ctx.currentTime esatto (quel blocco audio è già in rendering):
+  //     serve un piccolo anticipo, qui 60 ms.
+  function playSeq(notes){
+    ensure();
+    const go = () => { const t = ctx.currentTime + 0.06; notes.forEach(n => beepAt(n.f, t + n.dt, n.dur)); };
+    if(ctx.state === 'suspended'){ ctx.resume().then(go).catch(go); } else go();
+  }
+  function recStart(){ playSeq([{f:660,dt:0,dur:0.13},{f:880,dt:0.15,dur:0.15}]); }                                   // due bip che salgono
+  function recEnd(){ playSeq([{f:783.99,dt:0,dur:0.18},{f:659.25,dt:0.12,dur:0.18},{f:523.25,dt:0.24,dur:0.18}]); }   // arpeggio che scende
   // Keep-alive: su iOS il contesto audio si sospende dopo qualche secondo di silenzio
   // (es. la stabilizzazione), e poi il suono ritardato non parte. Un oscillatore muto
   // (20 Hz, gain quasi zero) tiene il contesto attivo per tutta la misurazione.
@@ -2349,7 +2405,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v53';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v54';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -2359,7 +2415,7 @@ const HRV = (() => {
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
-           uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl,
+           uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            liveRR: ()=> rr.map(o=>o.rr) };
 })();
 window.HRV = HRV;
@@ -2368,6 +2424,8 @@ window.HRV = HRV;
 const TestMode = (() => {
   const el = id => document.getElementById(id);
   const TONIC_MS = 300000, PHASIC_MS = 60000, BREATH_MS = 10000; // 6 atti/min = ciclo 10 s
+  const STAB_MS = 30000;                                          // stabilizzazione: collegati ma non si registra
+  let pending = null;                                             // dati paziente in attesa di avviare la cattura
   let raf = null, t0 = 0, phase = null, lastHalf = null;
   // Profilo paziente memorizzato in locale (SOLO sul telefono del paziente): evita di
   // reinserire codice/sesso/età/categoria ad ogni test. Nessun nome, mai trasmesso.
@@ -2400,11 +2458,27 @@ const TestMode = (() => {
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (vedi indicatore "Intervalli RR: sì") e riprova.'); return; }
     saveProfile({ code, sex, age, pop });   // ricorda i dati per i test successivi
-    HRV.beginTest(code, sex, age, pop);
+    pending = { code, sex, age, pop };      // la cattura parte solo dopo la stabilizzazione
     document.body.dataset.hrvTesting = '1';
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
+    try{ Audio.keepAliveOn(); }catch(e){}                      // sblocca l'audio: i suoni ritardati devono poter partire
     try{ WakeLock.acquire(); }catch(e){}
     show('run');
+    runStabilize();
+  }
+  // Fase 0 — STABILIZZAZIONE (30 s): la fascia è collegata ma NON si registra ancora.
+  // Il battito si assesta e gli artefatti da movimento restano fuori dalla registrazione.
+  function runStabilize(){
+    phase = 'stab'; t0 = performance.now(); lastHalf = null;
+    el('hrvTestPhase').textContent = 'Stabilizzazione';
+    el('hrvTestInstr').textContent = 'Resta fermo e rilassato. La registrazione non è ancora iniziata: partirà da sola, al segnale acustico.';
+    el('hrvTestOrb').style.transform = 'scale(1)';
+    loop();
+  }
+  // Suono d'inizio e via alla fase tonica: da qui in poi i battiti vengono registrati.
+  function beginCapture(){
+    HRV.beginTest(pending.code, pending.sex, pending.age, pending.pop);
+    try{ Audio.recStart(); }catch(e){}
     runPhase('tonic');
   }
   function runPhase(p){
@@ -2422,7 +2496,7 @@ const TestMode = (() => {
   }
   function loop(){
     const now = performance.now(), elapsed = now - t0;
-    const dur = phase==='tonic' ? TONIC_MS : PHASIC_MS;
+    const dur = phase==='stab' ? STAB_MS : (phase==='tonic' ? TONIC_MS : PHASIC_MS);
     el('hrvTestCount').textContent = fmt(dur - elapsed);
     if(phase==='phasic'){
       const ph = (elapsed % BREATH_MS) / BREATH_MS;          // 0..1
@@ -2432,7 +2506,9 @@ const TestMode = (() => {
       if(half !== lastHalf){ lastHalf = half; try{ Voice.say(half ? 'Inspira' : 'Espira'); }catch(e){} }
     }
     if(elapsed >= dur){
+      if(phase==='stab'){ beginCapture(); return; }
       if(phase==='tonic'){ runPhase('phasic'); return; }
+      try{ Audio.recEnd(); }catch(e){}
       finish(); return;
     }
     raf = requestAnimationFrame(loop);
@@ -2442,6 +2518,7 @@ const TestMode = (() => {
     delete document.body.dataset.hrvTesting;
     if(raf){ cancelAnimationFrame(raf); raf=null; }
     try{ WakeLock.release(); }catch(e){}
+    try{ Audio.keepAliveOff(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
   }
   function finish(){
@@ -2484,6 +2561,68 @@ const TestMode = (() => {
 /* ================= TEST DEL MATTINO (readiness 1 min con fascia) ================= */
 /* lnRMSSD del giorno confrontato con la banda di normalità personale (media ± DS    */
 /* su finestra mobile 60 gg). Verdetto allenabile/alleggerire/recupero dopo ≥7 misure.*/
+/* ---- Pulizia dei battiti: logica condivisa da test del mattino e DFA α1 ---- */
+const Beats = (() => {
+  const HALF = 4;              // finestra della mediana locale = 9 battiti (Malik/Kubios)
+  const DEV = 0.20;            // deviazione oltre la quale il battito è un artefatto
+  const PAIR_DEV = 0.15;       // deviazione minima perché il vicino sia il compagno della coppia
+  function localMedian(vals, i){
+    const a = Math.max(0, i-HALF), b = Math.min(vals.length, i+HALF+1);
+    const w = vals.slice(a, b).sort((x,y) => x-y);
+    return w[w.length>>1];
+  }
+  // Un'extrasistole produce SEMPRE una coppia di intervalli: uno corto e, subito dopo, uno
+  // lungo (pausa compensatoria). Escluderne uno solo lascia dentro l'altro e GONFIA l'RMSSD,
+  // che si costruisce sulle differenze al quadrato fra battiti consecutivi. Dato il battito i
+  // appena escluso a mano, il compagno è il vicino che devia dalla mediana locale nella
+  // direzione OPPOSTA e con ampiezza rilevante.
+  function partnerOf(beats, i){
+    const vals = beats.map(b => b.rr);
+    const med = localMedian(vals, i);
+    if(!med) return -1;
+    const di = beats[i].rr - med;
+    if(!di) return -1;
+    let best = -1, bestDev = PAIR_DEV;
+    [i-1, i+1].forEach(j => {
+      if(j < 0 || j >= beats.length) return;
+      const b = beats[j];
+      if(b.hard || b.excl) return;                                  // già fuori: niente da fare
+      const dj = b.rr - localMedian(vals, j);
+      if(dj === 0 || Math.sign(dj) === Math.sign(di)) return;       // deve deviare in senso opposto
+      const dev = Math.abs(dj) / med;
+      if(dev > bestDev){ bestDev = dev; best = j; }
+    });
+    return best;
+  }
+  // Tap su un battito: lo esclude portandosi dietro il compagno della coppia ectopica,
+  // oppure lo reinclude restituendo anche i battiti che aveva trascinato con sé.
+  function toggle(beats, i){
+    const b = beats[i];
+    if(b.hard) return;
+    if(!b.excl){
+      b.excl = true;
+      const j = partnerOf(beats, i);
+      if(j >= 0){ beats[j].excl = true; beats[j].pairedBy = i; }
+    } else {
+      b.excl = false; delete b.pairedBy;
+      beats.forEach(o => { if(o.pairedBy === i && !o.hard){ o.excl = false; delete o.pairedBy; } });
+    }
+  }
+  function autoFlag(beats){
+    const vals = beats.map(b => b.rr);
+    beats.forEach((b, i) => {
+      delete b.pairedBy;
+      if(b.hard){ b.excl = true; return; }
+      const med = localMedian(vals, i);
+      b.excl = med > 0 && Math.abs(b.rr - med) / med > DEV;
+    });
+  }
+  function includeAll(beats){ beats.forEach(b => { b.excl = b.hard; delete b.pairedBy; }); }
+  function keptRR(beats){ return beats.filter(b => !b.excl).map(b => b.rr); }
+  function pctExcluded(beats){ return beats.length ? 100 * beats.filter(b => b.excl).length / beats.length : 0; }
+  return { partnerOf, toggle, autoFlag, includeAll, keptRR, pctExcluded };
+})();
+
 const MorningTest = (() => {
   const el = id => document.getElementById(id);
   const KEY = 'respiroPacer.morning.v1';
@@ -2491,7 +2630,8 @@ const MorningTest = (() => {
   const CONSENT_KEY = 'respiroPacer.morningConsent.v1';
   const DUR_MS = 60000, STAB_MS = 30000, WINDOW_DAYS = 60, MIN_READINGS = 7;   // STAB_MS: stabilizzazione 30s (scarta artefatti, non registra)
   const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
-  let beats = [], raf = null, t0 = 0, phase = '';   // phase: 'stab' (stabilizzazione) | 'measure'
+  const MAX_EXCL_PCT = 5;                           // oltre il 5% di battiti scartati la misura non è affidabile
+  let beats = [], rawRR = [], raf = null, t0 = 0, phase = '';   // phase: 'stab' (stabilizzazione) | 'measure'
 
   function show(which){
     ['Setup','Run','Edit','Result'].forEach(s=>{ const e=el('morn'+s); if(e) e.style.display = (s===which)?'':'none'; });
@@ -2570,12 +2710,14 @@ const MorningTest = (() => {
     try{ WakeLock.release(); }catch(e){}
     try{ Audio.keepAliveOff(); }catch(e){}
     if(rrArr.length < 30){ alert('Troppi pochi battiti raccolti ('+rrArr.length+'): verifica il contatto della fascia e ripeti.'); show('Setup'); return; }
+    rawRR = rrArr.slice();                    // battiti grezzi conservati: senza, un'anomalia non è più verificabile
     beats = rrArr.map(v=>{ const hard = v<300||v>2000; return { rr:v, excl:hard, hard }; });
-    show('Edit'); drawTaco(); updateStat();
+    autoFlag();                               // pre-segnala gli artefatti, come nell'α1: il ritocco manuale è il SECONDO passo
+    show('Edit');
   }
 
   /* ---- editor battiti (pulizia manuale artefatti) ---- */
-  function keptRR(){ return beats.filter(b=>!b.excl).map(b=>b.rr); }
+  function keptRR(){ return Beats.keptRR(beats); }
   function rmssdOf(nn){ if(nn.length<3) return NaN; let ss=0; for(let i=1;i<nn.length;i++){ const d=nn[i]-nn[i-1]; ss+=d*d; } return Math.sqrt(ss/(nn.length-1)); }
   function scaleY(){ const v=beats.map(b=>b.rr); const lo=Math.min(Math.min.apply(null,v),500), hi=Math.max(Math.max.apply(null,v),1100); return {lo,hi}; }
   function X(i){ const n=beats.length; return PADX + (n<=1?0:i/(n-1))*(VB_W-2*PADX); }
@@ -2601,43 +2743,64 @@ const MorningTest = (() => {
     const sc=scaleY(); let best=-1, bd=1e9;
     beats.forEach((b,i)=>{ const dx=X(i)-px, dy=Y(b.rr,sc)-py, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=i; } });
     if(best<0 || bd>32*32) return;
-    const b=beats[best]; if(b.hard) return;   // fuori range fisiologico: resta sempre escluso
-    b.excl=!b.excl; drawTaco(); updateStat();
-  }
-  function updateStat(){
-    const nn=keptRR(), nExcl=beats.length-nn.length, r=rmssdOf(nn);
-    el('mornEditStat').innerHTML='<b>'+nn.length+'</b> battiti validi · <b style="color:#ff7a73">'+nExcl+'</b> esclusi'+(isNaN(r)?'':' · RMSSD <b>'+r.toFixed(0)+'</b> ms');
-  }
-  function autoFlag(){
-    const vals=beats.map(b=>b.rr), n=vals.length, half=4;
-    beats.forEach((b,i)=>{
-      if(b.hard){ b.excl=true; return; }
-      const a=Math.max(0,i-half), c=Math.min(n,i+half+1), w=vals.slice(a,c).slice().sort((x,y)=>x-y), med=w[w.length>>1];
-      b.excl = med>0 && Math.abs(b.rr-med)/med>0.20;
-    });
+    if(beats[best].hard) return;              // fuori range fisiologico: resta sempre escluso
+    Beats.toggle(beats, best);                // si porta dietro il compagno della coppia ectopica
     drawTaco(); updateStat();
   }
-  function includeAll(){ beats.forEach(b=>b.excl=b.hard); drawTaco(); updateStat(); }
+  function updateStat(){
+    const nn=keptRR(), nExcl=beats.length-nn.length, r=rmssdOf(nn), pct=Beats.pctExcluded(beats);
+    const bad = pct > MAX_EXCL_PCT;
+    el('mornEditStat').innerHTML='<b>'+nn.length+'</b> battiti validi · <b style="color:#ff7a73">'+nExcl+'</b> esclusi ('+pct.toFixed(1)+'%)'
+      +(isNaN(r)?'':' · RMSSD <b>'+r.toFixed(0)+'</b> ms')
+      +(bad?'<div style="color:#ff7a73;margin-top:6px">⚠️ Oltre il '+MAX_EXCL_PCT+'% di battiti scartati: misura poco affidabile, meglio ripeterla.</div>':'');
+  }
+  function autoFlag(){ Beats.autoFlag(beats); drawTaco(); updateStat(); }
+  function includeAll(){ Beats.includeAll(beats); drawTaco(); updateStat(); }
 
   /* ---- salvataggio, baseline e verdetto ---- */
   function save(){
     const nn=keptRR();
     if(nn.length<20){ alert('Troppi pochi battiti validi dopo la pulizia: ripeti la misura.'); return; }
+    const pct=Beats.pctExcluded(beats), lowq = pct > MAX_EXCL_PCT;
+    if(lowq && !confirm('Battiti scartati: '+pct.toFixed(1)+'% (limite '+MAX_EXCL_PCT+'%).\n\n'
+      +'La misura non è affidabile: verrà salvata come "qualità bassa", NON entrerà nella tua media di riferimento e non sarà inviata al medico.\n\n'
+      +'Salvarla comunque?')) return;
     const rmssd=rmssdOf(nn), ln=Math.log(rmssd), hr=60000/(nn.reduce((s,v)=>s+v,0)/nn.length);
     const d=new Date().toISOString().slice(0,10);
-    let h=loadHist().filter(e=>e.d!==d);            // una misura per giorno (l'ultima vince)
-    h.push({ d, rmssd:+rmssd.toFixed(1), ln, hr:Math.round(hr) });
-    h.sort((a,b)=> a.d<b.d?-1:1);
-    saveHist(h);
-    renderResult(h, {rmssd, ln});
+    const hist=loadHist(), prev=hist.find(e=>e.d===d);
+    // Una misura per giorno. La readiness si legge sulla PRIMA misura del mattino: le
+    // ripetizioni avvengono a soggetto ormai sveglio e non sono confrontabili fra loro.
+    // Perciò una misura sporca non scaccia mai una valida, e la sostituzione di una
+    // misura valida va confermata a mano.
+    let replace = true;
+    if(prev && !prev.lowq){
+      replace = !lowq && confirm('Oggi hai già una misura valida: RMSSD '+prev.rmssd+' ms.\n\n'
+        +'La readiness si legge sulla prima misura del mattino, appena sveglio. Le ripetizioni successive '
+        +'non sono confrontabili: sei già sveglio, seduto, e stai pensando alla misura.\n\n'
+        +'Sostituire comunque la misura di oggi con questa?');
+    }
+    let h = hist.slice();
+    if(replace){
+      h = h.filter(e=>e.d!==d);
+      // I battiti grezzi e gli indici esclusi restano con la misura: senza di essi un'anomalia
+      // non è più ispezionabile a posteriori (né dal medico né da noi).
+      h.push({ d, ts:new Date().toISOString(), rmssd:+rmssd.toFixed(1), ln, hr:Math.round(hr),
+               nRaw:beats.length, nKept:nn.length, pctExcl:+pct.toFixed(1), lowq,
+               rrRaw:rawRR.map(v=>Math.round(v)),
+               excl:beats.map((b,i)=>b.excl?i:-1).filter(i=>i>=0) });
+      h.sort((a,b)=> a.d<b.d?-1:1);
+      saveHist(h);
+    }
+    renderResult(h, {rmssd, ln, lowq, pct, notSaved:!replace, prevRmssd:prev?prev.rmssd:null});
     show('Result');
+    if(lowq || !replace) return;                    // misura sporca o ripetizione: niente verdetto, niente invio
     // Invio al medico (pseudonimizzato): riga di readiness sempre, avviso Telegram solo se Recupero.
     const b=baseline(h);
     if(b){ const v=classify(ln,b); sendReadiness({rmssd, ln, hr:Math.round(hr)}, {big:v.big, baseRmssd:Math.exp(b.m)}); }
   }
   function baseline(h){
     const cutoff=Date.now()-WINDOW_DAYS*864e5;
-    const vals=h.filter(e=>new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
+    const vals=h.filter(e=>!e.lowq && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
     if(vals.length<MIN_READINGS) return null;
     const m=vals.reduce((s,x)=>s+x,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
@@ -2650,9 +2813,22 @@ const MorningTest = (() => {
   }
   function renderResult(h, today){
     const b=baseline(h), host=el('mornVerdict');
+    if(today.lowq){
+      host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:#b3201e">Misura non valida</span></div>'
+        +'<div class="morn-rmssd">Battiti scartati: <b>'+today.pct.toFixed(1)+'%</b> (limite '+MAX_EXCL_PCT+'%)</div>'
+        +'<div class="morn-sub">Troppi artefatti per calcolare una readiness attendibile: su un solo minuto anche pochi battiti anomali stravolgono l\'RMSSD. '
+        +'La misura è conservata ma resta fuori dalla tua media di riferimento. Controlla il contatto della fascia, inumidisci gli elettrodi e ripeti.</div>';
+      renderTrend(h, b); return;
+    }
+    if(today.notSaved){
+      host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:#545e62">Misura non registrata</span></div>'
+        +'<div class="morn-rmssd">Questa misura: <b>'+today.rmssd.toFixed(0)+'</b> ms · quella di oggi resta <b>'+today.prevRmssd+'</b> ms</div>'
+        +'<div class="morn-sub">Vale la prima misura del mattino. Questa ripetizione non entra nella tua media di riferimento e non è stata inviata al medico.</div>';
+      renderTrend(h, b); return;
+    }
     if(!b){
-      const need=Math.max(0,MIN_READINGS-h.length);
-      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+h.length+'/'+MIN_READINGS+'</div>'
+      const nValid=h.filter(e=>!e.lowq).length, need=Math.max(0,MIN_READINGS-nValid);
+      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+nValid+'/'+MIN_READINGS+'</div>'
         +'<div class="morn-rmssd">RMSSD di oggi: <b>'+today.rmssd.toFixed(0)+'</b> ms</div>'
         +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>';
       renderTrend(h, null); return;
@@ -2664,7 +2840,7 @@ const MorningTest = (() => {
     renderTrend(h, b);
   }
   function renderTrend(h, b){
-    const host=el('mornTrend'), data=h.slice(-30), n=data.length;
+    const host=el('mornTrend'), data=h.filter(e=>!e.lowq).slice(-30), n=data.length;   // le misure sporche non entrano nel trend
     if(n<2){ host.innerHTML=''; return; }
     const W=720,H=140,px=8,pt=12,pb=18, lns=data.map(e=>e.ln);
     let lo=Math.min.apply(null,lns), hi=Math.max.apply(null,lns);
@@ -2685,6 +2861,37 @@ const MorningTest = (() => {
       +'<div class="lbl">Andamento lnRMSSD ultimi '+n+' giorni'+(b?' · banda verde = tua normalità (media ± 0,5 DS), linea arancio = soglia recupero (−1 DS)':'')+'</div>';
   }
 
+  /* ---- storico: ispezione, eliminazione, esportazione ---- */
+  // Serve perché una misura sbagliata resta nella baseline per 60 giorni, e perché senza
+  // i battiti grezzi nessuna anomalia è verificabile a posteriori.
+  function renderHist(){
+    const host=el('mornHistList'); if(!host) return;
+    const h=loadHist().slice(-14).reverse();
+    if(!h.length){ host.innerHTML='<div class="hrv-test-hint">Nessuna misura salvata.</div>'; return; }
+    host.innerHTML=h.map(e=>{
+      const q = e.lowq ? ' <span style="color:#ff7a73">qualità bassa</span>'
+                       : (e.pctExcl!=null ? ' <span style="color:var(--muted)">'+e.pctExcl+'% scartati</span>' : '');
+      const raw = e.rrRaw ? '' : ' <span style="color:var(--muted)">· senza battiti</span>';
+      return '<div class="morn-histrow"><span>'+e.d+' · RMSSD <b>'+e.rmssd+'</b> ms · FC '+(e.hr||'—')+q+raw+'</span>'
+        +'<button class="btn ghost morn-del" data-d="'+e.d+'">Elimina</button></div>';
+    }).join('');
+    host.querySelectorAll('.morn-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const d=btn.dataset.d;
+        if(!confirm('Eliminare la misura del '+d+'?\nUscirà dalla tua media di riferimento.')) return;
+        saveHist(loadHist().filter(e=>e.d!==d)); renderHist();
+      });
+    });
+  }
+  function exportHist(){
+    const h=loadHist();
+    if(!h.length){ alert('Nessuna misura da esportare.'); return; }
+    const head=['data','RMSSD_ms','lnRMSSD','FC_media_bpm','battiti_totali','battiti_validi','perc_scartati','qualita_bassa','RR_grezzi_ms'];
+    const rows=h.map(e=>[e.d, e.rmssd, (e.ln!=null?e.ln.toFixed(4):''), e.hr||'', e.nRaw||'', e.nKept||'',
+      (e.pctExcl!=null?e.pctExcl:''), e.lowq?'sì':'no', e.rrRaw?'"'+e.rrRaw.join(' ')+'"':''].join(','));
+    HRV.shareOrDl('test_mattino_'+new Date().toISOString().slice(0,10)+'.csv', [head.join(','),...rows].join('\n'), 'text/csv');
+  }
+
   function init(){
     if(!el('mornStart')) return;
     const codeInput=el('mornCode'); if(codeInput) codeInput.value=getCode();
@@ -2696,6 +2903,14 @@ const MorningTest = (() => {
     el('mornAll').addEventListener('click', includeAll);
     el('mornSave').addEventListener('click', save);
     el('mornNew').addEventListener('click', ()=> show('Setup'));
+    const hb=el('mornHistBtn'); if(hb) hb.addEventListener('click', ()=>{
+      const box=el('mornHistBox'); if(!box) return;
+      const open = box.style.display==='none';
+      box.style.display = open ? '' : 'none';
+      hb.textContent = open ? 'Nascondi storico' : 'Storico misure';
+      if(open) renderHist();
+    });
+    const eb=el('mornExport'); if(eb) eb.addEventListener('click', exportHist);
   }
   return { init };
 })();
@@ -2710,7 +2925,8 @@ const AlphaTest = (() => {
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';      // codice condiviso con gli altri test
   const CONSENT_KEY = 'respiroPacer.alphaConsent.v1';
   const VB_W = 720, VB_H = 220, PADX = 8, PADT = 14, PADB = 14;
-  let beats = [], raf = null, t0 = 0, durMin = 5, wallStart = 0, lastLive = 0;
+  const STAB_MS = 30000;                 // stabilizzazione: la fascia è collegata ma NON si registra
+  let beats = [], raf = null, t0 = 0, durMin = 5, wallStart = 0, lastLive = 0, phase = '';
 
   function show(w){ ['Setup','Run','Edit','Result'].forEach(s=>{ const e=el('alpha'+s); if(e) e.style.display=(s===w)?'':'none'; }); }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
@@ -2763,32 +2979,57 @@ const AlphaTest = (() => {
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
     const codeInput=el('alphaCode'), code=codeInput?codeInput.value.trim():'';
     if(code) saveCode(code);
-    HRV.beginMorning();                 // riusa la cattura RR generica dalla fascia
     document.body.dataset.alphaTesting='1';
+    try{ Audio.keepAliveOn(); }catch(e){}   // sblocca l'audio nel gesto del tap: i suoni ritardati devono poter partire
     try{ WakeLock.acquire(); }catch(e){}
-    wallStart=Date.now(); lastLive=0;
+    lastLive=0;
     el('alphaBeats').textContent='0'; el('alphaLive').textContent='—';
-    show('Run'); t0=performance.now(); loop();
+    show('Run'); startStabilize();
+  }
+  // Fase 1 — STABILIZZAZIONE (30 s): non si registra, si lascia assestare il battito
+  // e si lasciano passare gli artefatti da movimento.
+  function startStabilize(){
+    phase='stab'; t0=performance.now();
+    setPhaseUI('Stabilizzazione', 'Resta fermo e rilassato: sto stabilizzando il battito.', 'var(--muted)');
+    loop();
+  }
+  // Fase 2 — REGISTRAZIONE: suono d'inizio, poi cattura vera. Suono di fine a chiusura.
+  function startMeasure(){
+    phase='measure'; try{ Audio.recStart(); }catch(e){}
+    HRV.beginMorning();                 // riusa la cattura RR generica dalla fascia
+    wallStart=Date.now(); t0=performance.now();
+    setPhaseUI('Registrazione', 'Registrazione in corso. Stai fermo, respira normalmente. Non parlare.', '#4fd1c5');
+    loop();
+  }
+  function setPhaseUI(lbl, hint, col){
+    const p=el('alphaPhase'); if(p){ p.textContent=lbl; p.style.color=col; }
+    const h=el('alphaHint'); if(h) h.textContent=hint;
   }
   function loop(){
-    const now=performance.now(), left=durMin*60000-(now-t0);
+    const dur = phase==='stab' ? STAB_MS : durMin*60000;
+    const now=performance.now(), left=dur-(now-t0);
     el('alphaCount').textContent=fmt(left);
-    if(now-lastLive>2000){
+    if(phase==='measure' && now-lastLive>2000){
       lastLive=now; const vals=HRV.liveRR(); el('alphaBeats').textContent=vals.length;
       if(vals.length>=40){ const a=dfaAlpha1(quickClean(vals)); if(a!=null) el('alphaLive').textContent=a.toFixed(2); }
     }
-    if(left<=0){ finishCapture(); return; }
+    if(left<=0){
+      if(phase==='stab'){ startMeasure(); return; }
+      try{ Audio.recEnd(); }catch(e){}
+      finishCapture(); return;
+    }
     raf=requestAnimationFrame(loop);
   }
   function stopRaf(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
-  function cleanup(){ stopRaf(); delete document.body.dataset.alphaTesting; try{ WakeLock.release(); }catch(e){} }
+  function cleanup(){ stopRaf(); delete document.body.dataset.alphaTesting; try{ WakeLock.release(); }catch(e){} try{ Audio.keepAliveOff(); }catch(e){} }
   function abort(){
     if(!confirm('Interrompere la misura α1? I dati raccolti andranno persi.')) return;
     HRV.endMorning(); cleanup(); show('Setup');
   }
   function finishCapture(){
     stopRaf();
-    const rrArr=HRV.endMorning(); delete document.body.dataset.alphaTesting; try{ WakeLock.release(); }catch(e){}
+    const rrArr=HRV.endMorning(); delete document.body.dataset.alphaTesting;
+    try{ WakeLock.release(); }catch(e){} try{ Audio.keepAliveOff(); }catch(e){}
     if(rrArr.length<60){ alert('Troppi pochi battiti raccolti ('+rrArr.length+'): verifica il contatto della fascia e ripeti.'); show('Setup'); return; }
     beats=rrArr.map(v=>{ const hard=v<300||v>2000; return { rr:v, excl:hard, hard }; });
     autoFlag();                          // pre-segnala gli artefatti, poi ritocco manuale
@@ -2796,7 +3037,7 @@ const AlphaTest = (() => {
   }
 
   /* ---- editor battiti (identico nello spirito al test del mattino) ---- */
-  function keptRR(){ return beats.filter(b=>!b.excl).map(b=>b.rr); }
+  function keptRR(){ return Beats.keptRR(beats); }
   function scaleY(){ const v=beats.map(b=>b.rr); const lo=Math.min(Math.min.apply(null,v),500), hi=Math.max(Math.max.apply(null,v),1100); return {lo,hi}; }
   function X(i){ const n=beats.length; return PADX+(n<=1?0:i/(n-1))*(VB_W-2*PADX); }
   function Y(v,sc){ return PADT+(1-(v-sc.lo)/(sc.hi-sc.lo))*(VB_H-PADT-PADB); }
@@ -2816,22 +3057,17 @@ const AlphaTest = (() => {
     const px=(e.clientX-rect.left)/rect.width*VB_W, py=(e.clientY-rect.top)/rect.height*VB_H;
     const sc=scaleY(); let best=-1, bd=1e9;
     beats.forEach((b,i)=>{ const dx=X(i)-px, dy=Y(b.rr,sc)-py, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=i; } });
-    if(best<0 || bd>32*32) return; const b=beats[best]; if(b.hard) return;
-    b.excl=!b.excl; drawTaco(); updateStat();
+    if(best<0 || bd>32*32) return;
+    if(beats[best].hard) return;
+    Beats.toggle(beats, best);                // si porta dietro il compagno della coppia ectopica
+    drawTaco(); updateStat();
   }
   function updateStat(){
     const nn=keptRR(), nExcl=beats.length-nn.length, a=dfaAlpha1(nn);
     el('alphaEditStat').innerHTML='<b>'+nn.length+'</b> battiti validi · <b style="color:#ff7a73">'+nExcl+'</b> esclusi'+(a==null?'':' · α1 <b>'+a.toFixed(2)+'</b>');
   }
-  function autoFlag(){
-    const vals=beats.map(b=>b.rr), n=vals.length, half=4;
-    beats.forEach((b,i)=>{ if(b.hard){ b.excl=true; return; }
-      const a=Math.max(0,i-half), c=Math.min(n,i+half+1), med=median(vals.slice(a,c));
-      b.excl = med>0 && Math.abs(b.rr-med)/med>0.20;
-    });
-    drawTaco(); updateStat();
-  }
-  function includeAll(){ beats.forEach(b=>b.excl=b.hard); drawTaco(); updateStat(); }
+  function autoFlag(){ Beats.autoFlag(beats); drawTaco(); updateStat(); }
+  function includeAll(){ Beats.includeAll(beats); drawTaco(); updateStat(); }
 
   /* ---- calcolo, interpretazione, storico ---- */
   function zoneA(a){
@@ -3315,12 +3551,123 @@ const ConsentUI = (() => {
     });
     el('consentOverlay').addEventListener('click', e=>{ if(e.target===el('consentOverlay') && SendConsent.given()) closeModal(); });
     renderBar();
-    if(!SendConsent.asked()) openModal();   // prima volta in assoluto
+    // Il consenso all'invio dati si chiede SOLO dopo l'attivazione dell'app
+    // (a cancello aperto). Se l'app è ancora bloccata, ci penserà Activation
+    // a chiamare openModal() subito dopo l'attivazione riuscita.
+    if(!SendConsent.asked() && !document.body.classList.contains('locked')) openModal();
   }
-  return { init, renderBar };
+  return { init, renderBar, openModal };
 })();
 window.ConsentUI = ConsentUI;
 
+/* ============ Attivazione dell'app (licenza legata al dispositivo) ============ */
+/* L'app è riservata ai pazienti del medico. Al primo avvio il paziente inserisce il */
+/* codice; l'app lo fa validare dal Google Apps Script del medico e lo lega a QUESTO  */
+/* dispositivo (foglio "licenze"). Un codice = un dispositivo → non condivisibile.    */
+/* Verifica via JSONP su doGet: aggira il limite CORS di Apps Script (risposta         */
+/* leggibile anche su iPhone/Bluefy), a differenza degli invii dati che sono no-cors.  */
+const Activation = (() => {
+  const el = id => document.getElementById(id);
+  const LIC_KEY = 'respiroPacer.license.v1';        // {code, token, activatedAt, lastCheck}
+  const DEV_KEY = 'respiroPacer.deviceId.v1';        // impronta casuale del dispositivo
+  const PROFILE_KEY = 'respiroPacer.testProfile.v1'; // stesso profilo usato dagli altri moduli
+  const RECHECK_MS = 7*24*3600*1000;                 // ricontrollo licenza ~ogni 7 giorni
+  const URL = 'https://script.google.com/macros/s/AKfycbxCZSzyXdHN70Fi8iVA7L2fQi_C5N38axZN4mQuO_b76z6mTMEvmUoPhUMsF8POxn50Rg/exec';
+
+  function deviceId(){
+    try{
+      let d = localStorage.getItem(DEV_KEY);
+      if(!d){
+        d = (self.crypto && crypto.randomUUID) ? crypto.randomUUID()
+            : (Date.now().toString(36) + Math.random().toString(36).slice(2,12));
+        localStorage.setItem(DEV_KEY, d);
+      }
+      return d;
+    }catch(e){ return 'nodev'; }
+  }
+  function lic(){ try{ return JSON.parse(localStorage.getItem(LIC_KEY)||'null'); }catch(e){ return null; } }
+  function saveLic(o){ try{ localStorage.setItem(LIC_KEY, JSON.stringify(o)); }catch(e){} }
+  function clearLic(){ try{ localStorage.removeItem(LIC_KEY); }catch(e){} }
+  function active(){ const l=lic(); return !!(l && l.token); }
+  function setProfileCode(code){
+    try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code;
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){}
+  }
+
+  // Chiamata JSONP: <script src=…?callback=cb>. Nessun problema CORS, la risposta è leggibile.
+  function callActivate(code){
+    return new Promise((resolve, reject)=>{
+      const cb = 'act_'+Date.now()+'_'+Math.floor(Math.random()*1e6);
+      const s = document.createElement('script');
+      const to = setTimeout(()=>{ cleanup(); reject(new Error('timeout')); }, 15000);
+      function cleanup(){ try{ delete window[cb]; }catch(e){} if(s.parentNode) s.parentNode.removeChild(s); clearTimeout(to); }
+      window[cb] = data => { cleanup(); resolve(data); };
+      s.onerror = ()=>{ cleanup(); reject(new Error('network')); };
+      s.src = URL + '?kind=activate&callback=' + cb
+            + '&code=' + encodeURIComponent(code)
+            + '&device=' + encodeURIComponent(deviceId());
+      document.head.appendChild(s);
+    });
+  }
+
+  function unlock(){
+    document.body.classList.remove('locked');
+    // Canvas/orb possono essere stati dimensionati a 0 mentre l'app era nascosta:
+    // un resize forza il ricalcolo del layout una volta tornata visibile.
+    try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+  }
+  function lock(){ document.body.classList.add('locked'); }
+  function status(msg, kind){ const s=el('actStatus'); if(s){ s.textContent=msg||''; s.className='act-status'+(kind?(' '+kind):''); } }
+
+  async function tryActivate(){
+    const code = ((el('actCode').value)||'').trim().toUpperCase();
+    if(!code){ status('Inserisci il codice che ti ha dato il medico.','err'); return; }
+    const btn = el('actBtn'); btn.disabled = true; status('Verifica in corso…','');
+    try{
+      const r = await callActivate(code);
+      if(r && r.ok){
+        saveLic({ code, token:r.token||'1', activatedAt:new Date().toISOString(), lastCheck:Date.now() });
+        setProfileCode(code);
+        status('Attivata ✓','ok');
+        unlock();
+        // Subito dopo l'attivazione proponi (una sola volta) il consenso all'invio dati.
+        try{
+          if(window.SendConsent && !SendConsent.asked() && window.ConsentUI){
+            SendConsent.setCode(code); ConsentUI.openModal();
+          }
+        }catch(e){}
+      } else {
+        status((r && r.error) || 'Codice non valido.','err'); btn.disabled = false;
+      }
+    }catch(e){
+      status('Non riesco a verificare il codice adesso: controlla la connessione e riprova.','err');
+      btn.disabled = false;
+    }
+  }
+
+  // Ricontrollo periodico quando c'è rete: se il medico ha revocato il codice, l'app si richiude.
+  async function recheck(){
+    const l = lic(); if(!l || !l.code) return;
+    if(Date.now() - (l.lastCheck||0) < RECHECK_MS) return;
+    if(navigator.onLine === false) return;
+    try{
+      const r = await callActivate(l.code);
+      if(r && r.ok){ l.lastCheck = Date.now(); if(r.token) l.token = r.token; saveLic(l); }
+      else if(r && (r.reason==='revoked' || r.reason==='otherdevice' || r.reason==='notfound')){ clearLic(); lock(); }
+    }catch(e){ /* offline: si tollera, l'app resta attiva */ }
+  }
+
+  function init(){
+    const btn = el('actBtn'), inp = el('actCode');
+    if(btn) btn.addEventListener('click', tryActivate);
+    if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); tryActivate(); } });
+    if(active()){ unlock(); recheck(); } else { lock(); }
+  }
+  return { init, active };
+})();
+window.Activation = Activation;
+
+Activation.init();
 App.init();
 HRV.init();
 TestMode.init();
