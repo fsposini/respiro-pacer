@@ -48,7 +48,7 @@
 <body>
 <div class="wrap">
   <h1>🔐 Registro codici HRV</h1>
-  <p class="sub">Mappa privata <b>codice → paziente</b>. Vive solo su questo telefono, cifrata. Non esce mai in chiaro.</p>
+  <p class="sub">Mappa privata <b>codice → paziente</b>. Vive solo su questo telefono, cifrata. Non esce mai in chiaro.<br><span style="opacity:.55;font-size:.8em">versione 2 — sblocco tollerante, diagnostica</span></p>
 
   <!-- SETUP: prima volta -->
   <div id="setup" class="card hide">
@@ -69,6 +69,14 @@
     <input id="unlockPass" type="password" autocomplete="current-password">
     <button id="unlockBtn" class="btn">Sblocca</button>
     <div id="unlockMsg" class="msg"></div>
+
+    <div class="toolbar" style="margin:14px 0 0">
+      <button id="diagBtn">🔍 Diagnostica</button>
+      <button id="rawExportBtn">⬇︎ Salva copia cifrata</button>
+      <button id="resetBtn">🗑 Ricomincia</button>
+    </div>
+    <div id="diag" class="msg"></div>
+    <p class="locknote">La <b>copia cifrata</b> si salva senza password: è cifrata, non espone nulla. Falla sempre prima di <b>Ricomincia</b>.</p>
   </div>
 
   <!-- APP -->
@@ -116,6 +124,32 @@ let key=null, entries=[];
 function b2a(buf){ let s=''; const b=new Uint8Array(buf); for(let i=0;i<b.length;i++) s+=String.fromCharCode(b[i]); return btoa(s); }
 function a2b(b64){ const s=atob(b64), u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
 
+/* ---------- password: forma canonica ----------
+   La chiave nasce dai BYTE della password. Due password che sullo schermo
+   sembrano identiche possono avere byte diversi: uno spazio invisibile in coda,
+   oppure una "è" scritta come un carattere solo (NFC) o come "e"+accento (NFD).
+   iOS e i gestori di password non concordano sempre. Da qui in avanti la
+   password viene sempre ridotta a una forma canonica prima di derivare la chiave. */
+// trim() rimuove gia' NBSP e BOM ai bordi: per la forma canonica basta NFC.
+function canon(p){ return String(p).trim().normalize('NFC'); }
+
+/* Varianti storiche, provate solo in sblocco, per aprire registri creati
+   dalle versioni precedenti (che non normalizzavano nulla). */
+function passVariants(p){
+  const raw=String(p), t=raw.trim();
+  const nbsp=s=>s.replace(/[   ﻿]/g,' ');
+  const smart=s=>s.replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,'-')
+                  .replace(/[∗＊✱⁎]/g,'*');   // asterischi tipografici → asterisco ASCII
+  const cap=s=>s?s[0].toUpperCase()+s.slice(1):s, low=s=>s?s[0].toLowerCase()+s.slice(1):s;
+  const c=canon(raw);
+  const out=[ c, t.normalize('NFD'), raw, raw.normalize('NFC'), raw.normalize('NFD'), t,
+              nbsp(c), smart(c), cap(c), low(c), raw.replace(/[\r\n]+$/,''),
+              // il registro può essere stato CREATO con whitespace di troppo, quando
+              // il vecchio codice non ripuliva niente: va riaggiunto per riaprirlo
+              c+' ', ' '+c, c+'\n', c+'\r\n' ];
+  return [...new Set(out.filter(Boolean))];   // dedup: ogni tentativo costa 150.000 iterazioni
+}
+
 /* ---------- crypto: PBKDF2 -> AES-GCM ---------- */
 async function deriveKey(pass, salt){
   const base=await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
@@ -123,12 +157,13 @@ async function deriveKey(pass, salt){
     { name:'PBKDF2', salt, iterations:150000, hash:'SHA-256' },
     base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']);
 }
-async function encryptObj(obj){
+async function encryptWith(k, obj){
   const iv=crypto.getRandomValues(new Uint8Array(12));
-  const ct=await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(JSON.stringify(obj)));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM', iv}, k, new TextEncoder().encode(JSON.stringify(obj)));
   const out=new Uint8Array(iv.length+ct.byteLength); out.set(iv,0); out.set(new Uint8Array(ct), iv.length);
   return b2a(out.buffer);
 }
+async function encryptObj(obj){ return encryptWith(key, obj); }
 async function decryptWith(k, b64){
   const raw=a2b(b64), iv=raw.slice(0,12), ct=raw.slice(12);
   const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv}, k, ct);
@@ -149,23 +184,42 @@ function genCode(prefix){
 function show(which){ ['setup','unlock','app'].forEach(s=>$(s).classList.toggle('hide', s!==which)); }
 
 async function doSetup(){
-  const p1=$('setPass1').value, p2=$('setPass2').value, m=$('setMsg');
+  const p1=canon($('setPass1').value), p2=canon($('setPass2').value), m=$('setMsg');
   if(p1.length<6){ m.className='msg err'; m.textContent='Password troppo corta (min 6 caratteri).'; return; }
   if(p1!==p2){ m.className='msg err'; m.textContent='Le due password non coincidono.'; return; }
+  m.className='msg'; m.textContent='Creazione…';
   const salt=crypto.getRandomValues(new Uint8Array(16));
+  const k=await deriveKey(p1, salt);
+  const data=await encryptWith(k, []);
+  // Sale e dati vanno scritti insieme, senza attese in mezzo: un sale nuovo
+  // sopra dati vecchi renderebbe il registro inapribile con QUALSIASI password.
   localStorage.setItem(LS_SALT, b2a(salt.buffer));
-  key=await deriveKey(p1, salt);
-  entries=[]; await persist();
+  localStorage.setItem(LS_DATA, data);
+  key=k; entries=[]; m.textContent='';
   openApp();
 }
 async function doUnlock(){
-  const m=$('unlockMsg'); m.className='msg'; m.textContent='Sblocco…';
-  try{
-    const salt=a2b(localStorage.getItem(LS_SALT));
-    key=await deriveKey($('unlockPass').value, salt);
-    entries=await decryptData(localStorage.getItem(LS_DATA));   // fallisce se password errata
-    m.textContent=''; openApp();
-  }catch(e){ key=null; m.className='msg err'; m.textContent='Password errata.'; }
+  const m=$('unlockMsg'), typed=$('unlockPass').value;
+  if(!typed){ m.className='msg err'; m.textContent='Inserisci la password.'; return; }
+  const salt=a2b(localStorage.getItem(LS_SALT)), data=localStorage.getItem(LS_DATA);
+  const vars=passVariants(typed);
+  m.className='msg';
+  for(let i=0;i<vars.length;i++){
+    m.textContent='Sblocco… ('+(i+1)+'/'+vars.length+')';
+    await new Promise(r=>setTimeout(r,0));            // lascia respirare la UI
+    let k; try{ k=await deriveKey(vars[i], salt); }catch(e){ continue; }
+    try{
+      entries=await decryptWith(k, data);
+      key=k;
+      if(vars[i]!==canon(typed)){                      // aperto con una variante storica
+        key=await deriveKey(canon(typed), salt);       // riallinea alla forma canonica…
+        await persist();                               // …e ricifra, una volta sola
+      }
+      m.textContent=''; openApp(); return;
+    }catch(e){ /* variante sbagliata: passa alla prossima */ }
+  }
+  key=null; m.className='msg err';
+  m.innerHTML='Non si apre con questa password (provate '+vars.length+' varianti).<br>Premi <b>Diagnostica</b>: ti dice se il problema è la password o i dati.';
 }
 function openApp(){ $('unlockPass').value=''; show('app'); render(); }
 function lock(){ key=null; entries=[]; $('unlockPass').value=''; show('unlock'); }
@@ -208,6 +262,53 @@ function render(){
 }
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+/* ---------- diagnostica: legge la FORMA del blob, mai il contenuto ----------
+   Il testo cifrato è lungo quanto il testo in chiaro (+12 byte di IV, +16 di tag).
+   Un registro vuoto cifra "[]" = 2 byte. Quindi la dimensione dice, senza password,
+   se là dentro c'era qualcosa oppure no. */
+function diagnostica(){
+  const d=$('diag'), sB=localStorage.getItem(LS_SALT), dB=localStorage.getItem(LS_DATA);
+  const L=[];
+  if(!sB || !dB){ d.className='msg err'; d.textContent='Registro assente su questo dispositivo.'; return; }
+  let salt, raw;
+  try{ salt=a2b(sB); raw=a2b(dB); }
+  catch(e){ d.className='msg err'; d.textContent='Blob illeggibile (base64 corrotto).'; return; }
+  const chiaro=raw.length-12-16;
+  L.push('Sale: '+salt.length+' byte'+(salt.length===16?' ✓':' ⚠︎ atteso 16'));
+  L.push('Dati cifrati: '+raw.length+' byte → contenuto in chiaro '+chiaro+' byte');
+  if(chiaro<2){ L.push('⚠︎ Blob troncato o corrotto.'); }
+  else if(chiaro<=4){
+    L.push('→ <b>Il registro è VUOTO.</b> Non ha mai contenuto pazienti.');
+    L.push('Vuol dire che è stato ricreato da zero con un\'altra password:');
+    L.push('quella che hai salvato apriva un registro che non esiste più.');
+    L.push('Non c\'è nulla da recuperare. Usa <b>Ricomincia</b> e reinserisci dal PC.');
+  } else {
+    L.push('→ <b>Il registro contiene dati</b> ('+chiaro+' byte di contenuto).');
+    L.push('Se nessuna variante lo apre, il sale non corrisponde più ai dati:');
+    L.push('nessuna password lo aprirà mai. Salva la copia cifrata e ricomincia.');
+  }
+  d.className='msg'; d.innerHTML=L.join('<br>');
+}
+
+/* Esporta il blob cifrato SENZA sbloccare: è cifrato, non espone nulla,
+   e serve proprio quando non riesci ad entrare. */
+function exportRaw(){
+  const sB=localStorage.getItem(LS_SALT), dB=localStorage.getItem(LS_DATA);
+  if(!sB || !dB){ alert('Niente da salvare: il registro non esiste su questo dispositivo.'); return; }
+  const blob=new Blob([JSON.stringify({ salt:sB, data:dB, exportedAt:new Date().toISOString(), v:1, nota:'copia cifrata salvata senza sblocco' }, null, 2)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='registro_cifrato_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+async function resetRegistro(){
+  if(!confirm('Azzerare il registro su questo dispositivo?\n\nI dati cifrati verranno cancellati e non saranno più recuperabili.')) return;
+  if(!confirm('Hai già salvato la copia cifrata?\n\nSe non l\'hai fatta, annulla e premi prima "Salva copia cifrata".')) return;
+  localStorage.removeItem(LS_SALT); localStorage.removeItem(LS_DATA);
+  key=null; entries=[]; $('diag').textContent=''; $('unlockMsg').textContent='';
+  show('setup');
+}
+
 async function exportBackup(){
   const blob=new Blob([JSON.stringify({ salt:localStorage.getItem(LS_SALT), data:localStorage.getItem(LS_DATA), exportedAt:new Date().toISOString(), v:1 }, null, 2)], {type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -220,8 +321,12 @@ async function importBackup(file){
   if(!obj || !obj.salt || !obj.data){ alert('Questo file non è un backup del registro.'); return; }
   const pw=prompt('Password del backup (quella con cui l\'hai esportato):'); if(!pw) return;
   let imported;
-  try{ const k2=await deriveKey(pw, a2b(obj.salt)); imported=await decryptWith(k2, obj.data); }
-  catch(e){ alert('Password errata o backup danneggiato.'); return; }
+  const salt2=a2b(obj.salt);
+  for(const v of passVariants(pw)){
+    try{ const k2=await deriveKey(v, salt2); imported=await decryptWith(k2, obj.data); break; }
+    catch(e){ /* prossima variante */ }
+  }
+  if(imported===undefined){ alert('Password errata o backup danneggiato.'); return; }
   if(!Array.isArray(imported)){ alert('Backup non valido.'); return; }
   const byCode={}; entries.forEach(e=>byCode[e.code]=e);
   let added=0, updated=0;
@@ -236,6 +341,9 @@ async function importBackup(file){
 /* ---------- eventi ---------- */
 $('setBtn').addEventListener('click', doSetup);
 $('unlockBtn').addEventListener('click', doUnlock);
+$('diagBtn').addEventListener('click', diagnostica);
+$('rawExportBtn').addEventListener('click', exportRaw);
+$('resetBtn').addEventListener('click', resetRegistro);
 $('unlockPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doUnlock(); });
 $('saveBtn').addEventListener('click', addEntry);
 $('lockBtn').addEventListener('click', lock);
