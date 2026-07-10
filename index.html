@@ -236,7 +236,7 @@
     border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:130px;overflow:auto;white-space:pre-wrap}
 </style>
 </head>
-<body class="locked">
+<body>
 
 <!-- Cancello di attivazione: l'app resta bloccata finché il codice paziente non è
      validato dal medico e legato a QUESTO dispositivo. -->
@@ -2405,7 +2405,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v54';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v55';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3616,7 +3616,7 @@ const Activation = (() => {
     // un resize forza il ricalcolo del layout una volta tornata visibile.
     try{ window.dispatchEvent(new Event('resize')); }catch(e){}
   }
-  function lock(){ document.body.classList.add('locked'); }
+  function lock(){ /* cancello di attivazione rimosso: l'app resta sempre sbloccata */ }
   function status(msg, kind){ const s=el('actStatus'); if(s){ s.textContent=msg||''; s.className='act-status'+(kind?(' '+kind):''); } }
 
   async function tryActivate(){
@@ -3661,7 +3661,7 @@ const Activation = (() => {
     const btn = el('actBtn'), inp = el('actCode');
     if(btn) btn.addEventListener('click', tryActivate);
     if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); tryActivate(); } });
-    if(active()){ unlock(); recheck(); } else { lock(); }
+    unlock();   // cancello rimosso: l'app parte sempre sbloccata, con qualsiasi codice
   }
   return { init, active };
 })();
