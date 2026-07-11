@@ -142,6 +142,12 @@
   .readout .lab{font-size:.62rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-top:1px}
   .session-bar{width:100%;max-width:300px;height:5px;background:var(--bg);border-radius:6px;margin-top:12px;overflow:hidden;border:1px solid var(--line)}
   .session-bar .fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s linear}
+  .wake-ind{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:11px;font-size:.74rem;color:var(--muted);letter-spacing:.3px}
+  .wake-ind[hidden]{display:none}
+  .wake-ind .wdot{width:9px;height:9px;border-radius:50%;background:#33b27b;box-shadow:0 0 0 3px rgba(51,178,123,.18);flex:none}
+  .wake-ind[data-state="warn"]{color:#ff8a80;font-weight:700}
+  .wake-ind[data-state="warn"] .wdot{background:#ff5a4d;box-shadow:0 0 0 3px rgba(255,90,77,.22);animation:wpulse 1s infinite}
+  @keyframes wpulse{50%{opacity:.3}}
   .controls{display:flex;gap:9px;margin-top:14px}
   button.ctrl{border:none;cursor:pointer;font-size:.86rem;font-weight:600;padding:11px 22px;border-radius:10px;transition:.2s;letter-spacing:.4px}
   .btn-start{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
@@ -323,6 +329,7 @@
       <div class="readout"><div class="val" id="roElapsed">—</div><div class="lab">Trascorso</div></div>
     </div>
     <div class="session-bar"><div class="fill" id="sessionFill"></div></div>
+    <div class="wake-ind" id="wakeInd" data-state="on" hidden><span class="wdot"></span><span id="wakeIndTxt">schermo tenuto acceso</span></div>
     <div class="controls">
       <button class="ctrl btn-start" id="btnStart">Avvia</button>
       <button class="ctrl btn-pause" id="btnPause" disabled>Pausa</button>
@@ -941,7 +948,7 @@ const SAMPLES = {
 
 /* ---------- AUDIO ENGINE ---------- */
 const Audio = (() => {
-  let ctx, master, ambientGain, envGain, started=false, keepNode=null;
+  let ctx, master, ambientGain, envGain, started=false, keepNode=null, silentEl=null, silentSrc=null;
   let currentType=null, nodes={}, buffers={}, customBuffers={};
   function ensure(){
     if(ctx) return;
@@ -1136,17 +1143,38 @@ const Voice = (() => {
     setEnabled(v){enabled=v;if(!v){try{speechSynthesis.cancel();}catch(e){}}},setVol(v){vol=v;}};
 })();
 
-/* ---------- WAKE LOCK (schermo acceso durante la sessione) ---------- */
+/* ---------- WAKE LOCK (schermo acceso durante la sessione) ----------
+   IMPORTANTE (iOS): navigator.wakeLock.request('screen') va CHIAMATO dentro
+   il gesto del tap, PRIMA di qualsiasi await. Dopo un await iOS non considera
+   più l'azione "iniziata dall'utente" e rifiuta la richiesta in silenzio: lo
+   schermo si spegne a metà sessione e la registrazione si tronca. Per questo
+   acquire() è invocato prima di await Audio.start(). L'indicatore #wakeInd
+   mostra a video se la protezione è attiva (verde) o NO (rosso), così un
+   eventuale fallimento non è più invisibile. */
 const WakeLock = (() => {
-  let lock=null;
-  async function acquire(){
-    if(!('wakeLock' in navigator))return;
-    try{lock=await navigator.wakeLock.request('screen');}catch(e){}
+  let lock=null, want=false;
+  const supported = ('wakeLock' in navigator);
+  function setInd(state){ // 'on' | 'warn' | 'off'
+    const box=document.getElementById('wakeInd'); if(!box) return;
+    if(state==='off'){ box.hidden=true; return; }
+    box.hidden=false; box.dataset.state=state;
+    const t=document.getElementById('wakeIndTxt');
+    if(t) t.textContent = state==='on'
+      ? 'schermo tenuto acceso'
+      : 'schermo NON bloccato — tienilo acceso a mano';
   }
-  function release(){if(lock){try{lock.release();}catch(e){}lock=null;}}
+  function request(){ // sincrona fino alla chiamata all'API (dentro il gesto)
+    if(!supported){ setInd('warn'); return; }
+    Promise.resolve(navigator.wakeLock.request('screen')).then(l=>{
+      lock=l; setInd('on');
+      l.addEventListener('release',()=>{ lock=null; if(want) setInd('warn'); });
+    }).catch(()=>{ lock=null; setInd('warn'); });
+  }
+  function acquire(){ want=true; request(); }
+  function release(){ want=false; if(lock){try{lock.release();}catch(e){}lock=null;} setInd('off'); }
   // se l'app torna in primo piano e una sessione è attiva, riprova ad acquisirlo
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'&&!lock&&document.body.dataset.running==='1')acquire();
+    if(document.visibilityState==='visible'&&want&&!lock)request();
   });
   return{acquire,release};
 })();
@@ -1241,6 +1269,7 @@ const App = (() => {
     // chiamata "iniziata dall'utente" e zittisce tutta la voce della sessione.
     Voice.setEnabled(el('voiceOn').checked);Voice.setVol(+el('voiceVol').value/100);
     if(el('voiceOn').checked)Voice.unlock();
+    WakeLock.acquire();   // DENTRO il gesto del tap, PRIMA dell'await: altrimenti iOS rifiuta e lo schermo si spegne
     mode=document.querySelector('.tab.active').dataset.mode;cycleCount=0;seqIdx=0;pausedAccum=0;
     if(mode==='dynamic'){dyn={start:+el('startRate').value,end:+el('endRate').value,step:+el('stepRate').value,
       stepInterval:+el('stepInterval').value,total:+el('totalDuration').value,rate:+el('startRate').value,lastStep:0};
@@ -1249,7 +1278,7 @@ const App = (() => {
     Audio.setAmbientEnabled(el('ambientOn').checked);
     Audio.setMasterVol(+el('ambientVol').value/100);
     running=true;paused=false;const now=performance.now();sessionStart=now;startPhase(now);btnState();
-    document.body.dataset.running='1';WakeLock.acquire();        // tieni acceso lo schermo durante la sessione
+    document.body.dataset.running='1';   // WakeLock già acquisito nel gesto del tap (vedi sopra)
     if(window.HRV)HRV.sessionStart(currentRate());              // avvia registrazione HRV
     rafId=requestAnimationFrame(tick);
   }
@@ -2405,7 +2434,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v56';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v57';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3204,6 +3233,7 @@ const CameraCoherence = (() => {
     // La campana (WebAudio) funziona anche in Bluefy; la voce (TTS) no → default campana.
     try{ Voice.setEnabled(guideMode==='voce'); Voice.unlock(); }catch(e){}
     if(guideMode==='campana'){ try{ Audio.prime(); Audio.setMasterVol(0.8); }catch(e){} }
+    try{ WakeLock.acquire(); }catch(e){}   // schermo acceso DENTRO il gesto, PRIMA degli await della fotocamera
     // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
     const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
@@ -3220,7 +3250,7 @@ const CameraCoherence = (() => {
     sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.unlock(); }catch(e){}   // ridesta il motore (già sbloccato a inizio gesto)
-    try{ WakeLock.acquire(); }catch(e){}
+    // WakeLock già acquisito a inizio gesto (prima degli await della fotocamera)
     el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
     show('Run'); t0=performance.now();
