@@ -148,6 +148,9 @@
   .wake-ind[data-state="warn"]{color:#ff8a80;font-weight:700}
   .wake-ind[data-state="warn"] .wdot{background:#ff5a4d;box-shadow:0 0 0 3px rgba(255,90,77,.22);animation:wpulse 1s infinite}
   @keyframes wpulse{50%{opacity:.3}}
+  .code-badge{display:inline-block;font-size:.72rem;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:4px 11px;margin-bottom:10px}
+  .code-badge[hidden]{display:none}
+  .code-badge b{color:var(--text);letter-spacing:.5px}
   .controls{display:flex;gap:9px;margin-top:14px}
   button.ctrl{border:none;cursor:pointer;font-size:.86rem;font-weight:600;padding:11px 22px;border-radius:10px;transition:.2s;letter-spacing:.4px}
   .btn-start{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
@@ -423,6 +426,13 @@
     .hrv-test-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:2px 0}
     .hrv-test-instr{font-size:.85rem;color:var(--muted);max-width:340px;margin:0 auto 12px;line-height:1.45}
     .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
+    .prep-card{max-width:380px;margin:0 auto 16px;text-align:left;background:rgba(120,170,255,.08);border:1px solid rgba(120,170,255,.28);border-radius:14px;padding:15px 17px;transition:opacity 3.5s ease}
+    .prep-card.fading{opacity:0}
+    .prep-title{font-weight:700;font-size:.92rem;margin-bottom:9px;text-align:center}
+    .prep-list{margin:0;padding-left:18px;font-size:.85rem;line-height:1.5;color:var(--text)}
+    .prep-list li{margin-bottom:7px}
+    .prep-count{font-size:1rem;color:var(--muted);margin-bottom:14px}
+    .prep-count b{font-variant-numeric:tabular-nums;font-size:2.2rem;font-weight:700;color:var(--text);display:block;margin-top:4px}
     .hrv-consent{display:flex;gap:9px;align-items:flex-start;text-align:left;font-size:.78rem;line-height:1.4;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 12px;margin:0 auto 12px;max-width:380px}
     .hrv-consent input{margin-top:2px;flex:0 0 auto;width:18px;height:18px}
     .hrv-consent b{color:var(--text,#e8eef0)}
@@ -528,8 +538,7 @@
   <div class="hrv-test">
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
     <div id="hrvTestSetup">
-      <label for="hrvTestCode">Codice paziente (pseudonimo, nessun nome)</label>
-      <input id="hrvTestCode" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false">
+      <div class="code-badge" id="hrvTestCodeBadge" hidden></div>
       <div class="hrv-test-fields">
         <div>
           <label for="hrvTestSex">Sesso</label>
@@ -556,7 +565,7 @@
         </ul>
       </details>
       <button id="hrvTestStart" class="btn">Avvia test clinico</button>
-      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Il test inizia con <b>30 secondi di stabilizzazione</b> (non si registra): la registrazione parte al segnale acustico e finisce con un secondo segnale. Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
+      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Il test inizia con <b>30 secondi di stabilizzazione</b> (non si registra), poi la <b>fase tonica di 5 minuti</b>. Al termine potrai <b>concludere</b> o <b>aggiungere la fase fasica</b> (1′). Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
     </div>
     <div id="hrvTestRun" class="hrv-test-run" style="display:none">
       <div class="hrv-test-orb-wrap"><div id="hrvTestOrb"></div></div>
@@ -564,6 +573,25 @@
       <div class="hrv-test-count" id="hrvTestCount">0:30</div>
       <div class="hrv-test-instr" id="hrvTestInstr"></div>
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
+    </div>
+    <div id="hrvTestChoice" style="display:none">
+      <div class="hrv-test-doneMsg">✓ Fase tonica completata.</div>
+      <div class="hrv-test-hint">Puoi <b>concludere qui</b>, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
+      <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′)</button>
+      <button id="hrvTestConclude" class="btn ghost">Concludi qui</button>
+    </div>
+    <div id="hrvTestPrep" style="display:none">
+      <div id="hrvTestPrepCard" class="prep-card">
+        <div class="prep-title">Prima di iniziare — esecuzione corretta del fasico</div>
+        <ul class="prep-list">
+          <li>Respira <b>con il naso</b> (inspira ed espira dal naso), in modo <b>diaframmatico</b>: si gonfia la <b>pancia</b>, il petto resta fermo.</li>
+          <li>Inspira <b>lentamente</b>, riempiendo il polmone a circa il <b>75%</b> della capacità — senza forzare.</li>
+          <li><b>Segui la sfera</b>: inspira mentre si espande, espira mentre si restringe (6/min).</li>
+          <li>Non muoverti, non parlare, non iperventilare.</li>
+        </ul>
+      </div>
+      <div class="prep-count">La registrazione parte tra <b id="hrvTestPrepCount">15</b></div>
+      <button id="hrvTestPrepCancel" class="btn ghost">Annulla</button>
     </div>
     <div id="hrvTestDone" style="display:none">
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
@@ -577,8 +605,7 @@
     <h3>🌅 Test del mattino — 1 minuto</h3>
     <div id="mornSetup">
       <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
-      <label for="mornCode" style="margin-top:8px">Codice atleta (per l'avviso al medico, facoltativo)</label>
-      <input id="mornCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="code-badge" id="mornCodeBadge" hidden></div>
       <button id="mornStart" class="btn">Avvia test del mattino</button>
       <div class="morn-editbtns">
         <button id="mornHistBtn" class="btn ghost">Storico misure</button>
@@ -615,14 +642,8 @@
   <div class="hrv-alpha">
     <h3>📉 DFA α1 — dinamica frazionale (fascia)</h3>
     <div id="alphaSetup">
-      <div class="hrv-test-hint">Misura a riposo con la fascia: <b>seduto, fermo, respiro spontaneo</b> (non guidato — il pacing altera α1). Attendi “Intervalli RR: sì”. α1 misura l'organizzazione frattale del battito: a riposo ~1,0; riferimenti di soglia aerobica 0,75 e anaerobica 0,5. Molto sensibile agli artefatti: a fine misura pulisci i battiti anomali.</div>
-      <label>Durata</label>
-      <div class="cam-durs" id="alphaDurs">
-        <button type="button" data-min="5" class="btn ghost cam-sel">5 min</button>
-        <button type="button" data-min="6" class="btn ghost">6 min</button>
-      </div>
-      <label for="alphaCode" style="margin-top:8px">Codice atleta (per il report al medico)</label>
-      <input id="alphaCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="hrv-test-hint">Misura a riposo con la fascia, <b>5 minuti</b>: <b>seduto, fermo, respiro spontaneo</b> (non guidato — il pacing altera α1). Attendi “Intervalli RR: sì”. α1 misura l'organizzazione frattale del battito: a riposo ~1,0; riferimenti di soglia aerobica 0,75 e anaerobica 0,5. Molto sensibile agli artefatti: a fine misura pulisci i battiti anomali.</div>
+      <div class="code-badge" id="alphaCodeBadge" hidden></div>
       <button id="alphaStart" class="btn">Avvia misura α1</button>
       <div class="cam-sendnote" id="alphaSendNote"></div>
     </div>
@@ -669,8 +690,7 @@
         <button type="button" data-guide="muto" class="btn ghost">🔇 Muto</button>
       </div>
       <div class="cam-sendnote">La <b>campana</b> fa ding (inspira) e dong (espira) e funziona su ogni telefono. La <b>voce</b> dice “Inspira/Espira” ma può non funzionare in Bluefy.</div>
-      <label for="camCode" style="margin-top:8px">Codice paziente (per il report al medico)</label>
-      <input id="camCode" class="cam-code" type="text" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="code-badge" id="camCodeBadge" hidden></div>
       <button id="camStart" class="btn">Avvia allenamento</button>
       <div class="cam-sendnote" id="camSendNote"></div>
     </div>
@@ -852,13 +872,15 @@
         <li><b>Tonico (5 minuti, a riposo):</b> fotografa lo <b>stato funzionale di fondo</b> — come "gira il motore" mentre l'organismo mantiene l'omeostasi.</li>
         <li><b>Fasico (1 minuto, respiro guidato a 6/min):</b> introduce una <b>perturbazione controllata</b> e misura la <b>riserva di adattamento</b> e la velocità di rientro.</li>
       </ul>
+      <p>Tonico e fasico sono <b>due atti separati</b>: puoi fare solo il tonico, oppure aggiungere il fasico subito dopo. Se li fai entrambi, falli in sequenza (a pochi secondi di distanza).</p>
       <h4>Passi nell'app</h4>
       <ol>
         <li>Connetti la fascia (indicatore "Intervalli RR: sì").</li>
-        <li>Inserisci il <b>codice paziente</b> e <b>sesso, età, categoria</b> (servono per le scale di riferimento).</li>
-        <li>Avvia: parte il <b>tonico di 5 minuti</b> — durante il quale lo schermo mostra solo una sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
-        <li>Segue automaticamente il <b>fasico di 1 minuto</b>: respira seguendo la sfera a 6/min.</li>
-        <li>A fine test esporti/invii i dati grezzi, che vengono analizzati nel software HRV (pulizia artefatti + referto).</li>
+        <li>Il <b>codice paziente</b> è quello dell'attivazione (in alto). Imposta <b>sesso, età, categoria</b> (servono per le scale di riferimento).</li>
+        <li>Avvia: 30 s di stabilizzazione, poi il <b>tonico di 5 minuti</b> — schermo con sola sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
+        <li>A fine tonico scegli: <b>Concludi</b> (invii il solo tonico) oppure <b>Aggiungi fase fasica</b>.</li>
+        <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino a circa il <b>75%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
+        <li>A fine test i dati grezzi vengono inviati/esportati e analizzati nel software HRV (pulizia artefatti + referto).</li>
       </ol>
       <div class="tip">La valutazione è <b>doppia</b>: numerica (SDNN, RMSSD, Total Power, distribuzione VLF/LF/HF, coerenza, Stress Index) <b>e</b> morfologica (forma del tracciato). Per questo il tonico non mostra numeri al paziente: deve restare il più possibile "puro".</div>
       <a class="guide-top" href="#guideTop">↑ Indice</a>
@@ -2434,7 +2456,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v57';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v58';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -2455,7 +2477,7 @@ const TestMode = (() => {
   const TONIC_MS = 300000, PHASIC_MS = 60000, BREATH_MS = 10000; // 6 atti/min = ciclo 10 s
   const STAB_MS = 30000;                                          // stabilizzazione: collegati ma non si registra
   let pending = null;                                             // dati paziente in attesa di avviare la cattura
-  let raf = null, t0 = 0, phase = null, lastHalf = null;
+  let raf = null, t0 = 0, phase = null, lastHalf = null, prepTimer = null;
   // Profilo paziente memorizzato in locale (SOLO sul telefono del paziente): evita di
   // reinserire codice/sesso/età/categoria ad ogni test. Nessun nome, mai trasmesso.
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';
@@ -2477,15 +2499,17 @@ const TestMode = (() => {
   }
 
   function show(which){
-    el('hrvTestSetup').style.display = which==='setup' ? '' : 'none';
-    el('hrvTestRun').style.display   = which==='run'   ? '' : 'none';
-    el('hrvTestDone').style.display  = which==='done'  ? '' : 'none';
+    el('hrvTestSetup').style.display  = which==='setup'  ? '' : 'none';
+    el('hrvTestRun').style.display    = which==='run'    ? '' : 'none';
+    el('hrvTestChoice').style.display = which==='choice' ? '' : 'none';
+    el('hrvTestPrep').style.display   = which==='prep'   ? '' : 'none';
+    el('hrvTestDone').style.display   = which==='done'   ? '' : 'none';
   }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
 
   function start(){
-    const code = el('hrvTestCode').value.trim();
-    if(!code){ alert('Inserisci un codice paziente (es. MF-AB12).'); return; }
+    const code = (window.SendConsent ? SendConsent.code() : '');
+    if(!code){ alert('Imposta prima il codice paziente: aprilo dalla barra "Invio dei dati al medico" in cima all\'app.'); if(window.ConsentUI) ConsentUI.openModal(); return; }
     const sex = el('hrvTestSex').value;
     const age = el('hrvTestAge').value.trim();
     const pop = el('hrvTestPop').value || 'comune';
@@ -2543,16 +2567,44 @@ const TestMode = (() => {
     }
     if(elapsed >= dur){
       if(phase==='stab'){ beginCapture(); return; }
-      if(phase==='tonic'){ runPhase('phasic'); return; }
+      if(phase==='tonic'){ onTonicEnd(); return; }   // NON parte più il fasico da solo: scelta esplicita
       try{ Audio.recEnd(); }catch(e){}
       finish(); return;
     }
     raf = requestAnimationFrame(loop);
   }
+  // Fine del tonico: fermo il loop, chiudo il tag di fase (i battiti della pausa/countdown
+  // restano fuori dall'export) e mostro la scelta "Concludi" / "Aggiungi fasico".
+  function onTonicEnd(){
+    if(raf){ cancelAnimationFrame(raf); raf=null; }
+    HRV.setTestPhase(null);
+    try{ Audio.recEnd(); }catch(e){}
+    show('choice');
+  }
+  // Countdown di preparazione al fasico (15 s) con le raccomandazioni a schermo;
+  // negli ultimi ~4 s il pannello si dissolve, poi parte la registrazione fasica.
+  function startPhasicPrep(){
+    show('prep');
+    const card = el('hrvTestPrepCard'); if(card) card.classList.remove('fading');
+    let n = 15; el('hrvTestPrepCount').textContent = n;
+    if(prepTimer){ clearInterval(prepTimer); }
+    prepTimer = setInterval(()=>{
+      n--;
+      if(n<=4 && card) card.classList.add('fading');   // dissolvenza lenta finale
+      if(n<=0){ clearInterval(prepTimer); prepTimer=null; beginPhasic(); return; }
+      el('hrvTestPrepCount').textContent = n;
+    }, 1000);
+  }
+  function beginPhasic(){
+    show('run');
+    try{ Audio.recStart(); }catch(e){}
+    runPhase('phasic');                 // reimposta il tag 'phasic' e riavvia il loop
+  }
   function stopCommon(){
     HRV.endTest();
     delete document.body.dataset.hrvTesting;
     if(raf){ cancelAnimationFrame(raf); raf=null; }
+    if(prepTimer){ clearInterval(prepTimer); prepTimer=null; }
     try{ WakeLock.release(); }catch(e){}
     try{ Audio.keepAliveOff(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
@@ -2594,6 +2646,15 @@ const TestMode = (() => {
     el('hrvTestNew').addEventListener('click', ()=>{
       const ss = el('hrvSendStatus'); if(ss) ss.textContent = '';
       show('setup');
+    });
+    // Scelta a fine tonico: concludere (invio del solo tonico) o aggiungere il fasico.
+    el('hrvTestConclude') && el('hrvTestConclude').addEventListener('click', finish);
+    el('hrvTestAddPhasic') && el('hrvTestAddPhasic').addEventListener('click', startPhasicPrep);
+    // Annulla il countdown di preparazione e torna alla scelta (il tonico resta salvato).
+    el('hrvTestPrepCancel') && el('hrvTestPrepCancel').addEventListener('click', ()=>{
+      if(prepTimer){ clearInterval(prepTimer); prepTimer=null; }
+      const card = el('hrvTestPrepCard'); if(card) card.classList.remove('fading');
+      show('choice');
     });
   }
   return { init };
@@ -2706,7 +2767,7 @@ const MorningTest = (() => {
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
     // Codice atleta + consenso una-tantum per l'avviso al medico (facoltativi). Senza, la misura
     // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
-    const codeInput=el('mornCode'); if(codeInput && codeInput.value.trim()) saveCode(codeInput.value.trim().toUpperCase());
+    // Il codice arriva dalla finestra di attivazione (profilo condiviso), non più da una casella qui.
     try{ Audio.keepAliveOn(); }catch(e){}           // sblocca e TIENE SVEGLIO l'audio nel gesto del tap (i suoni ritardati devono poter partire)
     try{ WakeLock.acquire(); }catch(e){}
     show('Run'); startStabilize();
@@ -3018,8 +3079,7 @@ const AlphaTest = (() => {
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
-    const codeInput=el('alphaCode'), code=codeInput?codeInput.value.trim():'';
-    if(code) saveCode(code);
+    const code = getCode();   // dal profilo condiviso (finestra di attivazione)
     document.body.dataset.alphaTesting='1';
     try{ Audio.keepAliveOn(); }catch(e){}   // sblocca l'audio nel gesto del tap: i suoni ritardati devono poter partire
     try{ WakeLock.acquire(); }catch(e){}
@@ -3172,8 +3232,7 @@ const AlphaTest = (() => {
     const codeInput=el('alphaCode'); if(codeInput) codeInput.value=getCode();
     const wrap=el('alphaConsentWrap'); if(wrap && consentTs()) wrap.style.display='none';
     const note=el('alphaSendNote'); if(note) note.textContent = HRV.hasUploadUrl() ? 'Col codice atleta, a fine misura il risultato α1 viene inviato al medico.' : '';
-    el('alphaDurs').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return;
-      durMin=+b.getAttribute('data-min'); [].forEach.call(el('alphaDurs').children, x=>x.classList.toggle('cam-sel', x===b)); });
+    // Durata fissa a 5 minuti (standard a riposo): nessun selettore.
     el('alphaStart').addEventListener('click', start);
     el('alphaAbort').addEventListener('click', abort);
     el('alphaTaco').addEventListener('click', onTacoClick);
@@ -3234,10 +3293,9 @@ const CameraCoherence = (() => {
     try{ Voice.setEnabled(guideMode==='voce'); Voice.unlock(); }catch(e){}
     if(guideMode==='campana'){ try{ Audio.prime(); Audio.setMasterVol(0.8); }catch(e){} }
     try{ WakeLock.acquire(); }catch(e){}   // schermo acceso DENTRO il gesto, PRIMA degli await della fotocamera
-    // Codice paziente + consenso una-tantum (per il report al medico). Senza codice
+    // Codice dal profilo condiviso (finestra di attivazione). Senza codice
     // si allena comunque, ma il riepilogo non viene inviato.
-    const codeInput=el('camCode'), code=codeInput?codeInput.value.trim():'';
-    if(code) saveCode(code);
+    const code = getCode();
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Questo browser non dà accesso alla fotocamera.'); return; }
     try{
       stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:320}, height:{ideal:240} }, audio:false });
@@ -3533,8 +3591,16 @@ const CameraCoherence = (() => {
 /* ============ Consenso unico: finestra di primo avvio + barra di stato ============ */
 const ConsentUI = (() => {
   const el = id => document.getElementById(id);
+  // Il codice si inserisce UNA sola volta qui (finestra di attivazione). I singoli
+  // test non hanno più una casella codice: mostrano solo un badge di sola lettura
+  // col codice attivo, così il paziente sa a quale codice sono agganciati i dati.
   function syncCodeFields(code){
-    ['consentCode','camCode','mornCode','hrvTestCode','alphaCode'].forEach(id=>{ const e=el(id); if(e && !e.value.trim()) e.value=code; });
+    const cc = el('consentCode'); if(cc && !cc.value.trim()) cc.value = code;
+    ['hrvTestCodeBadge','mornCodeBadge','alphaCodeBadge','camCodeBadge'].forEach(id=>{
+      const e=el(id); if(!e) return;
+      if(code){ e.innerHTML = 'Codice attivo: <b>'+code+'</b>'; e.hidden = false; }
+      else { e.hidden = true; }
+    });
   }
   function renderBar(){
     const bar = el('consentBar'); if(!bar) return;
@@ -3592,6 +3658,7 @@ const ConsentUI = (() => {
       closeModal(); renderBar();
     });
     el('consentOverlay').addEventListener('click', e=>{ if(e.target===el('consentOverlay') && SendConsent.given()) closeModal(); });
+    syncCodeFields(SendConsent.code());   // popola i badge codice dei test all'avvio
     renderBar();
     // Il consenso all'invio dati si chiede SOLO dopo l'attivazione dell'app
     // (a cancello aperto). Se l'app è ancora bloccata, ci penserà Activation
