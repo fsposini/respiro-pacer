@@ -844,6 +844,7 @@
         <li>Per ogni frequenza, osserva con la fascia connessa l'<b>onda della frequenza cardiaca</b>: cerca quella con l'oscillazione <b>più ampia e più pulita</b> (cresta-valle massima).</li>
         <li>Metodo a sezioni: <b>2 minuti per frequenza</b> (1 minuto di adattamento + 1 di acquisizione), valutando l'aumento di SDNN e la risposta dell'RMSSD.</li>
       </ol>
+      <div class="tip"><b>Come leggere l'onda a schermo.</b> Durante il respiro la curva della frequenza cardiaca è <b>livellata</b> (ricampionata come nei sistemi HeartMath/emWave) per farti riconoscere subito la sinusoide di coerenza. I <b>battiti ectopici</b> (extrasistoli) sono segnati con un <b>puntino rosso</b> e riportati al livello dei battiti vicini, così un singolo battito anomalo non deforma più l'intera onda né la scala del grafico. È un aiuto <b>solo visivo</b>: i dati grezzi usati per l'analisi e per il calcolo della risonanza restano intatti.</div>
       <div class="tip">Se la massima potenza LF e la massima pulizia dell'onda non coincidono alla stessa frequenza, entrambe sono valide. Suggerimento circadiano: frequenza leggermente più alta al mattino, leggermente più lenta al pomeriggio/sera.</div>
       <p>Una volta individuata, impostala nella <b>modalità Statica</b> (es. ciclo da 10 s = 6/min: 5 s inspira + 5 s espira). Usala per l'allenamento quotidiano e per l'allenamento con la fotocamera.</p>
       <div class="warn"><b>Coerenza ≠ rilassamento.</b> Nella respirazione di <b>coerenza/risonanza</b> inspirazione ed espirazione hanno la <b>stessa durata, senza pause</b> (respirazione circolare sincrona). L'espirazione più lunga (es. 3:7) appartiene invece alla respirazione <b>rilassante</b>, che ha uno scopo diverso (massimizzare il tono parasimpatico), non quello di alzare la coerenza.</div>
@@ -912,6 +913,7 @@
       <p>Bastano <b>due o tre battiti ectopici</b> (extrasistoli) o artefatti da movimento per falsare completamente l'RMSSD e l'intera interpretazione. Per questo, dopo l'importazione, ogni battito è un punto cliccabile sul tracciato: <b>tocca i battiti anomali per escluderli</b>, a occhio, come si fa in ambulatorio. Tutti gli indici (RMSSD, SDNN, frequenze, coerenza, Stress Index) si <b>ricalcolano</b> sui soli battiti validi.</p>
       <div class="tip">Un'extrasistole tipica si riconosce come un battito <b>prematuro</b> (intervallo corto) seguito da una <b>pausa compensatoria</b> (intervallo lungo): un picco isolato che "rompe" l'onda regolare. Escludi entrambi.</div>
       <p>Nel <b>test del mattino</b> la stessa pulizia è disponibile prima di salvare la misura, perché su 1 minuto un artefatto pesa ancora di più.</p>
+      <div class="tip"><b>Da non confondere.</b> Il <b>puntino rosso</b> che compare sull'onda mentre respiri (pacer e fotocamera) segnala l'ectopico ma è <b>solo estetico</b>: non toglie nulla dal calcolo. La pulizia che <b>ricalcola davvero</b> gli indici è questa, manuale, sul tracciato dopo l'importazione (test clinico e test del mattino).</div>
       <a class="guide-top" href="#guideTop">↑ Indice</a>
     </section>
 
@@ -2535,7 +2537,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v61';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v62';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
