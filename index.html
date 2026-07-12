@@ -1651,6 +1651,27 @@ const HRV = (() => {
     const scale = parseFloat(m[1].split(',')[0]); // render(): scale = 0.9 + full*2.0
     return Math.max(0, Math.min(1, (scale - 0.9) / 2.0));
   }
+  // ── Filtro onda FC stile emWave ──────────────────────────────────────────
+  // Ricampiona i battiti {t,hr} su una griglia temporale UNIFORME (hz) e li
+  // interpola con spline Catmull-Rom: la curva diventa una sinusoide morbida
+  // come M-Wave Pro Plus. NON cancella gli ectopici — restano visibili come
+  // dossi arrotondati (proprio come nel tracciato emWave). Il ricampionamento
+  // uniforme è anche il prerequisito per la futura analisi spettrale della
+  // frequenza di risonanza (FFT su campioni equispaziati nel tempo).
+  window.smoothHRcurve = function(pts, t0, t1, hz){
+    if(!pts || pts.length < 3) return pts ? pts.slice() : [];
+    const T = pts.map(p=>p.t), V = pts.map(p=>p.hr), n = T.length, dt = 1000/(hz||2), out = [];
+    let j = 0;
+    for(let t=t0; t<=t1+1e-6; t+=dt){
+      while(j < n-2 && T[j+1] < t) j++;
+      const i1 = Math.max(0, Math.min(n-2, j)), i0 = Math.max(0, i1-1), i2 = i1+1, i3 = Math.min(n-1, i2+1);
+      const span = (T[i2]-T[i1])||1, u = Math.max(0, Math.min(1, (t-T[i1])/span)), u2=u*u, u3=u2*u;
+      const p0=V[i0], p1=V[i1], p2=V[i2], p3=V[i3];
+      out.push({t, hr: 0.5*((2*p1) + (-p0+p2)*u + (2*p0-5*p1+4*p2-p3)*u2 + (-p0+3*p1-3*p2+p3)*u3)});
+    }
+    return out;
+  };
+
   function drawWave(){
     if(!canvas || !cctx) return;
     const dpr = window.devicePixelRatio || 1;
@@ -1671,6 +1692,7 @@ const HRV = (() => {
     while(breathBuf.length && now - breathBuf[0].t > WAVE_WINDOW_MS) breathBuf.shift();
 
     const pts = wave.filter(p => p.t >= t0);
+    const spts = (pts.length >= 3) ? window.smoothHRcurve(pts, t0, now, 2) : pts;   // 2 Hz + spline → onda liscia stile emWave
 
     // Stato contatto / nota
     const note = el('hrvWaveNote');
@@ -1689,9 +1711,9 @@ const HRV = (() => {
       return;
     }
 
-    // Scala Y dalla FC
+    // Scala Y dalla FC (sulla curva ricampionata)
     let mn = Infinity, mx = -Infinity;
-    for(const p of pts){ if(p.hr < mn) mn = p.hr; if(p.hr > mx) mx = p.hr; }
+    for(const p of spts){ if(p.hr < mn) mn = p.hr; if(p.hr > mx) mx = p.hr; }
     let span = mx - mn;
     if(span < 6){ const mid = (mn+mx)/2; mn = mid-3; mx = mid+3; span = 6; }
     mn -= span*0.15; mx += span*0.15;
@@ -1723,7 +1745,7 @@ const HRV = (() => {
     // Curva FC istantanea (in primo piano)
     c.strokeStyle = '#4fd1c5'; c.lineWidth = 2.4*dpr; c.lineJoin = 'round';
     c.beginPath();
-    pts.forEach((p,idx)=>{ const x = xFor(p.t), y = yFor(p.hr); idx ? c.lineTo(x,y) : c.moveTo(x,y); });
+    spts.forEach((p,idx)=>{ const x = xFor(p.t), y = yFor(p.hr); idx ? c.lineTo(x,y) : c.moveTo(x,y); });
     c.stroke();
     // punto vivo
     const last = pts[pts.length-1];
@@ -2456,7 +2478,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v58';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v59';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3453,15 +3475,16 @@ const CameraCoherence = (() => {
       const {ctx,w,h}=fitCanvas(cv2); ctx.clearRect(0,0,w,h);
       const WIN=60000, t1=now-WIN, pad=10, xOf=t=>((t-t1)/WIN)*w;
       const hp=[]; for(const b of rr){ if(b.t>=t1 && b.ibi>=300 && b.ibi<=2000) hp.push({t:b.t, hr:60000/b.ibi}); }
+      const shp=(window.smoothHRcurve && hp.length>=3)?window.smoothHRcurve(hp,t1,now,2):hp;   // 2 Hz + spline → onda liscia stile emWave
       if(hp.length>=3){
-        let mn=1e9,mx=-1e9; for(const o of hp){ if(o.hr<mn)mn=o.hr; if(o.hr>mx)mx=o.hr; }
+        let mn=1e9,mx=-1e9; for(const o of shp){ if(o.hr<mn)mn=o.hr; if(o.hr>mx)mx=o.hr; }
         const lo=Math.floor(mn-1), hi=Math.ceil(mx+1), rng=(hi-lo)||1, yOf=v=>h-pad-((v-lo)/rng)*(h-2*pad);
         ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=1;            // griglia min/max
         ctx.beginPath(); ctx.moveTo(0,yOf(hi)); ctx.lineTo(w,yOf(hi)); ctx.moveTo(0,yOf(lo)); ctx.lineTo(w,yOf(lo)); ctx.stroke();
         ctx.fillStyle='rgba(255,255,255,.45)'; ctx.font='10px sans-serif'; ctx.textAlign='left';
         ctx.fillText(hi+'', 3, yOf(hi)+10); ctx.fillText(lo+'', 3, yOf(lo)-3);
         ctx.lineWidth=2.4; ctx.strokeStyle='#2fd0b6'; ctx.lineJoin='round'; ctx.beginPath();   // curva FC (teal HeartMath)
-        hp.forEach((o,i)=>{ const x=xOf(o.t),y=yOf(o.hr); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+        shp.forEach((o,i)=>{ const x=xOf(o.t),y=yOf(o.hr); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
         if(rngEl) rngEl.textContent=lo+'–'+hi+' bpm';
       } else {
         if(rngEl) rngEl.textContent='';
