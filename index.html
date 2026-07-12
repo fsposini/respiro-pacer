@@ -1653,11 +1653,16 @@ const HRV = (() => {
   }
   // ── Filtro onda FC stile emWave ──────────────────────────────────────────
   // Ricampiona i battiti {t,hr} su una griglia temporale UNIFORME (hz) e li
-  // interpola con spline Catmull-Rom: la curva diventa una sinusoide morbida
-  // come M-Wave Pro Plus. NON cancella gli ectopici — restano visibili come
-  // dossi arrotondati (proprio come nel tracciato emWave). Il ricampionamento
-  // uniforme è anche il prerequisito per la futura analisi spettrale della
-  // frequenza di risonanza (FFT su campioni equispaziati nel tempo).
+  // interpola con spline Catmull-Rom, poi applica un leggero livellamento
+  // (media mobile centrata di SMOOTH_WIN_SEC secondi): la curva diventa una
+  // sinusoide morbida come M-Wave Pro Plus. NON cancella gli ectopici — restano
+  // visibili come dossi arrotondati (proprio come nel tracciato emWave).
+  // SOLO VISIVO: l'analisi spettrale (VLF/LF/HF, picco 0,1 Hz) e l'export CSV
+  // usano gli NN grezzi e NON passano di qui. La finestra è tenuta ben sotto il
+  // periodo dell'onda di coerenza (~10 s a 0,1 Hz), così toglie il jitter
+  // battito-battito senza deformare la sinusoide.
+  // ►► UNICO PARAMETRO DA CALIBRARE: più alto = più liscio. ◄◄
+  const SMOOTH_WIN_SEC = 2.4;
   window.smoothHRcurve = function(pts, t0, t1, hz){
     if(!pts || pts.length < 3) return pts ? pts.slice() : [];
     const T = pts.map(p=>p.t), V = pts.map(p=>p.hr), n = T.length, dt = 1000/(hz||2), out = [];
@@ -1669,7 +1674,16 @@ const HRV = (() => {
       const p0=V[i0], p1=V[i1], p2=V[i2], p3=V[i3];
       out.push({t, hr: 0.5*((2*p1) + (-p0+p2)*u + (2*p0-5*p1+4*p2-p3)*u2 + (-p0+3*p1-3*p2+p3)*u3)});
     }
-    return out;
+    // Media mobile centrata: leviga il jitter veloce lasciando la sinusoide lenta.
+    const half = Math.round((SMOOTH_WIN_SEC*1000/dt - 1) / 2);
+    if(half < 1 || out.length < 2*half+1) return out;
+    const sm = new Array(out.length);
+    for(let k=0; k<out.length; k++){
+      const a = Math.max(0, k-half), b = Math.min(out.length-1, k+half);
+      let s = 0; for(let m=a; m<=b; m++) s += out[m].hr;
+      sm[k] = { t: out[k].t, hr: s/(b-a+1) };
+    }
+    return sm;
   };
 
   function drawWave(){
@@ -2478,7 +2492,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v59';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v60';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
