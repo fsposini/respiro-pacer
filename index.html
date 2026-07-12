@@ -1686,6 +1686,39 @@ const HRV = (() => {
     return sm;
   };
 
+  // ── Rilevamento battiti ectopici (SOLO VISIVO) ───────────────────────────
+  // Un ectopico arriva in anticipo: la FC istantanea di quel singolo battito
+  // schizza a valori anomali e poi crolla (battito compensatorio). Senza
+  // correzione, un solo picco gonfia la curva E fa esplodere la scala verticale
+  // automatica, schiacciando la sinusoide reale fino a renderla invisibile.
+  // Qui rileviamo il battito che si discosta troppo dalla MEDIANA dei battiti
+  // vicini e, PER IL SOLO DISEGNO, lo riportiamo al livello locale (come emWave):
+  // la sinusoide torna leggibile. Il battito viene poi segnato in rosso sul
+  // grafico, così resta visibile CHE e DOVE c'è stato un ectopico.
+  // I dati grezzi (export CSV, analisi VLF/LF/HF, picco 0,1 Hz) NON passano di
+  // qui e restano intatti: l'ectopico è informazione clinica reale.
+  // ►► SOGLIA: scostamento oltre ECT_TOL dalla mediana locale = ectopico. ◄◄
+  const ECT_TOL = 0.20;   // 20% dalla mediana dei ±3 battiti vicini
+  window.declutterHR = function(pts){
+    const n = pts ? pts.length : 0;
+    if(n < 5) return { clean: pts ? pts.map(p=>({t:p.t, hr:p.hr})) : [], bad: [] };
+    const HALF = 3, clean = new Array(n), bad = [], win = [];
+    for(let i=0;i<n;i++){
+      const a = Math.max(0,i-HALF), b = Math.min(n-1,i+HALF);
+      win.length = 0;
+      for(let k=a;k<=b;k++) if(k!==i) win.push(pts[k].hr);
+      win.sort((x,y)=>x-y);
+      const med = win[(win.length-1)>>1];
+      if(med>0 && Math.abs(pts[i].hr - med)/med > ECT_TOL){
+        clean[i] = { t: pts[i].t, hr: med };   // riportato al livello locale
+        bad.push(pts[i].t);
+      } else {
+        clean[i] = { t: pts[i].t, hr: pts[i].hr };
+      }
+    }
+    return { clean, bad };
+  };
+
   function drawWave(){
     if(!canvas || !cctx) return;
     const dpr = window.devicePixelRatio || 1;
@@ -1706,7 +1739,8 @@ const HRV = (() => {
     while(breathBuf.length && now - breathBuf[0].t > WAVE_WINDOW_MS) breathBuf.shift();
 
     const pts = wave.filter(p => p.t >= t0);
-    const spts = (pts.length >= 3) ? window.smoothHRcurve(pts, t0, now, 2) : pts;   // 2 Hz + spline → onda liscia stile emWave
+    const { clean: cpts, bad: ectT } = window.declutterHR(pts);                     // ectopici corretti (solo per il disegno) + tempi da segnare in rosso
+    const spts = (cpts.length >= 3) ? window.smoothHRcurve(cpts, t0, now, 2) : cpts; // 2 Hz + spline → onda liscia stile emWave
 
     // Stato contatto / nota
     const note = el('hrvWaveNote');
@@ -1761,8 +1795,17 @@ const HRV = (() => {
     c.beginPath();
     spts.forEach((p,idx)=>{ const x = xFor(p.t), y = yFor(p.hr); idx ? c.lineTo(x,y) : c.moveTo(x,y); });
     c.stroke();
-    // punto vivo
-    const last = pts[pts.length-1];
+    // Marcatori ectopici (rossi, come emWave): sulla curva, dove c'era l'anomalia
+    if(ectT.length && spts.length){
+      c.fillStyle = '#ff5a5a';
+      for(const bt of ectT){
+        let best = spts[0], bd = Infinity;
+        for(const s of spts){ const d = Math.abs(s.t-bt); if(d<bd){ bd=d; best=s; } }
+        c.beginPath(); c.arc(xFor(bt), yFor(best.hr), 3.4*dpr, 0, Math.PI*2); c.fill();
+      }
+    }
+    // punto vivo (segue la curva pulita, non salta sull'ectopico)
+    const last = cpts[cpts.length-1];
     c.fillStyle = '#5ad1c0';
     c.beginPath(); c.arc(xFor(last.t), yFor(last.hr), 3.2*dpr, 0, Math.PI*2); c.fill();
   }
@@ -2492,7 +2535,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v60';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v61';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3489,7 +3532,9 @@ const CameraCoherence = (() => {
       const {ctx,w,h}=fitCanvas(cv2); ctx.clearRect(0,0,w,h);
       const WIN=60000, t1=now-WIN, pad=10, xOf=t=>((t-t1)/WIN)*w;
       const hp=[]; for(const b of rr){ if(b.t>=t1 && b.ibi>=300 && b.ibi<=2000) hp.push({t:b.t, hr:60000/b.ibi}); }
-      const shp=(window.smoothHRcurve && hp.length>=3)?window.smoothHRcurve(hp,t1,now,2):hp;   // 2 Hz + spline → onda liscia stile emWave
+      const dc=(window.declutterHR)?window.declutterHR(hp):{clean:hp,bad:[]};                  // ectopici corretti (solo disegno) + rossi
+      const chp=dc.clean, ectT=dc.bad;
+      const shp=(window.smoothHRcurve && chp.length>=3)?window.smoothHRcurve(chp,t1,now,2):chp; // 2 Hz + spline → onda liscia stile emWave
       if(hp.length>=3){
         let mn=1e9,mx=-1e9; for(const o of shp){ if(o.hr<mn)mn=o.hr; if(o.hr>mx)mx=o.hr; }
         const lo=Math.floor(mn-1), hi=Math.ceil(mx+1), rng=(hi-lo)||1, yOf=v=>h-pad-((v-lo)/rng)*(h-2*pad);
@@ -3499,6 +3544,14 @@ const CameraCoherence = (() => {
         ctx.fillText(hi+'', 3, yOf(hi)+10); ctx.fillText(lo+'', 3, yOf(lo)-3);
         ctx.lineWidth=2.4; ctx.strokeStyle='#2fd0b6'; ctx.lineJoin='round'; ctx.beginPath();   // curva FC (teal HeartMath)
         shp.forEach((o,i)=>{ const x=xOf(o.t),y=yOf(o.hr); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+        if(ectT.length && shp.length){                                       // marcatori ectopici (rossi, come emWave)
+          ctx.fillStyle='#ff5a5a';
+          for(const bt of ectT){
+            let best=shp[0], bd=Infinity;
+            for(const s of shp){ const d=Math.abs(s.t-bt); if(d<bd){ bd=d; best=s; } }
+            ctx.beginPath(); ctx.arc(xOf(bt), yOf(best.hr), 3, 0, Math.PI*2); ctx.fill();
+          }
+        }
         if(rngEl) rngEl.textContent=lo+'–'+hi+' bpm';
       } else {
         if(rngEl) rngEl.textContent='';
