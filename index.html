@@ -299,6 +299,7 @@
     <div class="tabs">
       <div class="tab active" data-mode="static">Statica</div>
       <div class="tab" data-mode="dynamic">Dinamica</div>
+      <div class="tab" data-mode="resonance">Risonanza</div>
     </div>
     <div id="staticSettings">
       <div class="field"><label>Inspirazione</label><div class="row"><input type="number" id="inhale" value="6.5" min="0" step="0.5"><span class="unit">sec</span></div></div>
@@ -314,6 +315,13 @@
       <div class="field"><label>Cambia ogni</label><div class="row"><input type="number" id="stepInterval" value="2" min="0.25" step="0.25"><span class="unit">min</span></div></div>
       <div class="field"><label>Durata totale sessione</label><div class="row"><input type="number" id="totalDuration" value="10" min="1" step="1"><span class="unit">min</span></div></div>
       <div class="calc" id="dynCalc">Ciclo simmetrico 1:1.<br>Da <b id="dynFromRate">6.0</b> a <b id="dynToRate">4.0</b> atti/min in <b id="dynSteps">—</b> step.</div>
+    </div>
+    <div id="resonanceSettings" style="display:none">
+      <div class="field"><label>Da (inspira = espira)</label><div class="row"><input type="number" id="resStart" value="4" min="3" max="9" step="0.5"><span class="unit">sec/lato</span></div></div>
+      <div class="field"><label>A (inspira = espira)</label><div class="row"><input type="number" id="resEnd" value="6.5" min="3" max="9" step="0.5"><span class="unit">sec/lato</span></div></div>
+      <div class="field"><label>Passo</label><div class="row"><input type="number" id="resStep" value="0.5" min="0.5" step="0.5"><span class="unit">sec</span></div></div>
+      <div class="calc" id="resCalc">—</div>
+      <div class="calc" style="margin-top:8px">Test della <b>frequenza di risonanza</b>: senza pause, respira con la pancia seguendo la sfera. Ogni ritmo dura <b>3 minuti</b>, poi rallenta da solo. <b>Più sei alto, parti da tempi più lunghi</b>: ~1,50 m → 4 s · ~1,70 m → 4,5–5 s · ~1,80 m → 5 s. Serve la <b>fascia cardio</b> collegata e il codice paziente.</div>
     </div>
   </div>
 
@@ -773,6 +781,26 @@
       <button class="hrv-btn ghost" id="hrvClear">Cancella storico</button>
     </div>
   </div>
+
+  <style>
+    #resResults .res-verdict{background:var(--bg2,#F4FBF8);border:1px solid var(--line,#e5eef0);border-radius:10px;padding:10px 12px;margin:6px 0 12px;font-size:.9rem;color:var(--text,#545E62)}
+    #resResults .res-tablewrap{overflow-x:auto}
+    #resResults .res-table{width:100%;border-collapse:collapse;font-size:.82rem}
+    #resResults .res-table th,#resResults .res-table td{padding:6px 8px;text-align:center;border-bottom:1px solid var(--line,#e5eef0);white-space:nowrap}
+    #resResults .res-table th{color:var(--muted,#8aa);font-weight:600}
+    #resResults .res-table tr.best td{background:rgba(27,84,155,.12);font-weight:700;color:#1B549B}
+  </style>
+  <div class="hrv-results" id="resResults" style="display:none">
+    <h3>🎯 Test della frequenza di risonanza</h3>
+    <div class="res-verdict" id="resVerdict">Test in corso… i risultati compaiono a ogni cambio di frequenza.</div>
+    <div class="res-tablewrap">
+      <table class="res-table">
+        <thead><tr><th>#</th><th>sec/lato</th><th>atti/min</th><th>LF (ms²)</th><th>picco LF (Hz)</th><th>HF (ms²)</th><th>LF/HF</th><th>battiti</th></tr></thead>
+        <tbody id="resTableBody"></tbody>
+      </table>
+    </div>
+    <div class="hrv-bands-note">La <b>frequenza di risonanza</b> è quella con il <b>picco di LF</b> più alto. VLF/HF sono riportate per completezza; in 3 minuti la VLF è poco affidabile. I dati e la foto dell'onda di ogni frequenza vengono inviati al medico in forma anonima (solo codice paziente).</div>
+  </div>
 </div>
 
 <div class="guide-overlay" id="guideOverlay" role="dialog" aria-modal="true" aria-label="Guida HRV Tool">
@@ -826,6 +854,8 @@
       <p>Imposti tu le durate fisse di ogni fase, in secondi: <b>Inspirazione</b>, <b>Pausa piena</b>, <b>Espirazione</b>, <b>Pausa vuota</b>. La somma delle quattro fasi è il <b>ciclo</b>; la frequenza in atti/minuto è mostrata in tempo reale. È la modalità da usare per respirare alla <b>tua frequenza di risonanza</b> (cap. 3).</p>
       <h4>Modalità Dinamica</h4>
       <p>Il ritmo parte da una <b>frequenza iniziale</b> e scende gradualmente verso una <b>frequenza finale (target)</b>, con una <b>variazione per step</b>. Serve per accompagnare progressivamente il sistema verso ritmi più lenti, o per cercare la frequenza di risonanza.</p>
+      <h4>Modalità Risonanza</h4>
+      <p>È il <b>test guidato della frequenza di risonanza</b> (cap. 3). Imposti solo <b>da</b> quanti secondi partire e <b>a</b> quanti arrivare, e l'app fa il resto: cambia ritmo ogni 3 minuti, misura l'HRV a ogni tappa e, alla fine, ti indica la frequenza di risonanza. Servono la <b>fascia</b> collegata e il <b>codice paziente</b>.</p>
       <h4>Audio e voce</h4>
       <ul>
         <li><b>Voce guida</b> (Inspira / Espira / Trattieni): attivala per essere guidato a occhi chiusi.</li>
@@ -838,7 +868,16 @@
     <section class="guide-ch" id="g3">
       <h3>3 · La frequenza di risonanza</h3>
       <p>La frequenza di risonanza è il ritmo respiratorio a cui il sistema cardiovascolare <b>massimizza la coerenza, il Total Power e l'ampiezza dell'HRV</b>, con la potenza concentrata nelle basse frequenze (LF &gt;90% dello spettro, picco intorno a <b>0,1 Hz</b>) e un'onda sinusoidale ampia e pulita. È individuale.</p>
-      <h4>Come trovarla</h4>
+      <h4>Il test automatico — scheda «Risonanza»</h4>
+      <p>La scheda <b>Risonanza</b> (accanto a Statica e Dinamica) la trova da sola. Devi solo dirle <b>da quanti secondi partire</b> e <b>a quanti arrivare</b> — per lato, cioè inspira ed espira di uguale durata, <b>senza pause</b>.</p>
+      <ul>
+        <li><b>Come scegliere i secondi in base alla statura.</b> Più sei alto, più il respiro di risonanza è lento (secondi più lunghi per lato). Indicativamente: <b>~1,50 m → parti da 4 s</b> · <b>~1,70 m → 4,5–5 s</b> · <b>~1,80 m → 5 s</b>. Nel dubbio tieni il range ampio (es. da 4 a 6,5 s): l'app prova tutte le tappe.</li>
+        <li><b>Come funziona.</b> Ogni ritmo dura <b>3 minuti</b>, poi rallenta da solo di mezzo secondo. Respira di pancia seguendo la sfera, senza pause. Servono la <b>fascia</b> collegata (indicatore «Intervalli RR: sì») e il <b>codice paziente</b> impostato dalla barra in cima all'app.</li>
+        <li><b>Quanto dura.</b> Circa <b>3 minuti per ogni tappa</b> (es. 5 tappe ≈ 15 minuti): il riquadro sotto i campi te lo mostra prima di avviare. Resta comodo, seduto, senza parlare né muoverti.</li>
+        <li><b>Risultato.</b> Alla fine l'app evidenzia la frequenza con il <b>picco di LF più alto</b> — la tua frequenza di risonanza — e invia al medico la tabella e la <b>foto dell'onda</b> di ogni tappa, in forma anonima (solo codice paziente).</li>
+      </ul>
+      <p>Una volta scoperta, impostala nella <b>modalità Statica</b> per l'allenamento quotidiano. Qui sotto trovi anche il metodo manuale, utile per capire cosa succede sotto il cofano.</p>
+      <h4>Come trovarla a mano</h4>
       <ol>
         <li>Usa la <b>modalità Dinamica</b> (o sezioni a frequenza fissa decrescente) partendo da circa <b>8 atti/min</b> per corporature minute, <b>5–6 atti/min</b> per corporature maggiori.</li>
         <li>Per ogni frequenza, osserva con la fascia connessa l'<b>onda della frequenza cardiaca</b>: cerca quella con l'oscillazione <b>più ampia e più pulita</b> (cresta-valle massima).</li>
@@ -1221,8 +1260,22 @@ const App = (() => {
   const dynSeqForRate=r=>{const c=60/r,h=c/2;return[{name:'inhale',dur:h},{name:'exhale',dur:h}];};
   function currentRate(){
     if(mode==='dynamic')return dyn?dyn.rate:+el('startRate').value;
+    if(mode==='resonance')return dyn?dyn.rate:60/(2*(+el('resStart').value||5));
     const t=+el('inhale').value+ +el('holdFull').value+ +el('exhale').value+ +el('holdEmpty').value;
     return t>0?60/t:0;
+  }
+  // Scala a gradini TONDI in secondi/lato (come ragiona il medico): 4 → 4,5 → 5 …
+  // Ogni gradino è convertito nella frequenza in atti/min per il motore. Restituisce
+  // [{sec, rate}]. Direzione qualsiasi (di norma si allunga il ciclo = si rallenta).
+  function buildResLadder(){
+    const a=+el('resStart').value, b=+el('resEnd').value, st=Math.max(0.5,+el('resStep').value||0.5);
+    const dir=b>=a?1:-1, out=[];
+    for(let s=a; dir>0 ? s<=b+1e-6 : s>=b-1e-6; s+=dir*st){
+      const sec=Math.round(s*10)/10; out.push({sec, rate:60/(sec*2)});
+      if(out.length>=30) break;                       // guardia anti-loop
+    }
+    if(!out.length){ const sec=a; out.push({sec, rate:60/(sec*2)}); }
+    return out;
   }
   function fullnessFor(name,p){const ease=x=>0.5-0.5*Math.cos(Math.PI*x);
     if(name==='inhale')return ease(p);if(name==='exhale')return 1-ease(p);if(name==='holdFull')return 1;return 0;}
@@ -1243,6 +1296,7 @@ const App = (() => {
     const m=document.querySelector('.tab.active').dataset.mode;
     let rate,cyc;
     if(m==='dynamic'){ const s=+el('startRate').value; rate=s; cyc=s>0?60/s:0; }
+    else if(m==='resonance'){ const sec=+el('resStart').value||5; cyc=sec*2; rate=cyc>0?60/cyc:0; }
     else { const tot=+el('inhale').value+ +el('holdFull').value+ +el('exhale').value+ +el('holdEmpty').value;
       cyc=tot; rate=tot>0?60/tot:0; }
     el('freqNum').textContent=rate?rate.toFixed(1):'—';
@@ -1254,19 +1308,28 @@ const App = (() => {
     Voice.say(phaseText[ph.name]);Audio.onPhaseStart(ph.name);}
   function nextPhase(now){seqIdx++;
     if(seqIdx>=seq.length){seqIdx=0;cycleCount++;
-      if(mode==='dynamic'){maybeStepRate(now);seq=dynSeqForRate(dyn.rate);}
+      if(mode==='dynamic'||mode==='resonance'){maybeStepRate(now);seq=dynSeqForRate(dyn.rate);}
       if(mode==='static'){const tc=+el('targetCycles').value;if(tc>0&&cycleCount>=tc){finish();return false;}}}
     startPhase(now);return true;}
   function maybeStepRate(now){const em=(now-sessionStart-pausedAccum)/60000,steps=Math.floor(em/dyn.stepInterval);
-    if(steps>dyn.lastStep){dyn.lastStep=steps;const dir=Math.sign(dyn.end-dyn.start)||0;
-      let r=dyn.start+dir*dyn.step*steps;if(dir>0)r=Math.min(r,dyn.end);else if(dir<0)r=Math.max(r,dyn.end);dyn.rate=r;}}
+    if(steps>dyn.lastStep){dyn.lastStep=steps;
+      if(dyn.resonance){
+        const li=Math.min(steps,dyn.ladder.length-1);
+        // confine di blocco: chiude il blocco appena finito (analisi+foto+invio) e apre il nuovo
+        if(window.HRV&&HRV.resonanceStepBlock)HRV.resonanceStepBlock(dyn.ladder[li].rate,dyn.ladder[li].sec);
+        dyn.rate=dyn.ladder[li].rate;
+      }else{
+        const dir=Math.sign(dyn.end-dyn.start)||0;
+        let r=dyn.start+dir*dyn.step*steps;if(dir>0)r=Math.min(r,dyn.end);else if(dir<0)r=Math.max(r,dyn.end);dyn.rate=r;
+      }
+    }}
   function tick(now){
     if(!running)return;if(paused){rafId=requestAnimationFrame(tick);return;}
     const ph=seq[seqIdx];let elapsed=(now-phaseStart)/1000;
     if(elapsed>=ph.dur){if(!nextPhase(now))return;elapsed=0;}
     const p=ph.dur>0?Math.min(elapsed/ph.dur,1):1,full=fullnessFor(seq[seqIdx].name,p);
     render(full,seq[seqIdx],elapsed,now);Audio.update(full,seq[seqIdx].name);
-    if(mode==='dynamic'&&now-sessionStart-pausedAccum>=dyn.total*60000){finish();return;}
+    if((mode==='dynamic'||mode==='resonance')&&now-sessionStart-pausedAccum>=dyn.total*60000){finish();return;}
     rafId=requestAnimationFrame(tick);
   }
   function render(full,ph,elapsed,now){
@@ -1274,20 +1337,26 @@ const App = (() => {
     const halo=el('halo'),hs=84*scale*1.15;halo.style.width=hs+'px';halo.style.height=hs+'px';halo.style.opacity=0.15+full*0.45;
     el('roPhaseTime').textContent=Math.max(0,ph.dur-elapsed).toFixed(1);
     const cyc=seq.reduce((a,b)=>a+b.dur,0);
-    const rate=mode==='dynamic'?dyn.rate:(cyc>0?60/cyc:0);
+    const rate=(mode==='dynamic'||mode==='resonance')?dyn.rate:(cyc>0?60/cyc:0);
     el('roCycle').textContent=cyc.toFixed(1);
     el('roCycleN').textContent=cycleCount;
     el('freqNum').textContent=rate.toFixed(1);     // badge live
     el('freqCycle').textContent=cyc.toFixed(1);
     const te=(now-sessionStart-pausedAccum)/1000;el('roElapsed').textContent=fmt(te);
     el('orbCount').textContent=cycleCount||'';
-    if(mode==='dynamic'){el('sessionFill').style.width=Math.min(100,(te/(dyn.total*60))*100)+'%';}
+    if(mode==='dynamic'||mode==='resonance'){el('sessionFill').style.width=Math.min(100,(te/(dyn.total*60))*100)+'%';}
     else{const tc=+el('targetCycles').value;el('sessionFill').style.width=tc>0?Math.min(100,(cycleCount/tc)*100)+'%':'0%';}
   }
   const fmt=s=>{s=Math.max(0,Math.floor(s));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 
   async function start(){
     if(running)return;
+    // Test di risonanza: senza fascia + codice paziente non ha senso (nulla da misurare/inviare).
+    if(document.querySelector('.tab.active').dataset.mode==='resonance'){
+      const rc = window.SendConsent ? SendConsent.code() : '';
+      if(!rc){ alert('Per il test di risonanza serve prima il codice paziente: aprilo dalla barra "Invio dei dati al medico" in cima all\'app.'); if(window.ConsentUI) ConsentUI.openModal(); return; }
+      if(!(window.HRV && HRV.isReady && HRV.isReady())){ alert('Per il test di risonanza collega prima una fascia cardio che invii gli intervalli RR (vedi indicatore "Intervalli RR: sì").'); return; }
+    }
     // VOCE: abilita e SBLOCCA subito il motore TTS, dentro il gesto del tap e
     // PRIMA dell'await su Audio.start(). Dopo un await iOS non considera più la
     // chiamata "iniziata dall'utente" e zittisce tutta la voce della sessione.
@@ -1297,13 +1366,21 @@ const App = (() => {
     mode=document.querySelector('.tab.active').dataset.mode;cycleCount=0;seqIdx=0;pausedAccum=0;
     if(mode==='dynamic'){dyn={start:+el('startRate').value,end:+el('endRate').value,step:+el('stepRate').value,
       stepInterval:+el('stepInterval').value,total:+el('totalDuration').value,rate:+el('startRate').value,lastStep:0};
-      seq=dynSeqForRate(dyn.rate);}else{seq=staticSeq();}
+      seq=dynSeqForRate(dyn.rate);}
+    else if(mode==='resonance'){const ladder=buildResLadder();
+      dyn={resonance:true,ladder,stepInterval:3,total:ladder.length*3,rate:ladder[0].rate,lastStep:0,
+        start:ladder[0].rate,end:ladder[ladder.length-1].rate};
+      seq=dynSeqForRate(dyn.rate);}
+    else{seq=staticSeq();}
     await Audio.start(el('ambientType').value);
     Audio.setAmbientEnabled(el('ambientOn').checked);
     Audio.setMasterVol(+el('ambientVol').value/100);
     running=true;paused=false;const now=performance.now();sessionStart=now;startPhase(now);btnState();
     document.body.dataset.running='1';   // WakeLock già acquisito nel gesto del tap (vedi sopra)
-    if(window.HRV)HRV.sessionStart(currentRate());              // avvia registrazione HRV
+    if(window.HRV){
+      if(mode==='resonance')HRV.resonanceStart({code:(window.SendConsent?SendConsent.code():''),ladder:dyn.ladder,blockMin:3});
+      else HRV.sessionStart(currentRate());                     // avvia registrazione HRV
+    }
     rafId=requestAnimationFrame(tick);
   }
   function pause(){if(!running)return;paused=!paused;const now=performance.now();if(window.HRV)HRV.setPaused(paused);
@@ -1311,7 +1388,7 @@ const App = (() => {
     else{const d=now-pausedAt;pausedAccum+=d;phaseStart+=d;startPhase(now);}
     el('btnPause').textContent=paused?'Riprendi':'Pausa';}
   function finish(){stop(true);el('phaseLabel').textContent='Completato';el('phaseLabel').style.color='var(--accent2)';}
-  function stop(keep){running=false;paused=false;document.body.dataset.running='0';if(window.HRV)HRV.sessionEnd();if(rafId)cancelAnimationFrame(rafId);Audio.stop();speechSynthesis.cancel();WakeLock.release();
+  function stop(keep){running=false;paused=false;document.body.dataset.running='0';if(window.HRV){if(mode==='resonance')HRV.resonanceEnd();else HRV.sessionEnd();}if(rafId)cancelAnimationFrame(rafId);Audio.stop();speechSynthesis.cancel();WakeLock.release();
     el('orb').style.transform='scale(1)';el('halo').style.opacity='0.15';el('halo').style.width='96px';el('halo').style.height='96px';el('orbCount').textContent='';
     if(!keep){el('phaseLabel').textContent='Pronto';el('phaseLabel').style.color='';}
     el('btnPause').textContent='Pausa';btnState();updateFreqDisplay();}
@@ -1321,15 +1398,21 @@ const App = (() => {
   function updateDynCalc(){const s=+el('startRate').value,en=+el('endRate').value,st=+el('stepRate').value;
     el('dynFromRate').textContent=s.toFixed(1);el('dynToRate').textContent=en.toFixed(1);
     el('dynSteps').textContent=st>0?Math.ceil(Math.abs(en-s)/st):0;}
+  function updateResCalc(){const c=el('resCalc');if(!c)return;
+    const ladder=buildResLadder(),mins=ladder.length*3;
+    const secs=ladder.map(x=>x.sec.toFixed(1).replace(/\.0$/,'').replace('.',',')).join(' · ');
+    const rlo=Math.min(...ladder.map(x=>x.rate)),rhi=Math.max(...ladder.map(x=>x.rate));
+    c.innerHTML=`<b>${ladder.length}</b> ritmi da 3 min · ~<b>${mins}</b> min totali<br>${secs} sec/lato &nbsp;(${rhi.toFixed(1)}–${rlo.toFixed(1)} atti/min)`;}
 
   /* ---------- PERSISTENZA IMPOSTAZIONI ---------- */
   const SKEY='respiroPacer.settings.v1';
-  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','ambientVol','voiceVol'];
+  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','resStart','resEnd','resStep','ambientVol','voiceVol'];
   const chkIds=['ambientOn','voiceOn'];
   function activateTab(m){
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===m));
     el('staticSettings').style.display=m==='static'?'block':'none';
     el('dynamicSettings').style.display=m==='dynamic'?'block':'none';
+    el('resonanceSettings').style.display=m==='resonance'?'block':'none';
   }
   function saveSettings(){
     const d={};
@@ -1353,6 +1436,7 @@ const App = (() => {
     el('btnStart').addEventListener('click',start);el('btnPause').addEventListener('click',pause);el('btnStop').addEventListener('click',()=>stop(false));
     ['inhale','holdFull','exhale','holdEmpty'].forEach(id=>el(id).addEventListener('input',updateFreqDisplay));
     ['startRate','endRate','stepRate'].forEach(id=>el(id).addEventListener('input',()=>{updateDynCalc();updateFreqDisplay();}));
+    ['resStart','resEnd','resStep'].forEach(id=>{const e=el(id);if(e)e.addEventListener('input',()=>{updateResCalc();updateFreqDisplay();});});
     el('ambientOn').addEventListener('change',e=>Audio.setAmbientEnabled(e.target.checked));
     el('ambientVol').addEventListener('input',e=>Audio.setMasterVol(+e.target.value/100));
     el('voiceOn').addEventListener('change',e=>{Voice.setEnabled(e.target.checked);if(e.target.checked)Voice.unlock();});
@@ -1363,7 +1447,7 @@ const App = (() => {
       catch(err){alert('File audio non valido: '+err.message);}}));
     [...valIds,...chkIds].forEach(id=>{const e=el(id);if(e)e.addEventListener('change',saveSettings);});
     el('voiceSelect').addEventListener('change',saveSettings);
-    updateDynCalc();updateFreqDisplay();
+    updateDynCalc();updateResCalc();updateFreqDisplay();
   }
   return{init, breathStateAt, currentRate};
 })();
@@ -1464,6 +1548,10 @@ const HRV = (() => {
   let testPhase = null;                       // 'tonic' | 'phasic' | null → etichetta ogni RR
   let consentMark = '';                       // traccia del consenso (es. "Sì · 2026-06-28T…")
   function setConsent(on){ consentMark = on ? ('Sì · '+new Date().toISOString()) : ''; }
+  // ---- Stato modalità Risonanza (sweep di frequenze, misura per blocco) ----
+  let resActive = false;                      // registrazione risonanza in corso
+  let resBlockIdx = 0;                        // indice del blocco/frequenza corrente
+  let resState = null;                        // {code, sessId, ladder, blockMin, blocks:[], best}
 
   function logEvent(msg){
     const elLog = el('hrvLog'); if(!elLog) return;
@@ -1629,7 +1717,8 @@ const HRV = (() => {
     while(wave.length && now - wave[0].t > WAVE_WINDOW_MS) wave.shift();
 
     if(capturing && !paused){
-      for(const v of incoming){ tcum += v; rr.push({tcum, rr: v, ph: testPhase}); }
+      const tag = resActive ? resBlockIdx : testPhase;   // in risonanza l'etichetta è l'indice del blocco
+      for(const v of incoming){ tcum += v; rr.push({tcum, rr: v, ph: tag}); }
     }
     renderLive();
   }
@@ -2531,13 +2620,176 @@ const HRV = (() => {
     return true;
   }
 
+  /* ======================= Modalità Risonanza ======================= */
+  // Sweep di frequenze respiratorie: ogni blocco (default 3 min) è una frequenza
+  // diversa. A ogni cambio si chiude il blocco appena finito — analisi VLF/LF/HF +
+  // foto dell'onda — e lo si invia al medico; a fine test la frequenza col picco
+  // LF più alto è la risonanza stimata. Pseudonimizzato: solo il codice paziente.
+  function fmtSec(step){ return step ? step.sec.toFixed(1).replace(/\.0$/,'').replace('.',',')+' s/lato' : ''; }
+  function resonanceStart(cfg){
+    cfg = cfg || {};
+    resState = { code: cfg.code || getCode(), sessId: 'RIS-'+Date.now().toString(36),
+                 ladder: cfg.ladder || [], blockMin: cfg.blockMin || 3, blocks: [], best: null };
+    resActive = true; resBlockIdx = 0;
+    rr = []; tcum = 0; paused = false; capturing = true;
+    cohRatio = null; cohPct = null; cohSum = 0; cohPctSum = 0; cohPctMax = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
+    sessionMeta = { start: new Date().toISOString(), breathRate: (resState.ladder[0]||{}).rate || 0, kind: 'risonanza' };
+    el('hrvResults').classList.remove('show');
+    showResonancePanel();
+    if(!connected) status('⚠️ Fascia non connessa: il test di risonanza parte ma senza HRV non misura nulla.', true);
+    else status('Test di risonanza — blocco 1/'+resState.ladder.length+' · '+fmtSec(resState.ladder[0])+'…');
+    updateCoherenceUI();
+  }
+  // Confine di blocco: chiude il blocco appena concluso e apre il successivo.
+  function resonanceStepBlock(){
+    if(!resActive) return;
+    if(resBlockIdx >= resState.ladder.length-1) return;   // già sull'ultima frequenza: la chiude resonanceEnd
+    closeCurrentBlock();
+    resBlockIdx++;
+    const step = resState.ladder[Math.min(resBlockIdx, resState.ladder.length-1)];
+    status('Test di risonanza — blocco '+(resBlockIdx+1)+'/'+resState.ladder.length+' · '+fmtSec(step)+'…');
+  }
+  // Fine test: chiude l'ultimo blocco, sceglie la risonanza (max LF) e invia il verdetto.
+  function resonanceEnd(){
+    if(!resActive) return;
+    closeCurrentBlock();
+    capturing = false; resActive = false;
+    let best = null;
+    for(const b of resState.blocks){ if(b.freq && (best===null || b.freq.lf > best.freq.lf)) best = b; }
+    resState.best = best;
+    renderResonanceSummary(resState);
+    sendResonanceVerdict(resState, best);
+    status('Test di risonanza completato: '+resState.blocks.length+' frequenze misurate.'+(best?' Risonanza ≈ '+fmtSec(best.step)+'.':''));
+  }
+  // Estrae gli RR del blocco corrente, li analizza, fotografa l'onda, salva e invia.
+  function closeCurrentBlock(){
+    if(!resState) return;
+    const idx = resBlockIdx;
+    const step = resState.ladder[Math.min(idx, resState.ladder.length-1)] || {sec:0, rate:0};
+    const series = rr.filter(o=>o.ph===idx);
+    const res = analyzeBlock(series);
+    const png = captureBlockPNG(series, step);
+    const block = { idx, sec: step.sec, rate: step.rate, step,
+                    freq: res.freq, time: res.time, quality: res.quality,
+                    nBeats: series.length, png };
+    resState.blocks.push(block);
+    appendResonanceRow(block);
+    uploadRisonanzaBlock(block, resState);
+  }
+  // Analisi di un singolo blocco, indipendente dallo stato globale (tcum/sessionMeta).
+  function analyzeBlock(series){
+    const filt = filterSeries(series);
+    const kept = filt.filter(o=>o.kept);
+    const nn = kept.map(o=>o.rr);
+    const time = nn.length>=4 ? timeDomain(nn) : null;
+    const freq = nn.length>=30 ? freqDomain(nn) : null;
+    const total = filt.length, keptN = kept.length;
+    const durS = series.length ? Math.round((series[series.length-1].tcum - series[0].tcum + series[0].rr)/1000) : 0;
+    return { time, freq, durationS: durS,
+      quality: { total, kept: keptN, excluded: total-keptN, keptPct: total>0?keptN/total*100:0,
+                 reliableFreq: total>0 ? (keptN/total)>=0.95 : false } };
+  }
+  // Foto "da referto" dell'onda del blocco intero: ricostruita dagli RR grezzi (non
+  // dall'onda live, che mostra solo 60 s) su una tela dedicata → PNG data URL.
+  function captureBlockPNG(series, step){
+    try{
+      if(!series || series.length < 4) return '';
+      const W=760, H=240, pad=36;
+      const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+      const c = cv.getContext('2d');
+      c.fillStyle = '#ffffff'; c.fillRect(0,0,W,H);
+      const t0 = series[0].tcum - series[0].rr;
+      const pts = series.map(o=>({ t:(o.tcum - t0), hr: 60000/o.rr }));
+      const T1 = pts[pts.length-1].t || 1;
+      const sm = (window.smoothHRcurve && pts.length>=3) ? window.smoothHRcurve(pts, 0, T1, 4) : pts;
+      let mn=Infinity, mx=-Infinity; for(const p of sm){ if(p.hr<mn)mn=p.hr; if(p.hr>mx)mx=p.hr; }
+      if(!isFinite(mn)||!isFinite(mx)) return '';
+      let span = mx-mn; if(span<6){ const mid=(mn+mx)/2; mn=mid-3; mx=mid+3; span=6; }
+      mn -= span*0.12; mx += span*0.12; span = mx-mn;
+      const xFor = t => pad + (t/T1)*(W-2*pad);
+      const yFor = hr => H-pad - ((hr-mn)/span)*(H-2*pad);
+      c.strokeStyle='#e5eef0'; c.lineWidth=1; c.strokeRect(pad, pad, W-2*pad, H-2*pad);
+      c.beginPath(); c.strokeStyle='#1B549B'; c.lineWidth=2;
+      sm.forEach((p,i)=>{ const x=xFor(p.t), y=yFor(p.hr); i?c.lineTo(x,y):c.moveTo(x,y); });
+      c.stroke();
+      c.fillStyle='#545E62'; c.font='14px system-ui, sans-serif';
+      c.fillText((step?fmtSec(step):'')+'  ·  '+(step?step.rate.toFixed(1):'?')+' atti/min', pad, 22);
+      c.font='11px system-ui, sans-serif';
+      c.fillText(mx.toFixed(0)+' bpm', 3, pad+2); c.fillText(mn.toFixed(0)+' bpm', 3, H-pad+4);
+      c.fillText('0 s', pad, H-10); c.fillText(Math.round(T1/1000)+' s', W-pad-30, H-10);
+      return cv.toDataURL('image/png');
+    }catch(e){ return ''; }
+  }
+  /* ---- UI riepilogo risonanza ---- */
+  function showResonancePanel(){
+    const p = el('resResults'); if(!p) return;
+    el('resTableBody').innerHTML = '';
+    el('resVerdict').textContent = 'Test in corso… i risultati compaiono a ogni cambio di frequenza.';
+    p.style.display = '';
+    p.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+  function appendResonanceRow(b){
+    const tb = el('resTableBody'); if(!tb) return;
+    const f = b.freq || {};
+    const g = (v,d)=>(v==null||!isFinite(v))?'—':v.toFixed(d==null?0:d);
+    const tr = document.createElement('tr'); tr.dataset.idx = b.idx;
+    tr.innerHTML = '<td>'+(b.idx+1)+'</td><td>'+g(b.sec,1)+'</td><td>'+g(b.rate,1)+'</td><td>'+g(f.lf,0)+
+      '</td><td>'+(f.lfPeakHz?f.lfPeakHz.toFixed(3):'—')+'</td><td>'+g(f.hf,0)+'</td><td>'+g(f.lfhf,2)+'</td><td>'+b.nBeats+'</td>';
+    tb.appendChild(tr);
+  }
+  function renderResonanceSummary(st){
+    const best = st.best;
+    if(best){ el('resTableBody').querySelectorAll('tr').forEach(r=>{ r.classList.toggle('best', +r.dataset.idx===best.idx); }); }
+    el('resVerdict').innerHTML = best
+      ? 'Frequenza di risonanza stimata: <b>'+best.sec.toFixed(1).replace('.',',')+' s/lato</b> ('+best.rate.toFixed(1)+' atti/min) — picco LF più alto ('+(best.freq?Math.round(best.freq.lf):'?')+' ms²).'
+      : 'Nessun blocco con dati sufficienti per stimare la risonanza (servono ≥30 battiti utili per frequenza).';
+  }
+  /* ---- Invio al medico (una riga + foto per blocco; verdetto a fine test) ---- */
+  async function uploadRisonanza(fields){
+    if(!DOCTOR_UPLOAD_URL) return false;
+    const body = new URLSearchParams(Object.assign({ kind:'risonanza', consent:'1' }, fields));
+    await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
+    return true;
+  }
+  async function uploadRisonanzaBlock(block, st){
+    if(!DOCTOR_UPLOAD_URL || !st.code || !SendConsent.given()) return;
+    const f = block.freq || {}, t = block.time || {};
+    const num=(v,d)=>(v==null||!isFinite(v))?'':(d!=null?v.toFixed(d):''+Math.round(v)).replace('.',',');
+    const d=new Date(), pad=n=>String(n).padStart(2,'0');
+    const local=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    try{
+      await uploadRisonanza({
+        code: st.code, ts: d.toISOString(), local, sess: st.sessId,
+        blocco: block.idx+1, n_blocchi: st.ladder.length,
+        sec_lato: num(block.sec,1), atti_min: num(block.rate,1),
+        lf: num(f.lf,0), lf_picco_hz: f.lfPeakHz?f.lfPeakHz.toFixed(3).replace('.',','):'',
+        hf: num(f.hf,0), vlf: num(f.vlf,0), lf_hf: num(f.lfhf,2),
+        lf_pct: num(f.lfPct,1), hf_pct: num(f.hfPct,1),
+        fc_media: num(t&&t.meanHR,0), rmssd: num(t&&t.rmssd,1),
+        battiti: block.nBeats, png: block.png || ''
+      });
+    }catch(e){}
+  }
+  async function sendResonanceVerdict(st, best){
+    if(!DOCTOR_UPLOAD_URL || !st.code || !SendConsent.given()) return;
+    const num=(v,d)=>(v==null||!isFinite(v))?'':(d!=null?v.toFixed(d):''+Math.round(v)).replace('.',',');
+    try{
+      await uploadRisonanza({
+        esito:'1', code: st.code, ts:new Date().toISOString(), sess: st.sessId, n_blocchi: st.ladder.length,
+        ris_sec_lato: best?num(best.sec,1):'', ris_atti_min: best?num(best.rate,1):'',
+        ris_lf: (best&&best.freq)?num(best.freq.lf,0):'',
+        ris_lf_picco_hz: (best&&best.freq&&best.freq.lfPeakHz)?best.freq.lfPeakHz.toFixed(3).replace('.',','):''
+      });
+    }catch(e){}
+  }
+
   function init(){
     el('hrvConnect').addEventListener('click', connect);
     el('hrvDisconnect').addEventListener('click', disconnect);
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v62';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v63';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -2548,6 +2800,7 @@ const HRV = (() => {
            isReady, beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
+           resonanceStart, resonanceStepBlock, resonanceEnd,
            liveRR: ()=> rr.map(o=>o.rr) };
 })();
 window.HRV = HRV;

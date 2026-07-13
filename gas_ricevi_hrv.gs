@@ -87,6 +87,43 @@ function doPost(e) {
       return _json({ ok: true, kind: 'readiness' });
     }
 
+    // ── Test della FREQUENZA DI RISONANZA ──
+    // Sweep di frequenze respiratorie: una riga per frequenza sul foglio
+    // "risonanza_pazienti" + la foto PNG dell'onda di quella frequenza salvata come
+    // file nella cartella. A fine test una riga di esito su "risonanza_esiti" con la
+    // frequenza di risonanza (picco LF). Tutto pseudonimizzato: solo il codice.
+    if (kind === 'risonanza') {
+      if (p.esito === '1') {
+        _sheetRow(folder, 'risonanza_esiti',
+          ['data e ora', 'codice', 'sessione', 'n frequenze',
+           'risonanza sec/lato', 'risonanza atti/min', 'LF picco (ms2)', 'LF picco (Hz)', 'ts ISO'],
+          [ts, code, p.sess || '', p.n_blocchi || '',
+           p.ris_sec_lato || '', p.ris_atti_min || '', p.ris_lf || '', p.ris_lf_picco_hz || '', ts]);
+        return _json({ ok: true, kind: 'risonanza', esito: true });
+      }
+      // riga per singola frequenza (blocco)
+      _sheetRow(folder, 'risonanza_pazienti',
+        ['data e ora', 'codice', 'sessione', 'blocco', 'n frequenze', 'sec/lato', 'atti/min',
+         'LF (ms2)', 'LF picco (Hz)', 'HF (ms2)', 'VLF (ms2)', 'LF/HF', 'LF%', 'HF%',
+         'FC media', 'RMSSD', 'battiti', 'ts ISO'],
+        [p.local || ts, code, p.sess || '', p.blocco || '', p.n_blocchi || '',
+         p.sec_lato || '', p.atti_min || '', p.lf || '', p.lf_picco_hz || '', p.hf || '',
+         p.vlf || '', p.lf_hf || '', p.lf_pct || '', p.hf_pct || '',
+         p.fc_media || '', p.rmssd || '', p.battiti || '', ts]);
+      // foto "occhiometrica" dell'onda del blocco (data URL PNG → file nella cartella)
+      if (p.png && p.png.indexOf('data:image') === 0) {
+        try {
+          var imgBytes = Utilities.base64Decode(p.png.split(',')[1]);
+          var imgName = ('risonanza_' + code + '_' + (p.sess || '') + '_blocco' + (p.blocco || '') + '.png')
+            .replace(/[^A-Za-z0-9_.\-]/g, '_');
+          var imgBlob = Utilities.newBlob(imgBytes, 'image/png', imgName);
+          var imgFile = folder.createFile(imgBlob);
+          imgFile.setDescription('Risonanza · paziente ' + code + ' · ' + (p.sec_lato || '') + ' s/lato · ' + ts);
+        } catch (imgErr) {}
+      }
+      return _json({ ok: true, kind: 'risonanza' });
+    }
+
     // ── Test HRV clinico: un file CSV per test (comportamento originale) ──
     var csv     = p.data    || '';
     var fname   = (p.fname  || 'test_HRV.csv').replace(/[^A-Za-z0-9_.\-]/g, '_');
@@ -104,8 +141,109 @@ function doPost(e) {
   }
 }
 
-function doGet() {                       // verifica rapida che l'app sia viva
-  return _json({ ok: true, service: 'ricevi-hrv' });
+function doGet(e) {
+  var p = (e && e.parameter) ? e.parameter : {};
+
+  // ── Attivazione licenza (JSONP): l'app chiede se il codice è valido e libero su
+  //    questo dispositivo. JSONP perché Apps Script non espone header CORS: così il
+  //    browser (anche Bluefy su iPhone) legge la risposta senza problemi.
+  if (p.kind === 'activate') {
+    var result = _activate(p.code || '', p.device || '');
+    if (p.callback) {
+      return ContentService
+        .createTextOutput(p.callback + '(' + JSON.stringify(result) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return _json(result);
+  }
+
+  return _json({ ok: true, service: 'ricevi-hrv' });   // verifica rapida che l'app sia viva
+}
+
+// ─────────────────────── ATTIVAZIONE / LICENZE ───────────────────────
+// Foglio "licenze" nella cartella HRV pazienti. Una riga per paziente, preparata dal
+// medico. Colonne: codice · pseudonimo · stato · max_dispositivi · dispositivi ·
+// data_attivazione · ultimo_accesso.  Il medico compila codice/pseudonimo/stato
+// (max_dispositivi opzionale, default 1); le altre si riempiono da sole.
+//  • stato "attivo" (o vuoto) = utilizzabile · "revocato"/"sospeso" = bloccato
+//  • primo dispositivo che si presenta → viene legato al codice
+//  • un dispositivo diverso, oltre il limite → rifiutato (niente condivisione)
+// Gestione: si modifica il foglio a mano (svuotare "dispositivi" = reset per nuovo
+// telefono; stato "revocato" = chiudere l'accesso).
+function _activate(code, device) {
+  code = String(code || '').trim().toUpperCase();
+  device = String(device || '').trim();
+  if (!code)   return { ok: false, reason: 'nocode',   error: 'Codice mancante.' };
+  if (!device) return { ok: false, reason: 'nodevice', error: 'Dispositivo non identificato.' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) {}
+  try {
+    var folder = DriveApp.getFolderById(FOLDER_ID);
+    var ss = _openSheet(folder, 'licenze',
+      ['codice', 'pseudonimo', 'stato', 'max_dispositivi', 'dispositivi', 'data_attivazione', 'ultimo_accesso']);
+    var sheet = ss.getActiveSheet();
+    var data = sheet.getDataRange().getValues();
+    var C = 0, STATO = 2, MAX = 3, DISP = 4, DATA = 5, LAST = 6;   // indici colonna (0-based)
+
+    for (var r = 1; r < data.length; r++) {
+      if (String(data[r][C]).trim().toUpperCase() !== code) continue;
+
+      var stato = String(data[r][STATO] || 'attivo').trim().toLowerCase();
+      if (stato === 'revocato' || stato === 'sospeso' || stato === 'bloccato')
+        return { ok: false, reason: 'revoked', error: 'Codice non più attivo. Contatta il medico.' };
+
+      var maxDev = parseInt(data[r][MAX], 10); if (!maxDev || maxDev < 1) maxDev = 1;
+      var devs = String(data[r][DISP] || '').split(',').map(function (x) { return x.trim(); }).filter(String);
+      var now = new Date();
+
+      if (devs.indexOf(device) >= 0) {                    // già legato a questo dispositivo → ok
+        sheet.getRange(r + 1, LAST + 1).setValue(now);
+        return { ok: true, token: _token(code, device), pseudonimo: data[r][1] };
+      }
+      if (devs.length < maxDev) {                         // c'è ancora posto → lega questo dispositivo
+        devs.push(device);
+        sheet.getRange(r + 1, DISP + 1).setValue(devs.join(','));
+        if (!data[r][DATA]) sheet.getRange(r + 1, DATA + 1).setValue(now);
+        sheet.getRange(r + 1, LAST + 1).setValue(now);
+        return { ok: true, token: _token(code, device), pseudonimo: data[r][1] };
+      }
+      return { ok: false, reason: 'otherdevice', error: 'Codice già attivato su un altro dispositivo. Contatta il medico.' };
+    }
+    return { ok: false, reason: 'notfound', error: 'Codice non valido.' };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+// Prova (firma) che il server ha detto sì. Non è una barriera crittografica: la
+// protezione reale è il legame codice→dispositivo nel foglio, verificato dal server.
+function _token(code, device) {
+  var secret = PropertiesService.getScriptProperties().getProperty('LICENSE_SECRET') || 'respiro-pacer';
+  var bytes = Utilities.computeHmacSha256Signature(code + '|' + device, secret);
+  return Utilities.base64EncodeWebSafe(bytes);
+}
+
+// Da lanciare UNA volta dall'editor Apps Script (menu ▶ Esegui) per creare il foglio
+// "licenze" già pronto con le intestazioni. Poi apri il foglio nella cartella HRV
+// pazienti e aggiungi una riga per ogni paziente: codice, pseudonimo, stato "attivo".
+function creaFoglioLicenze() {
+  var folder = DriveApp.getFolderById(FOLDER_ID);
+  _openSheet(folder, 'licenze',
+    ['codice', 'pseudonimo', 'stato', 'max_dispositivi', 'dispositivi', 'data_attivazione', 'ultimo_accesso']);
+}
+
+// Apre (o crea) un foglio dedicato nella cartella, con intestazione se nuovo.
+function _openSheet(folder, name, header) {
+  var it = folder.getFilesByName(name), ss;
+  if (it.hasNext()) { ss = SpreadsheetApp.open(it.next()); }
+  else {
+    ss = SpreadsheetApp.create(name);
+    var f = DriveApp.getFileById(ss.getId());
+    folder.addFile(f); DriveApp.getRootFolder().removeFile(f);
+    ss.getActiveSheet().appendRow(header);
+  }
+  return ss;
 }
 
 // Accoda una riga a un foglio dedicato (creato al volo nella stessa cartella, con
