@@ -101,15 +101,17 @@ function doPost(e) {
            p.ris_sec_lato || '', p.ris_atti_min || '', p.ris_lf || '', p.ris_lf_picco_hz || '', ts]);
         return _json({ ok: true, kind: 'risonanza', esito: true });
       }
-      // riga per singola frequenza (blocco)
+      // riga per singola frequenza (blocco). L'ultima colonna 'rr_grezzi (ms)' contiene
+      // gli RR grezzi del blocco (CSV in una cella): serve a rigenerare foto/analisi dal
+      // PC senza ripetere il test. _sheetRow aggiunge da sola la colonna ai fogli già esistenti.
       _sheetRow(folder, 'risonanza_pazienti',
         ['data e ora', 'codice', 'sessione', 'blocco', 'n frequenze', 'sec/lato', 'atti/min',
          'LF (ms2)', 'LF picco (Hz)', 'HF (ms2)', 'VLF (ms2)', 'LF/HF', 'LF%', 'HF%',
-         'FC media', 'RMSSD', 'battiti', 'ts ISO'],
+         'FC media', 'RMSSD', 'battiti', 'ts ISO', 'rr_grezzi (ms)'],
         [p.local || ts, code, p.sess || '', p.blocco || '', p.n_blocchi || '',
          p.sec_lato || '', p.atti_min || '', p.lf || '', p.lf_picco_hz || '', p.hf || '',
          p.vlf || '', p.lf_hf || '', p.lf_pct || '', p.hf_pct || '',
-         p.fc_media || '', p.rmssd || '', p.battiti || '', ts]);
+         p.fc_media || '', p.rmssd || '', p.battiti || '', ts, p.rr || '']);
       // foto "occhiometrica" dell'onda del blocco (data URL PNG → file nella cartella)
       if (p.png && p.png.indexOf('data:image') === 0) {
         try {

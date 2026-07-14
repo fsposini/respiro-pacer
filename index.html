@@ -1484,6 +1484,11 @@ const HRV = (() => {
   // funzionano su entrambi i motori.
   const HR_SERVICE = 'heart_rate', HR_CHAR = 'heart_rate_measurement';
   const STORE = 'respiroPacer.hrv.v1';
+  // Storico locale del test di risonanza: per ogni sessione, gli RR GREZZI di ogni
+  // blocco (+ metriche leggere). Serve a rigenerare foto/analisi in futuro senza
+  // dover ripetere il test. Copia di sicurezza locale: gli stessi RR vengono anche
+  // inviati (pseudonimizzati) al foglio del medico. Solo dato clinico + codice, nessun nome.
+  const RIS_STORE = 'respiroPacer.risonanza.v1';
   // Codice paziente condiviso con gli altri moduli (stesso profilo locale).
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';
   function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
@@ -1822,7 +1827,12 @@ const HRV = (() => {
     const now = performance.now(), t0 = now - WAVE_WINDOW_MS;
     const padL = 42*dpr, padR = 10*dpr, padT = 12*dpr, padB = 16*dpr;
     const pw = W-padL-padR, ph = H-padT-padB;
-    const xFor = t => padL + ((t - t0) / WAVE_WINDOW_MS) * pw;
+    // Il punto "vivo" (ora) non arriva al bordo destro: si ferma a ~3/4 della larghezza,
+    // così l'onda ha respiro a destra invece di toccare il margine dello schermo.
+    // Un'unica funzione posiziona TUTTO in orizzontale (FC, respiro guida, punto), quindi
+    // resta tutto allineato. La storia (60 s) è compressa nella parte sinistra.
+    const HEAD_FRAC = 0.78;
+    const xFor = t => padL + ((t - t0) / WAVE_WINDOW_MS) * pw * HEAD_FRAC;
 
     // Aggiorna curva del respiro guida (solo durante la sessione)
     const running = document.body.dataset.running === '1';
@@ -2669,12 +2679,38 @@ const HRV = (() => {
     const series = rr.filter(o=>o.ph===idx);
     const res = analyzeBlock(series);
     const png = captureBlockPNG(series, step);
+    const rrRaw = series.map(o=>o.rr);   // RR GREZZI del blocco (ms), NON filtrati: sono il dato da conservare
     const block = { idx, sec: step.sec, rate: step.rate, step,
                     freq: res.freq, time: res.time, quality: res.quality,
-                    nBeats: series.length, png };
+                    nBeats: series.length, rrRaw, png };
     resState.blocks.push(block);
     appendResonanceRow(block);
+    saveResonanceLocal(resState);        // copia locale incrementale (sopravvive a interruzioni)
     uploadRisonanzaBlock(block, resState);
+  }
+  // Salva/aggiorna la sessione di risonanza corrente nello storico locale, con gli RR
+  // GREZZI di ogni blocco. Niente PNG (pesante: si rigenera dagli RR). Incrementale: a
+  // ogni blocco riscrive la sessione, così i blocchi già chiusi restano anche se il test
+  // si interrompe. Best-effort: se la memoria è piena non blocca il test.
+  function saveResonanceLocal(st){
+    if(!st) return;
+    try{
+      let list = []; try{ list = JSON.parse(localStorage.getItem(RIS_STORE)) || []; }catch(e){ list = []; }
+      const lite = {
+        sessId: st.sessId, code: st.code, start: (sessionMeta && sessionMeta.start) || new Date().toISOString(),
+        nLadder: st.ladder.length,
+        blocks: st.blocks.map(b=>{
+          let freqLite = null; if(b.freq){ freqLite = Object.assign({}, b.freq); delete freqLite.spectrum; }
+          return { idx:b.idx, sec:b.sec, rate:b.rate, freq:freqLite, time:b.time, quality:b.quality, nBeats:b.nBeats, rrRaw:b.rrRaw };
+        })
+      };
+      const i = list.findIndex(s=>s.sessId===st.sessId);
+      if(i>=0) list[i] = lite; else list.push(lite);
+      if(list.length > 20) list = list.slice(-20);   // tiene le ultime 20 sessioni
+      localStorage.setItem(RIS_STORE, JSON.stringify(list));
+    }catch(e){
+      status('Storico risonanza non salvato in locale (memoria piena). I dati sono comunque inviati al medico.', true);
+    }
   }
   // Analisi di un singolo blocco, indipendente dallo stato globale (tcum/sessionMeta).
   function analyzeBlock(series){
@@ -2701,7 +2737,16 @@ const HRV = (() => {
       const t0 = series[0].tcum - series[0].rr;
       const pts = series.map(o=>({ t:(o.tcum - t0), hr: 60000/o.rr }));
       const T1 = pts[pts.length-1].t || 1;
-      const sm = (window.smoothHRcurve && pts.length>=3) ? window.smoothHRcurve(pts, 0, T1, 4) : pts;
+      // Stesso trattamento SOLO VISIVO dell'onda live (drawWave): prima si tolgono
+      // gli ectopici dalla curva (declutterHR), POI si liscia. Senza questo passo un
+      // singolo battito ectopico deforma la sinusoide e, soprattutto, fa esplodere la
+      // scala verticale automatica (mn/mx), schiacciando l'onda reale: le foto dei
+      // 3 minuti diventano inconfrontabili tra una frequenza e l'altra. L'ectopico
+      // resta comunque visibile come puntino rosso. NB: qui è solo la FOTO; l'analisi
+      // in frequenza del blocco (analyzeBlock) parte dagli RR grezzi e non passa di qui.
+      const dc = (window.declutterHR) ? window.declutterHR(pts) : { clean: pts, bad: [] };
+      const cpts = dc.clean, ectT = dc.bad || [];
+      const sm = (window.smoothHRcurve && cpts.length>=3) ? window.smoothHRcurve(cpts, 0, T1, 4) : cpts;
       let mn=Infinity, mx=-Infinity; for(const p of sm){ if(p.hr<mn)mn=p.hr; if(p.hr>mx)mx=p.hr; }
       if(!isFinite(mn)||!isFinite(mx)) return '';
       let span = mx-mn; if(span<6){ const mid=(mn+mx)/2; mn=mid-3; mx=mid+3; span=6; }
@@ -2712,6 +2757,16 @@ const HRV = (() => {
       c.beginPath(); c.strokeStyle='#1B549B'; c.lineWidth=2;
       sm.forEach((p,i)=>{ const x=xFor(p.t), y=yFor(p.hr); i?c.lineTo(x,y):c.moveTo(x,y); });
       c.stroke();
+      // Marcatori ectopici (rossi, come nell'onda live): appoggiati sulla curva pulita,
+      // nel punto temporale dell'anomalia — segnano CHE e DOVE senza deformare l'onda.
+      if(ectT.length && sm.length){
+        c.fillStyle='#ff5a5a';
+        for(const bt of ectT){
+          let best=sm[0], bd=Infinity;
+          for(const s of sm){ const d=Math.abs(s.t-bt); if(d<bd){ bd=d; best=s; } }
+          c.beginPath(); c.arc(xFor(bt), yFor(best.hr), 3.2, 0, Math.PI*2); c.fill();
+        }
+      }
       c.fillStyle='#545E62'; c.font='14px system-ui, sans-serif';
       c.fillText((step?fmtSec(step):'')+'  ·  '+(step?step.rate.toFixed(1):'?')+' atti/min', pad, 22);
       c.font='11px system-ui, sans-serif';
@@ -2766,7 +2821,8 @@ const HRV = (() => {
         hf: num(f.hf,0), vlf: num(f.vlf,0), lf_hf: num(f.lfhf,2),
         lf_pct: num(f.lfPct,1), hf_pct: num(f.hfPct,1),
         fc_media: num(t&&t.meanHR,0), rmssd: num(t&&t.rmssd,1),
-        battiti: block.nBeats, png: block.png || ''
+        battiti: block.nBeats, png: block.png || '',
+        rr: (block.rrRaw && block.rrRaw.length) ? block.rrRaw.join(',') : ''   // RR GREZZI del blocco (ms), per rigenerare foto/analisi
       });
     }catch(e){}
   }
@@ -2789,7 +2845,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v63';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v64';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
