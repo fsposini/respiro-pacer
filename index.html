@@ -128,6 +128,18 @@
   .freq-badge .num{font-size:2.6rem;font-weight:200;color:var(--accent2);line-height:1;font-variant-numeric:tabular-nums}
   .freq-badge .lab{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
   .freq-badge .lab b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+  /* Ritmo attuale in secondi: nelle modalità Dinamica e Risonanza cambia da solo,
+     e durante la prova è il dato che serve davvero (più degli atti al minuto).
+     Deve leggersi a colpo d'occhio, anche da lontano. */
+  .rhythm{width:100%;max-width:300px;text-align:center;background:var(--bg);border:1px solid var(--line);
+    border-radius:12px;padding:9px 12px;margin:2px 0 8px}
+  .rhythm .rh-lbl{display:block;font-size:.6rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent)}
+  .rhythm .rh-val{display:block;font-size:1.02rem;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+  .rhythm .rh-val b{color:var(--accent2);font-size:1.28rem;font-weight:700}
+  .rhythm .rh-val .sep{color:var(--muted);margin:0 5px;font-weight:400}
+  .rhythm .rh-hold{display:block;font-size:.68rem;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+  .rhythm .rh-hold[hidden],.rhythm .rh-next[hidden]{display:none}
+  .rhythm .rh-next{display:block;font-size:.68rem;color:var(--hold);margin-top:4px;font-variant-numeric:tabular-nums;letter-spacing:.3px}
   .phase-label{font-size:1.25rem;font-weight:300;letter-spacing:3px;text-transform:uppercase;height:30px;transition:color .3s}
   .breath-wrap{position:relative;width:230px;height:230px;display:flex;align-items:center;justify-content:center;margin:6px 0}
   .orb{width:84px;height:84px;border-radius:50%;
@@ -159,6 +171,18 @@
   .btn-stop{background:transparent;color:var(--danger);border:1px solid var(--danger)}
   button:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
 
+  /* ---- Tasti: un solo stile in tutta l'app ----
+     Fino a qui .btn non aveva uno stile di base e i tasti "Avvia…" uscivano con
+     l'aspetto grezzo del sistema. Ora tutti parlano la stessa lingua del pacer:
+     azione principale = gradiente teal (come "Avvia"), secondaria = .ghost con
+     contorno, rosso solo per fermare. Le regole più specifiche (consenso,
+     attivazione, chip della fotocamera) restano valide e vincono su questa. */
+  .btn{display:inline-block;border:1px solid transparent;cursor:pointer;font-family:inherit;
+    font-size:.86rem;font-weight:700;letter-spacing:.3px;padding:11px 22px;border-radius:10px;
+    transition:.2s;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:600}
+
   .vol-field{margin-top:9px}
   .vol-field label{font-size:.74rem;color:var(--muted)}
   .hint{font-size:.68rem;color:var(--muted);margin-top:7px;line-height:1.45}
@@ -171,9 +195,15 @@
   footer{margin-top:14px;color:var(--muted);font-size:.66rem;text-align:center;opacity:.65}
 
   /* ---------- HRV ---------- */
-  .hrv-panel{width:100%;max-width:1180px;margin-top:14px;background:linear-gradient(180deg,var(--panel),var(--bg2));
+  .hrv-panel,.conn-card{width:100%;max-width:1180px;margin-top:14px;background:linear-gradient(180deg,var(--panel),var(--bg2));
     border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
-  .hrv-panel h2{font-size:.82rem;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  .conn-card{margin-top:0}
+  .hrv-panel h2,.conn-card h2{font-size:.82rem;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  /* Connetti fascia: è l'azione principale della schermata, non un tasto qualsiasi */
+  .hrv-btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;
+    color:#06222a;font-size:.86rem;font-weight:700;padding:11px 20px}
+  .hrv-btn.primary:hover{color:#06222a}
+  .hrv-btn.primary:disabled{opacity:.45}
   .hrv-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .hrv-conn{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .hrv-dot{width:10px;height:10px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px rgba(224,106,106,.6);transition:background .3s}
@@ -243,6 +273,60 @@
   .hrv-diag-row{margin:8px 0 4px}
   .hrv-log{font-family:ui-monospace,Consolas,monospace;font-size:.64rem;line-height:1.55;background:var(--bg);
     border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:130px;overflow:auto;white-space:pre-wrap}
+
+  /* ================== HOME E SCHERMATE ==================
+     L'app si apre sulla Home: tasto grande per agganciare la fascia, alternativa
+     con fotocamera per chi non ce l'ha, e menu delle quattro attività.
+     Ogni attività è una schermata a sé: il body porta data-screen="…" e resta
+     visibile solo il blocco con lo stesso data-feat (l'attributo accetta più
+     schermate separate da spazio). Le regole qui sotto NASCONDONO soltanto: così
+     ogni blocco conserva il suo display naturale (grid, block, .show) quando tocca a lui. */
+  body[data-screen="coherence"] [data-feat]:not([data-feat~="coherence"]),
+  body[data-screen="cam"]       [data-feat]:not([data-feat~="cam"]),
+  body[data-screen="morning"]   [data-feat]:not([data-feat~="morning"]),
+  body[data-screen="test"]      [data-feat]:not([data-feat~="test"]),
+  body[data-screen="alpha"]     [data-feat]:not([data-feat~="alpha"]){display:none!important}
+  body[data-screen="home"] .layout,
+  body[data-screen="home"] .conn-card,
+  body[data-screen="home"] .hrv-panel{display:none!important}
+  /* Sulle schermate dei singoli test il pannello avvolge una sola scheda:
+     senza cornice, per non avere due bordi uno dentro l'altro. */
+  body[data-screen="cam"] .hrv-panel,
+  body[data-screen="morning"] .hrv-panel,
+  body[data-screen="test"] .hrv-panel,
+  body[data-screen="alpha"] .hrv-panel{background:none;border:none;box-shadow:none;padding:0;margin-top:0}
+
+  .back-home{display:block;width:100%;max-width:1180px;margin:0 auto 12px;text-align:left;cursor:pointer;
+    font-family:inherit;font-size:.86rem;font-weight:600;padding:11px 15px;border-radius:10px;
+    border:1px solid var(--line);background:var(--panel);color:var(--text)}
+  .back-home:active{transform:translateY(1px)}
+  body[data-screen="home"] .back-home{display:none}
+
+  #homeScreen{display:none;width:100%;max-width:560px;margin:0 auto}
+  body[data-screen="home"] #homeScreen{display:block}
+  .home-hero{display:flex;align-items:center;gap:15px;width:100%;text-align:left;cursor:pointer;font-family:inherit;
+    padding:20px 18px;border-radius:18px;border:1px solid transparent;box-shadow:var(--shadow);
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
+  .home-hero .hh-ico{font-size:2rem;flex:0 0 auto;line-height:1}
+  .home-hero b{display:block;font-size:1.14rem;font-weight:800;letter-spacing:.2px}
+  .home-hero i{display:block;font-style:normal;font-size:.79rem;margin-top:3px;line-height:1.4;opacity:.78}
+  .home-alt{display:block;width:100%;margin-top:10px;padding:13px 15px;border-radius:12px;cursor:pointer;
+    font-family:inherit;font-size:.82rem;line-height:1.45;text-align:left;
+    border:1px dashed var(--line);background:transparent;color:var(--muted)}
+  .home-alt b{display:block;margin-top:3px;color:var(--accent);font-size:.86rem}
+  .home-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--accent);
+    font-weight:700;margin:22px 0 9px}
+  /* Due colonne anche sul telefono: la Home deve stare in una schermata, senza scorrere */
+  .home-menu{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:340px){.home-menu{grid-template-columns:1fr}}
+  .home-tile{display:block;width:100%;text-align:left;cursor:pointer;font-family:inherit;padding:15px 14px;
+    border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);color:var(--text);
+    background:linear-gradient(180deg,var(--panel),var(--bg2))}
+  .home-tile .ht-ico{display:block;font-size:1.35rem;line-height:1;margin-bottom:7px}
+  .home-tile b{display:block;font-size:.92rem;font-weight:700}
+  .home-tile i{display:block;font-style:normal;font-size:.72rem;color:var(--muted);margin-top:3px;line-height:1.4}
+  .home-tile:active,.home-hero:active,.home-alt:active{transform:translateY(1px)}
+  .home-foot{font-size:.72rem;color:var(--muted);text-align:center;margin-top:20px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -293,7 +377,59 @@
   </div>
 </div>
 
-<div class="layout">
+<!-- Ritorno alla Home: presente su ogni schermata, nascosto sulla Home stessa. -->
+<button type="button" id="backHome" class="back-home">← Home</button>
+
+<!-- HOME: prima cosa che vede il paziente. In alto la cosa da fare per prima
+     (agganciare la fascia), poi l'alternativa senza fascia, poi il menu delle attività. -->
+<div id="homeScreen">
+  <button type="button" class="home-hero" data-go="coherence">
+    <span class="hh-ico">❤️</span>
+    <span><b>Aggancia la fascia cardio</b><i>Collega la fascia e inizia la respirazione di coerenza</i></span>
+  </button>
+  <button type="button" class="home-alt" data-go="cam">
+    Non hai la fascia cardio?
+    <b>Fai la respirazione di coerenza con la fotocamera →</b>
+  </button>
+
+  <div class="home-lbl">Le tue attività</div>
+  <div class="home-menu">
+    <button type="button" class="home-tile" data-go="morning">
+      <span class="ht-ico">🌅</span><b>Test del mattino</b><i>Readiness, 1 minuto con la fascia</i>
+    </button>
+    <button type="button" class="home-tile" data-go="test">
+      <span class="ht-ico">🩺</span><b>Test tonico/fasico</b><i>Valutazione clinica, 5′ + 1′</i>
+    </button>
+    <button type="button" class="home-tile" data-go="alpha">
+      <span class="ht-ico">📉</span><b>Test α1</b><i>DFA α1 a riposo, 5 minuti</i>
+    </button>
+    <button type="button" class="home-tile" data-go="coherence">
+      <span class="ht-ico">🫁</span><b>Respirazione di coerenza</b><i>Pacer del respiro + fascia cardio</i>
+    </button>
+  </div>
+  <div class="home-foot">Da ogni attività si torna qui con il tasto <b>← Home</b> in alto.<br>Se è la prima volta, apri la <b>📖 Guida</b>.</div>
+</div>
+
+<!-- Connessione della fascia: serve a quattro attività su cinque, perciò vive fuori dal
+     pannello di monitoraggio e resta in cima a ogni schermata che la usa. -->
+<div class="conn-card" data-feat="coherence test morning alpha">
+  <div class="hrv-head">
+    <h2>❤️ Fascia cardio <span style="font-weight:400;color:var(--muted);font-size:.72rem">— Bluetooth con intervalli RR</span> <span id="appVer" style="font-weight:400;color:var(--accent);font-size:.62rem;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px"></span></h2>
+    <div class="hrv-conn">
+      <span class="hrv-dot" id="hrvDot"></span>
+      <span id="hrvConnLabel" style="font-size:.72rem;color:var(--muted)">Non connesso</span>
+      <button class="hrv-btn primary" id="hrvConnect">Connetti fascia</button>
+      <button class="hrv-btn ghost" id="hrvDisconnect" disabled>Disconnetti</button>
+    </div>
+  </div>
+  <div class="hrv-status" id="hrvStatus">Collega la fascia cardio (Polar H10/H9 o altra fascia Bluetooth con RR) e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
+  <details class="hrv-diag"><summary>Diagnostica connessione</summary>
+    <div class="hrv-diag-row">Intervalli RR dalla fascia: <b id="hrvRRflag">—</b></div>
+    <div class="hrv-log" id="hrvLog"></div>
+  </details>
+</div>
+
+<div class="layout" data-feat="coherence">
   <!-- COLONNA 1: IMPOSTAZIONI -->
   <div class="panel">
     <div class="tabs">
@@ -331,6 +467,12 @@
       <div class="num" id="freqNum">4.6</div>
       <div class="lab">atti<br>al minuto<br><span>ciclo <b id="freqCycle">13.0</b> s</span></div>
     </div>
+    <div class="rhythm">
+      <span class="rh-lbl">Ritmo attuale</span>
+      <span class="rh-val"><b id="rhIn">—</b> s dentro <span class="sep">·</span> <b id="rhOut">—</b> s fuori</span>
+      <span class="rh-hold" id="rhHold" hidden>pause: <b id="rhHf">0</b> s a polmoni pieni · <b id="rhHe">0</b> s a polmoni vuoti</span>
+      <span class="rh-next" id="rhNext" hidden></span>
+    </div>
     <div class="phase-label" id="phaseLabel">Pronto</div>
     <div class="breath-wrap"><div class="halo" id="halo"></div><div class="orb" id="orb"><div class="count" id="orbCount"></div></div></div>
     <div class="readouts">
@@ -362,22 +504,7 @@
 </div>
 
 <div class="hrv-panel">
-  <div class="hrv-head">
-    <h2>❤️ Monitoraggio HRV <span style="font-weight:400;color:var(--muted);font-size:.72rem">— fascia Bluetooth con RR</span> <span id="appVer" style="font-weight:400;color:var(--accent);font-size:.62rem;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:4px"></span></h2>
-    <div class="hrv-conn">
-      <span class="hrv-dot" id="hrvDot"></span>
-      <span id="hrvConnLabel" style="font-size:.72rem;color:var(--muted)">Non connesso</span>
-      <button class="hrv-btn" id="hrvConnect">Connetti fascia</button>
-      <button class="hrv-btn ghost" id="hrvDisconnect" disabled>Disconnetti</button>
-    </div>
-  </div>
-  <div class="hrv-status" id="hrvStatus">Collega la fascia cardio (Polar H10/H9 o altra fascia Bluetooth con RR) e poi avvia una sessione di respirazione: l'HRV verrà registrato durante tutta la sessione.</div>
-  <details class="hrv-diag"><summary>Diagnostica connessione</summary>
-    <div class="hrv-diag-row">Intervalli RR dalla fascia: <b id="hrvRRflag">—</b></div>
-    <div class="hrv-log" id="hrvLog"></div>
-  </details>
-
-  <div class="hrv-live">
+  <div class="hrv-live" data-feat="coherence">
     <div class="hrv-cell beat"><div class="v" id="hrvHR">—</div><div class="l">Battiti / min</div></div>
     <div class="hrv-cell"><div class="v" id="hrvRMSSD">—</div><div class="l">RMSSD live (ms)</div></div>
     <div class="hrv-cell"><div class="v" id="hrvRSA">—</div><div class="l">Ampiezza RSA (ms)</div></div>
@@ -397,16 +524,18 @@
     .hrv-coh-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#ef6b6b,#4aa3e0,#2bd4a8);transition:width .6s ease}
     .hrv-coh-hint{font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.4}
   </style>
-  <div class="hrv-coh">
+  <div class="hrv-coh" data-feat="coherence">
     <div class="hrv-coh-cells">
       <div class="hrv-cell"><div class="v" id="hrvCohRatio">—</div><div class="l">Coherence Ratio (HeartMath)</div></div>
       <div class="hrv-cell"><div class="v"><span id="hrvCohPct">—</span><span style="font-size:.45em;color:var(--muted)"> / 100</span></div><div class="l">Coerenza normalizzata</div></div>
     </div>
+    <!-- La barra chiude la scheda: subito sotto parte l'onda, così mentre respiri
+         vedi insieme quanto sei coerente e la forma del battito. La spiegazione
+         sta sotto l'onda, per non separarle. -->
     <div class="hrv-coh-zonewrap">
       <span class="hrv-coh-zone" id="hrvCohZone">—</span>
       <div class="hrv-coh-track"><div class="hrv-coh-fill" id="hrvCohBar"></div></div>
     </div>
-    <div class="hrv-coh-hint">Picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
   </div>
 
   <style>
@@ -417,7 +546,7 @@
     body[data-hrv-testing="1"] .hrv-results{display:none!important}
     .hrv-test{margin-top:14px;padding:14px;border-radius:16px;background:rgba(43,212,168,.06);border:1px solid rgba(43,212,168,.22)}
     .hrv-test h3{margin:0 0 10px;font-size:1rem}
-    .hrv-test label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px}
+    .hrv-test label,.hrv-cam label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px}
     .hrv-test input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:1rem;box-sizing:border-box}
     .hrv-test-fields{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:9px;margin-top:10px}
     .hrv-test-fields input,.hrv-test-fields select{width:100%;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box}
@@ -490,7 +619,7 @@
     .hrv-cam .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
     .cam-durs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px 0}
     .btn.ghost{color:var(--text)}   /* testo leggibile: senza colore esplicito iOS colora il testo di blu di sistema, illeggibile su scuro */
-    .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px}
+    .cam-durs .btn{margin-top:0;flex:1;min-width:64px;max-width:110px;padding:9px 8px;font-size:.78rem;letter-spacing:0}
     .cam-durs .btn.cam-sel{background:linear-gradient(135deg,var(--accent),var(--accent2))!important;border-color:transparent!important;color:#06222a!important;font-weight:700}   /* attivo = verde acqua (specificità alta + !important per battere .hrv-cam .btn.ghost trasparente) */
     .cam-code{width:100%;max-width:300px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit;font-size:.95rem;box-sizing:border-box;margin:2px auto 4px;display:block;text-align:center}
     .cam-sendnote{font-size:.78rem;color:var(--muted);margin:6px auto 0;max-width:320px}
@@ -543,7 +672,7 @@
     .guide-ch .sci{background:rgba(120,170,255,.1);border-left:3px solid #7aaaff;border-radius:6px;padding:9px 13px;margin:11px 0;font-size:.89rem}
     .guide-top{display:block;text-align:right;font-size:.8rem;color:var(--muted);text-decoration:none;margin-top:8px}
   </style>
-  <div class="hrv-test">
+  <div class="hrv-test" data-feat="test">
     <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
     <div id="hrvTestSetup">
       <div class="code-badge" id="hrvTestCodeBadge" hidden></div>
@@ -609,7 +738,7 @@
     </div>
   </div>
 
-  <div class="hrv-morning">
+  <div class="hrv-morning" data-feat="morning">
     <h3>🌅 Test del mattino — 1 minuto</h3>
     <div id="mornSetup">
       <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
@@ -647,7 +776,7 @@
     </div>
   </div>
 
-  <div class="hrv-alpha">
+  <div class="hrv-alpha" data-feat="alpha">
     <h3>📉 DFA α1 — dinamica frazionale (fascia)</h3>
     <div id="alphaSetup">
       <div class="hrv-test-hint">Misura a riposo con la fascia, <b>5 minuti</b>: <b>seduto, fermo, respiro spontaneo</b> (non guidato — il pacing altera α1). Attendi “Intervalli RR: sì”. α1 misura l'organizzazione frattale del battito: a riposo ~1,0; riferimenti di soglia aerobica 0,75 e anaerobica 0,5. Molto sensibile agli artefatti: a fine misura pulisci i battiti anomali.</div>
@@ -680,10 +809,10 @@
     </div>
   </div>
 
-  <div class="hrv-cam">
+  <div class="hrv-cam" data-feat="cam">
     <h3>📷 Allenamento coerenza — fotocamera</h3>
     <div id="camSetup">
-      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer qui sopra</b>. Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer</b> (schermata <b>Respirazione di coerenza</b>). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
       <label>Durata</label>
       <div class="cam-durs" id="camDurs">
         <button type="button" data-min="3" class="btn ghost">3 min</button>
@@ -715,14 +844,14 @@
         <div class="cam-graph-lbl">Polso — battito al dito</div>
         <canvas id="camWavePulse" class="cam-canvas" height="62"></canvas>
       </div>
+      <!-- Coerenza sopra l'onda, come nella schermata con la fascia: barra e sinusoide
+           insieme, così il feedback è immediato mentre si respira. -->
       <div class="cam-graph">
-        <div class="cam-graph-lbl">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
+        <div class="cam-graph-lbl">Coerenza adesso</div>
+        <div class="hrv-coh-track"><div class="hrv-coh-fill" id="camCohBar"></div></div>
+        <div class="cam-graph-lbl" style="margin-top:10px">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
         <canvas id="camWaveHrv" class="cam-canvas" height="88"></canvas>
-      </div>
-      <div class="cam-graph">
-        <div class="cam-graph-lbl">Coerenza in tempo reale</div>
-        <canvas id="camWaveCoh" class="cam-canvas" height="64"></canvas>
-        <div class="cam-graph-note"><i style="color:#b3201e">●</i> bassa &nbsp;<i style="color:#e8820c">●</i> media &nbsp;<i style="color:#1b8a5a">●</i> alta — l'obiettivo è far salire e mantenere il verde.</div>
+        <div class="cam-graph-note">La barra sale quando l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro: sale in inspirazione, scende in espirazione.</div>
       </div>
       <div class="cam-count" id="camCount"></div>
       <button id="camStop" class="cam-stopbtn">Termina sessione</button>
@@ -733,16 +862,17 @@
     </div>
   </div>
 
-  <div class="hrv-wave-wrap">
+  <div class="hrv-wave-wrap" data-feat="coherence">
     <div class="hrv-wave-head">
       <span>Onda della frequenza cardiaca <span style="color:var(--muted);font-weight:400">— coerenza / RSA</span></span>
       <span class="hrv-wave-legend"><i class="dot-hr"></i>FC istantanea (onda reale) &nbsp;<i class="dot-br"></i>respiro guida (tratteggio)</span>
     </div>
     <canvas id="hrvWave" height="200"></canvas>
     <div class="hrv-wave-note" id="hrvWaveNote">Connetti la fascia: l'onda della frequenza cardiaca apparirà qui. In coerenza, sale in inspirazione e scende in espirazione, in sincrono col respiro.</div>
+    <div class="hrv-coh-hint">La <b>coerenza</b> qui sopra è il picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
   </div>
 
-  <div class="hrv-results" id="hrvResults">
+  <div class="hrv-results" id="hrvResults" data-feat="coherence">
     <h3>Time domain</h3>
     <div class="hrv-grid">
       <div class="hrv-metric"><div><span class="mv" id="mRMSSD">—</span><span class="mu">ms</span></div><div class="ml">RMSSD</div></div>
@@ -790,7 +920,7 @@
     #resResults .res-table th{color:var(--muted,#8aa);font-weight:600}
     #resResults .res-table tr.best td{background:rgba(27,84,155,.12);font-weight:700;color:#1B549B}
   </style>
-  <div class="hrv-results" id="resResults" style="display:none">
+  <div class="hrv-results" id="resResults" style="display:none" data-feat="coherence">
     <h3>🎯 Test della frequenza di risonanza</h3>
     <div class="res-verdict" id="resVerdict">Test in corso… i risultati compaiono a ogni cambio di frequenza.</div>
     <div class="res-tablewrap">
@@ -838,6 +968,9 @@
         <li><b>Cosa NON funziona:</b> orologi (Apple Watch, Garmin, Fitbit, Samsung) — non si comportano da fascia verso l'app; le vecchie fasce solo-ANT+ (es. Garmin HRM-Run/Tri); qualsiasi dispositivo che mandi solo la frequenza cardiaca senza i battiti singoli.</li>
       </ul>
       <div class="tip"><b>In breve:</b> massima precisione → <b>Polar H10</b>; spesa contenuta ma affidabile → <b>Polar H9</b>; budget minimo → <b>CooSpo H808S</b> o <b>Magene H64</b>.</div>
+      <h4>Come ci si muove nell'app</h4>
+      <p>All'apertura compare la <b>Home</b>. In alto il tasto grande <b>"Aggancia la fascia cardio"</b>, che porta alla respirazione di coerenza: è il punto di partenza normale. Subito sotto, l'alternativa per chi non ha la fascia (<b>coerenza con la fotocamera</b>). Più in basso il menu delle attività: <b>test del mattino</b>, <b>test tonico/fasico</b>, <b>test α1</b>, <b>respirazione di coerenza</b>.</p>
+      <p>Ogni attività si apre da sola, senza il resto attorno: si torna alla Home col tasto <b>"← Home"</b> in alto. Mentre una misura è in corso il ritorno alla Home è bloccato: si chiude prima l'attività con il suo tasto (<b>Interrompi</b>, <b>Stop</b> o <b>Termina sessione</b>), così non si perde una registrazione per un tocco distratto.</p>
       <h4>Browser e connessione</h4>
       <ul>
         <li><b>iPhone:</b> apri l'app nel browser <b>Bluefy</b> (Safari non supporta il Bluetooth web).</li>
@@ -986,6 +1119,7 @@
         <li>Appoggia il <b>polpastrello</b> sulla fotocamera posteriore coprendo anche il flash; tieni il dito <b>fermo e premi leggero</b>.</li>
         <li>Quando il pallino diventa <b>verde</b> (FC plausibile e stabile), respira seguendo la sfera, che pulsa alla <b>tua frequenza di risonanza</b> impostata nel pacer.</li>
       </ol>
+      <p>Durante la sessione il feedback è lo stesso della fascia: la <b>barra della coerenza</b> sopra l'<b>onda della frequenza cardiaca</b>. La barra si riempie via via che l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro. La coerenza compare dopo circa <b>20 secondi</b> di battito stabile.</p>
       <p>A fine sessione vedi la <b>coerenza media</b> e la <b>percentuale di tempo in coerenza</b>. L'obiettivo, con la costanza, è far salire quella percentuale.</p>
       <div class="tip">Il biofeedback non è rilassamento: serve a <b>imparare a modulare</b> il sistema mantenendo la reattività. Durata utile per sessione: 15–20 minuti (atleti fino a 30); oltre non aggiunge benefici.</div>
       <a class="guide-top" href="#guideTop">↑ Indice</a>
@@ -1290,6 +1424,33 @@ const App = (() => {
     const last=s[s.length-1]; return {full:fullnessFor(last.name,1),name:last.name,text:phaseText[last.name],cycleMs:cyc*1000};
   }
 
+  /* ---- Ritmo attuale, in secondi ----
+     Quanto dura l'inspirazione e quanto l'espirazione, adesso. In Dinamica e
+     Risonanza il motore rifà la sequenza a ogni gradino: i secondi si leggono da
+     lì (dato vero, non ricalcolato), così il medico vede in ogni momento a che
+     ritmo sta lavorando il paziente, senza doverlo dedurre dagli atti/min. */
+  const secTxt=v=>(Math.round(v*10)/10).toFixed(1).replace('.',',');
+  let rhLast='';
+  function updateRhythm(s, next){
+    const sum=n=>s.filter(p=>p.name===n).reduce((a,b)=>a+b.dur,0);
+    const din=sum('inhale'), dout=sum('exhale'), hf=sum('holdFull'), he=sum('holdEmpty');
+    const key=[din,dout,hf,he,next||''].join('|');
+    if(key===rhLast) return;                    // tocca il DOM solo quando cambia davvero
+    rhLast=key;
+    el('rhIn').textContent=secTxt(din); el('rhOut').textContent=secTxt(dout);
+    const hold=el('rhHold');
+    if(hf>0||he>0){ el('rhHf').textContent=secTxt(hf); el('rhHe').textContent=secTxt(he); hold.hidden=false; }
+    else hold.hidden=true;
+    const nx=el('rhNext');
+    if(next){ nx.textContent=next; nx.hidden=false; } else nx.hidden=true;
+  }
+  // Sequenza che verrà usata con le impostazioni correnti (a sessione ferma)
+  function seqForSettings(m){
+    if(m==='dynamic'){ const r=+el('startRate').value; return r>0?dynSeqForRate(r):[]; }
+    if(m==='resonance'){ const sec=+el('resStart').value||5; return [{name:'inhale',dur:sec},{name:'exhale',dur:sec}]; }
+    return staticSeq();
+  }
+
   /* frequenza SEMPRE visibile: calcolo da impostazioni (idle) o live (run) */
   function updateFreqDisplay(){
     if(running) return; // durante run aggiorna render()
@@ -1301,6 +1462,7 @@ const App = (() => {
       cyc=tot; rate=tot>0?60/tot:0; }
     el('freqNum').textContent=rate?rate.toFixed(1):'—';
     el('freqCycle').textContent=cyc?cyc.toFixed(1):'—';
+    updateRhythm(seqForSettings(m), m==='resonance' ? 'primo blocco del test' : '');
   }
 
   function startPhase(now){const ph=seq[seqIdx];phaseStart=now;
@@ -1332,6 +1494,21 @@ const App = (() => {
     if((mode==='dynamic'||mode==='resonance')&&now-sessionStart-pausedAccum>=dyn.total*60000){finish();return;}
     rafId=requestAnimationFrame(tick);
   }
+  /* Quanto manca al prossimo cambio di ritmo. Solo Dinamica e Risonanza cambiano
+     da sole (in Risonanza: un blocco ogni 3 minuti); in Statica il ritmo lo decide
+     l'utente e non si muove, quindi non si mostra nulla. */
+  function nextChangeText(now){
+    if(!dyn || !(mode==='dynamic'||mode==='resonance')) return '';
+    const te=(now-sessionStart-pausedAccum)/1000;
+    const manca=fmt(dyn.stepInterval*60*(dyn.lastStep+1)-te);
+    if(dyn.resonance){
+      const tot=dyn.ladder.length, cur=Math.min(dyn.lastStep+1, tot);
+      return 'blocco '+cur+'/'+tot+(cur>=tot ? ' · ultimo ritmo del test' : ' · cambia tra '+manca);
+    }
+    const dir=Math.sign(dyn.end-dyn.start)||0;
+    if(dir===0 || Math.abs(dyn.rate-dyn.end)<1e-6) return 'ritmo finale raggiunto';
+    return 'cambia tra '+manca;
+  }
   function render(full,ph,elapsed,now){
     const scale=0.9+full*2.0;el('orb').style.transform=`scale(${scale})`;
     const halo=el('halo'),hs=84*scale*1.15;halo.style.width=hs+'px';halo.style.height=hs+'px';halo.style.opacity=0.15+full*0.45;
@@ -1342,6 +1519,7 @@ const App = (() => {
     el('roCycleN').textContent=cycleCount;
     el('freqNum').textContent=rate.toFixed(1);     // badge live
     el('freqCycle').textContent=cyc.toFixed(1);
+    updateRhythm(seq, nextChangeText(now));        // ritmo in secondi, sempre aggiornato
     const te=(now-sessionStart-pausedAccum)/1000;el('roElapsed').textContent=fmt(te);
     el('orbCount').textContent=cycleCount||'';
     if(mode==='dynamic'||mode==='resonance'){el('sessionFill').style.width=Math.min(100,(te/(dyn.total*60))*100)+'%';}
@@ -2845,7 +3023,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v64';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v65';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3655,7 +3833,6 @@ const CameraCoherence = (() => {
   let fingerPresent=false, lastPeakT=0;
   let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
-  let cohSeries=[];                            // {t, pct, ratio} coerenza nel tempo (grafico a colori)
   let lastDraw=0;                              // throttle del disegno dei grafici
   let hrSum=0, hrN=0;                          // FC media della sessione (per il report)
   let sessionWallStart=0;                      // ora di inizio (orologio reale, per il report)
@@ -3694,13 +3871,14 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0; cohSeries=[];
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
     sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.unlock(); }catch(e){}   // ridesta il motore (già sbloccato a inizio gesto)
     // WakeLock già acquisito a inizio gesto (prima degli await della fotocamera)
     el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
+    { const bar=el('camCohBar'); if(bar) bar.style.width='0%'; }
     show('Run'); t0=performance.now();
     sampleLoop(); orbLoop();
   }
@@ -3798,9 +3976,9 @@ const CameraCoherence = (() => {
       const co=(tail.length>=16)?HRV.cohOf(tail):null;
       if(co){ const z=zoneOf(co.ratio);
         el('camCoh').textContent=Math.round(co.pct); const zEl=el('camZone'); zEl.textContent=z.txt; zEl.style.background=z.col;
+        const bar=el('camCohBar'); if(bar) bar.style.width=Math.max(0,Math.min(100,co.pct))+'%';   // stessa barra della schermata con fascia
         cohSum+=co.pct; cohN++; if(co.ratio>=0.5) cohInZone++; if(co.pct>peakCoh) peakCoh=co.pct;
         if(locked){ hrSum+=hrAuto; hrN++; }   // FC media solo su segnale agganciato
-        cohSeries.push({t:now, pct:co.pct, ratio:co.ratio}); while(cohSeries.length>2 && now-cohSeries[0].t>90000) cohSeries.shift();
       }
     }
     // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
@@ -3870,28 +4048,8 @@ const CameraCoherence = (() => {
         ctx.fillText('Aggancia il battito per vedere l\'onda…', w/2, h/2+4);
       }
     }
-    // ── 3) Coerenza in tempo reale: barre colorate per zona (rosso→arancio→verde) ──
-    const cv3=el('camWaveCoh');
-    if(cv3){
-      const {ctx,w,h}=fitCanvas(cv3); ctx.clearRect(0,0,w,h);
-      const WIN=90000, t1=now-WIN, pad=4, xOf=t=>((t-t1)/WIN)*w;
-      ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=1;            // riferimento a 50/100
-      ctx.beginPath(); ctx.moveTo(0,h-pad-0.5*(h-2*pad)); ctx.lineTo(w,h-pad-0.5*(h-2*pad)); ctx.stroke();
-      const pts=cohSeries.filter(o=>o.t>=t1);
-      if(pts.length>=1){
-        for(let i=0;i<pts.length;i++){
-          const o=pts[i], x0=xOf(o.t), x1=(i+1<pts.length)?xOf(pts[i+1].t):w;
-          const y=h-pad-(Math.max(0,Math.min(100,o.pct))/100)*(h-2*pad);
-          ctx.fillStyle=zoneOf(o.ratio).col; ctx.fillRect(x0, y, Math.max(2,x1-x0), h-pad-y);
-        }
-        const last=pts[pts.length-1];                                       // valore corrente a destra
-        ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='right';
-        ctx.fillText(Math.round(last.pct)+'', w-5, 14);
-      } else {
-        ctx.fillStyle='rgba(255,255,255,.4)'; ctx.font='12px sans-serif'; ctx.textAlign='center';
-        ctx.fillText('La coerenza compare dopo ~20 s di battito stabile…', w/2, h/2+4);
-      }
-    }
+    // La coerenza non si disegna più qui: è la barra #camCohBar sopra l'onda,
+    // aggiornata nel ricalcolo ogni 2 s (stesso widget della schermata con fascia).
   }
 
   /* ---- chiusura e riepilogo ---- */
@@ -4185,6 +4343,47 @@ MorningTest.init();
 AlphaTest.init();
 CameraCoherence.init();
 ConsentUI.init();
+
+/* ---- Schermate: Home + una schermata per attività ----
+   Il body porta data-screen="home|coherence|cam|morning|test|alpha"; il CSS mostra
+   solo i blocchi con lo stesso data-feat. Qui si gestiscono i tasti della Home,
+   il ritorno indietro e la guardia contro l'uscita accidentale a misura avviata. */
+const Screens = (() => {
+  const HOME='home';
+  // Attività in corso → si esce solo col tasto dedicato dell'attività (Interrompi/Stop/Termina),
+  // così non si perde una registrazione con un tocco distratto.
+  const RUNS = [
+    ['hrvTestRun', 'il test clinico', 'Interrompi'],
+    ['mornRun',    'il test del mattino', 'Interrompi'],
+    ['alphaRun',   'la misura α1', 'Interrompi'],
+    ['camRun',     'l\'allenamento con la fotocamera', 'Termina sessione']
+  ];
+  function busy(){
+    if(document.body.dataset.running==='1') return {what:'la sessione di respirazione', how:'Stop'};
+    for(const [id, what, how] of RUNS){
+      const e=document.getElementById(id);
+      if(e && e.style.display!=='none') return {what, how};
+    }
+    return null;
+  }
+  function go(name){
+    const b=busy();
+    if(b){ alert('C\'è '+b.what+' in corso. Per tornare alla Home chiudi prima con il tasto "'+b.how+'".'); return; }
+    document.body.dataset.screen = name || HOME;
+    window.scrollTo(0,0);
+  }
+  function init(){
+    document.body.dataset.screen = HOME;
+    document.addEventListener('click', e => {
+      const t=e.target.closest('[data-go]');
+      if(t) go(t.dataset.go);
+    });
+    const back=document.getElementById('backHome');
+    if(back) back.addEventListener('click', ()=>go(HOME));
+  }
+  return { init, go };
+})();
+Screens.init();
 
 /* ---- Guida utente (overlay) ---- */
 (function(){
