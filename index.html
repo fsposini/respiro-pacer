@@ -296,11 +296,22 @@
   body[data-screen="test"] .hrv-panel,
   body[data-screen="alpha"] .hrv-panel{background:none;border:none;box-shadow:none;padding:0;margin-top:0}
 
-  .back-home{display:block;width:100%;max-width:1180px;margin:0 auto 12px;text-align:left;cursor:pointer;
-    font-family:inherit;font-size:.86rem;font-weight:600;padding:11px 15px;border-radius:10px;
-    border:1px solid var(--line);background:var(--panel);color:var(--text)}
+  /* Il ritorno alla Home deve URLARE che è un tasto: prima era una barra identica
+     all'avviso del consenso qui sopra (stessa forma, stesso colore) e il paziente la
+     leggeva come un'etichetta. Ora è un tasto col colore dell'azione, e resta
+     appiccicato in alto mentre si scorre: in fondo a un test non si deve risalire
+     tutta la pagina per uscire. */
+  .back-home{position:sticky;top:6px;z-index:50;display:flex;align-items:center;gap:10px;
+    width:100%;max-width:1180px;margin:0 auto 12px;cursor:pointer;font-family:inherit;text-align:left;
+    font-size:.92rem;font-weight:700;padding:13px 16px;border-radius:12px;
+    border:1.5px solid var(--accent);background:var(--bg);color:var(--accent);
+    box-shadow:0 6px 20px rgba(4,12,18,.55)}
+  .back-home .bh-arrow{font-size:1.1rem;line-height:1;flex:0 0 auto}
+  .back-home .bh-sub{display:block;font-weight:400;font-size:.74rem;color:var(--muted);margin-top:2px}
   .back-home:active{transform:translateY(1px)}
   body[data-screen="home"] .back-home{display:none}
+  .home-hero.connessa{background:rgba(90,209,192,.10);border-color:rgba(90,209,192,.55);color:var(--text)}
+  .home-hero.connessa i{opacity:1;color:var(--accent2)}
 
   #homeScreen{display:none;width:100%;max-width:560px;margin:0 auto}
   body[data-screen="home"] #homeScreen{display:block}
@@ -366,7 +377,7 @@
     <input id="consentCode" type="text" class="cam-code" placeholder="il codice che ti ha dato il medico" autocomplete="off" spellcheck="false" autocapitalize="characters">
     <label class="hrv-consent" id="consentCheckWrap">
       <input type="checkbox" id="consentCheck">
-      <span>Autorizzo l'invio automatico al <b>Dott. Federico Sposini</b>, <b>da questo momento in poi</b>, dei risultati di <b>tutte le attività dell'app</b> — valutazione iniziale (test tonico/fasico), readiness del mattino, α1, coerenza con fascia e con fotocamera — al termine di ogni attività, in forma <b>anonimizzata</b>, <b>per il monitoraggio clinico a distanza</b> (Reg. UE 2016/679). Consenso unico, revocabile in qualsiasi momento.</span>
+      <span>Autorizzo l'invio automatico al <b>Dott. Federico Sposini</b>, <b>da questo momento in poi</b>, dei risultati di <b>tutte le attività dell'app</b> — valutazione iniziale (test tonico/fasico), readiness del mattino, α1, coerenza con fascia e con fotocamera — <b>e delle informazioni che inserisco insieme al test del mattino</b> (posizione della misura, qualità percepita del sonno, attività fisica intensa, alcolici e pasto serale del giorno prima), al termine di ogni attività, in forma <b>anonimizzata</b>, <b>per il monitoraggio clinico a distanza</b> (Reg. UE 2016/679). Consenso unico, revocabile in qualsiasi momento.</span>
     </label>
     <div class="consent-active" id="consentActiveNote" hidden></div>
     <div class="consent-actions">
@@ -378,14 +389,20 @@
 </div>
 
 <!-- Ritorno alla Home: presente su ogni schermata, nascosto sulla Home stessa. -->
-<button type="button" id="backHome" class="back-home">← Home</button>
+<button type="button" id="backHome" class="back-home">
+  <span class="bh-arrow">←</span>
+  <span>Home<span class="bh-sub">torna alla schermata principale, dove scegli l'attività</span></span>
+</button>
 
 <!-- HOME: prima cosa che vede il paziente. In alto la cosa da fare per prima
      (agganciare la fascia), poi l'alternativa senza fascia, poi il menu delle attività. -->
 <div id="homeScreen">
-  <button type="button" class="home-hero" data-go="coherence">
-    <span class="hh-ico">❤️</span>
-    <span><b>Aggancia la fascia cardio</b><i>Collega la fascia e inizia la respirazione di coerenza</i></span>
+  <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
+       poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
+       quindi si può far partire la connessione direttamente da questo tasto. -->
+  <button type="button" class="home-hero" id="homeConnect">
+    <span class="hh-ico" id="homeConnIco">❤️</span>
+    <span><b id="homeConnTitle">Aggancia la fascia cardio</b><i id="homeConnState">Tocca qui per collegarla: serve a quasi tutte le attività</i></span>
   </button>
   <button type="button" class="home-alt" data-go="cam">
     Non hai la fascia cardio?
@@ -600,6 +617,16 @@
     .morn-rmssd b{font-size:1.5rem}
     .morn-sub{font-size:.88rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
     .morn-collect{font-size:1.05rem;font-weight:700;margin:10px 0}
+    /* Contesto della misura del mattino: risposte a un tocco, niente tastiera all'alba */
+    .morn-ctx{margin:12px 0 4px;padding:12px;border-radius:12px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08);text-align:left}
+    .morn-ctx label{display:block;font-size:.74rem;color:var(--muted);margin-bottom:6px}
+    .chips{display:flex;gap:7px;flex-wrap:wrap}
+    .chips .btn{margin-top:0;flex:1 1 auto;padding:9px 10px;font-size:.78rem;letter-spacing:0;white-space:nowrap}
+    .chips .btn.on{background:linear-gradient(135deg,var(--accent),var(--accent2))!important;border-color:transparent!important;color:#06222a!important;font-weight:700}
+    .morn-ctxnote{font-size:.68rem;color:var(--muted);margin-top:9px;line-height:1.4}
+    .morn-poswarn{font-size:.72rem;color:var(--hold);margin-top:7px;line-height:1.45;background:rgba(201,169,106,.10);
+      border:1px solid rgba(201,169,106,.35);border-radius:9px;padding:8px 10px}
+    .morn-poswarn[hidden]{display:none}
     .hrv-alpha{margin-top:14px;padding:14px;border-radius:16px;background:rgba(170,120,255,.08);border:1px solid rgba(170,120,255,.30);text-align:center}
     .hrv-alpha h3{margin:0 0 10px;font-size:1rem}
     .hrv-alpha .btn{margin-top:8px}
@@ -735,13 +762,40 @@
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestSend" class="btn ghost">Invia i dati al medico</button>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
+      <button type="button" class="btn" data-go="home">← Schermata principale</button>
     </div>
   </div>
 
   <div class="hrv-morning" data-feat="morning">
     <h3>🌅 Test del mattino — 1 minuto</h3>
     <div id="mornSetup">
-      <div class="hrv-test-hint">Appena sveglio, da seduto o sdraiato, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno alla stessa ora per un confronto affidabile.</div>
+      <div class="hrv-test-hint">Appena sveglio, <b>respiro normale</b> (non guidato). Indossa la fascia e attendi “Intervalli RR: sì”. Misura ogni giorno <b>alla stessa ora e nella stessa posizione</b>: sono le due condizioni perché il confronto con la tua media valga qualcosa.</div>
+      <!-- Contesto della misura. La POSIZIONE non è un'etichetta: da sdraiato l'RMSSD è
+           sistematicamente più alto che da seduto, quindi il baseline si calcola solo
+           sulle misure fatte nella posizione di riferimento (la prima scelta). Il resto
+           serve al medico per capire COSA fa scendere la readiness. -->
+      <div class="morn-ctx">
+        <label>Posizione della misura</label>
+        <div class="chips" id="mornPos">
+          <button type="button" data-v="seduto" class="btn ghost">Seduto</button>
+          <button type="button" data-v="sdraiato" class="btn ghost">Sdraiato</button>
+        </div>
+        <div class="morn-poswarn" id="mornPosWarn" hidden></div>
+        <label style="margin-top:10px">Come hai dormito questa notte?</label>
+        <div class="chips" id="mornSleep">
+          <button type="button" data-v="molto bene" class="btn ghost">Molto bene</button>
+          <button type="button" data-v="bene" class="btn ghost">Bene</button>
+          <button type="button" data-v="male" class="btn ghost">Male</button>
+          <button type="button" data-v="pessimo" class="btn ghost">Pessimo</button>
+        </div>
+        <label style="margin-top:10px">Ieri — tocca quello che è successo</label>
+        <div class="chips" id="mornYest">
+          <button type="button" data-v="esercizio" class="btn ghost">🏋️ Esercizio intenso</button>
+          <button type="button" data-v="alcol" class="btn ghost">🍷 Alcolici</button>
+          <button type="button" data-v="pasto" class="btn ghost">🍝 Pasto tardi o abbondante</button>
+        </div>
+        <div class="morn-ctxnote">Quello che non tocchi vale come “no”. Serve al medico per capire cosa pesa davvero sulla tua readiness.</div>
+      </div>
       <div class="code-badge" id="mornCodeBadge" hidden></div>
       <button id="mornStart" class="btn">Avvia test del mattino</button>
       <div class="morn-editbtns">
@@ -768,11 +822,17 @@
         <button id="mornAll" class="btn ghost">Includi tutti</button>
       </div>
       <button id="mornSave" class="btn">Salva e calcola la readiness</button>
+      <!-- Senza questo, l'app avvisa che la misura è inaffidabile e poi costringe a
+           salvarla: l'unica uscita era il salvataggio. -->
+      <button id="mornDiscard" class="btn ghost">Scarta e rifai la misura</button>
     </div>
     <div id="mornResult" style="display:none">
       <div id="mornVerdict"></div>
       <div id="mornTrend"></div>
-      <button id="mornNew" class="btn ghost">Chiudi</button>
+      <div class="morn-editbtns" style="margin-top:10px">
+        <button id="mornNew" class="btn ghost">Chiudi</button>
+        <button type="button" class="btn" data-go="home">← Schermata principale</button>
+      </div>
     </div>
   </div>
 
@@ -805,7 +865,10 @@
       <div id="alphaVerdict"></div>
       <div id="alphaTrend"></div>
       <div class="morn-sub" id="alphaSendStatus"></div>
-      <button id="alphaNew" class="btn ghost">Chiudi</button>
+      <div class="morn-editbtns" style="margin-top:10px">
+        <button id="alphaNew" class="btn ghost">Chiudi</button>
+        <button type="button" class="btn" data-go="home">← Schermata principale</button>
+      </div>
     </div>
   </div>
 
@@ -858,7 +921,10 @@
     </div>
     <div id="camDone" style="display:none">
       <div id="camSummary"></div>
-      <button id="camNew" class="btn ghost">Chiudi</button>
+      <div class="morn-editbtns" style="margin-top:10px">
+        <button id="camNew" class="btn ghost">Chiudi</button>
+        <button type="button" class="btn" data-go="home">← Schermata principale</button>
+      </div>
     </div>
   </div>
 
@@ -1094,10 +1160,13 @@
       <p>È una misura <b>ultra-breve (1 minuto)</b> da fare <b>appena svegli</b>, prima di scendere dal letto e prima di toccare il telefono. In quei istanti si fotografa l'efficienza del passaggio tra la fase <b>riparativa del sonno</b> e la fase <b>di attivazione della veglia</b>: è la lettura più pulita del recupero notturno.</p>
       <h4>Come si fa</h4>
       <ol>
-        <li>Indossa la fascia da sdraiato/seduto, <b>respiro spontaneo</b> (non guidato).</li>
+        <li>Indossa la fascia, <b>respiro spontaneo</b> (non guidato).</li>
+        <li>Indica la <b>posizione</b> (seduto o sdraiato), <b>come hai dormito</b> e cosa è successo <b>ieri</b> (esercizio intenso, alcolici, pasto tardi o abbondante). Un tocco per risposta: quello che non tocchi vale come "no".</li>
         <li>Avvia il <b>test del mattino</b> (1 minuto).</li>
-        <li>Pulisci eventuali artefatti, poi <b>salva</b>.</li>
+        <li>Pulisci eventuali artefatti, poi <b>salva</b>. Se ci sono troppi artefatti puoi <b>scartare e rifare</b> la misura.</li>
       </ol>
+      <div class="warn"><b>La posizione va tenuta sempre la stessa.</b> Da sdraiato il tono vagale è più alto e l'RMSSD viene sistematicamente più alto che da seduto: sono due scale diverse. La prima misura fissa la tua <b>posizione di riferimento</b> e la media personale si costruisce solo su quella. Se un giorno misuri nell'altra posizione, la misura viene comunque salvata e inviata al medico, ma <b>non entra nella media e non riceve un verdetto</b>: un confronto fra posture diverse darebbe un risultato falso.</div>
+      <div class="sci">Le informazioni su sonno, alcol, allenamento e pasto servono al medico per capire, sui tuoi dati reali e nel tempo, <b>che cosa</b> abbassa davvero la tua readiness — la misura dice che sei giù, il contesto dice perché.</div>
       <h4>Cosa significa il risultato</h4>
       <p>Il valore di oggi (espresso come <b>lnRMSSD</b>, l'indice di riferimento per la readiness) viene confrontato con la <b>tua media personale</b>. Il verdetto:</p>
       <ul>
@@ -2380,6 +2449,17 @@ const HRV = (() => {
     el('hrvConnLabel').textContent = connected ? (device&&device.name?device.name:'Connesso') : 'Non connesso';
     el('hrvConnect').disabled = connected;
     el('hrvDisconnect').disabled = !connected;
+    // Lo stesso stato sul tasto della Home: da lì il paziente collega la fascia
+    // e deve vedere subito se ha funzionato, senza cambiare schermata.
+    const hi=el('homeConnIco'), ht=el('homeConnTitle'), hs=el('homeConnState'), hb=el('homeConnect');
+    if(hb){
+      hb.classList.toggle('connessa', connected);
+      hi.textContent = connected ? '✅' : '❤️';
+      ht.textContent = connected ? 'Fascia cardio collegata' : 'Aggancia la fascia cardio';
+      hs.textContent = connected
+        ? ((device&&device.name?device.name:'Fascia')+' — ora scegli l\'attività qui sotto')
+        : 'Tocca qui per collegarla: serve a quasi tutte le attività';
+    }
   }
   function liveRMSSD(){
     if(!capturing || rr.length < 4) return null;
@@ -3023,7 +3103,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v65';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v66';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3308,6 +3388,38 @@ const MorningTest = (() => {
   }
   function fmt(ms){ const s=Math.max(0,Math.ceil(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
   function loadHist(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+
+  /* ---- Contesto della misura (posizione + diario della sera prima) ----
+     La POSIZIONE è di riferimento: la fissa la prima misura valida e da lì in poi il
+     baseline si calcola SOLO sulle misure fatte in quella posizione. Da sdraiato il
+     tono vagale è più alto e l'RMSSD sale: mescolare le posizioni farebbe misurare al
+     verdetto la postura invece della readiness. Una misura in posizione diversa si
+     salva e si invia lo stesso (serve al medico), ma resta fuori dal baseline. */
+  const POS_KEY = 'respiroPacer.morningPos.v1';
+  let ctx = { pos:'', sleep:'', yest:[] };
+  function posRef(){ try{ return localStorage.getItem(POS_KEY)||''; }catch(e){ return ''; } }
+  function setPosRef(p){ try{ localStorage.setItem(POS_KEY, p); }catch(e){} }
+  function chipSet(host, val){
+    host.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.dataset.v===val));
+  }
+  function updatePosWarn(){
+    const w=el('mornPosWarn'), ref=posRef();
+    if(!w) return;
+    if(!ref || !ctx.pos || ctx.pos===ref){ w.hidden=true; return; }
+    w.hidden=false;
+    w.innerHTML='⚠️ Di solito misuri <b>'+ref+'</b>. Da '+ctx.pos+' l\'HRV viene diverso, quindi il confronto '
+      +'con la tua media non sarebbe valido: questa misura verrà salvata e inviata al medico, ma <b>non entrerà '
+      +'nel tuo riferimento</b> e non avrà un verdetto.';
+  }
+  function initCtx(){
+    const ref=posRef();
+    ctx = { pos: ref || '', sleep:'', yest:[] };          // sonno e diario si ricompilano ogni giorno: mai preselezionati
+    const p=el('mornPos'), s=el('mornSleep'), y=el('mornYest');
+    if(p){ chipSet(p, ctx.pos); }
+    if(s){ chipSet(s, ''); }
+    if(y){ y.querySelectorAll('button').forEach(b=> b.classList.remove('on')); }
+    updatePosWarn();
+  }
   function saveHist(h){ try{ localStorage.setItem(KEY, JSON.stringify(h)); }catch(e){} }
   function getCode(){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null'); return (p&&p.code)||''; }catch(e){ return ''; } }
   function saveCode(code){ try{ const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'null')||{}; p.code=code; localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){} }
@@ -3320,11 +3432,16 @@ const MorningTest = (() => {
     if(!code || !consentTs() || !HRV.hasUploadUrl()) return;
     const d=new Date(), pad=n=>String(n).padStart(2,'0');
     const local=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    const has=k=>today.yest && today.yest.indexOf(k)>=0 ? 'sì' : 'no';
     try{ await HRV.uploadReadiness({
       code, ts:d.toISOString(), local,
       lnrmssd:today.ln.toFixed(3).replace('.',','), rmssd:Math.round(today.rmssd), fc_media:today.hr,
       base_rmssd:v.baseRmssd!=null?Math.round(v.baseRmssd):'',
-      verdetto:v.big, alert:v.big==='Recupero'?'1':'0'
+      verdetto:v.big||'', alert:v.big==='Recupero'?'1':'0',
+      // Contesto: è questo che permette di vedere cosa fa scendere la readiness
+      posizione:today.pos||'', pos_riferimento:posRef()||'', in_baseline:v.inBase?'sì':'no',
+      sonno:today.sleep||'', esercizio_ieri:has('esercizio'), alcol_ieri:has('alcol'), pasto_tardi:has('pasto'),
+      pct_scartati:today.pct!=null?today.pct.toFixed(1).replace('.',','):''
     }); }catch(e){}
   }
 
@@ -3333,6 +3450,9 @@ const MorningTest = (() => {
     if(document.body.dataset.running==='1'){ alert('Ferma prima la sessione di respirazione libera.'); return; }
     if(document.body.dataset.hrvTesting==='1'){ alert('C\'è un test clinico in corso.'); return; }
     if(!HRV.isReady()){ alert('Connetti una fascia cardio che invii gli intervalli RR (indicatore "Intervalli RR: sì") e riprova.'); return; }
+    // La posizione è l'unica risposta obbligatoria: senza, la misura non è confrontabile
+    // con nulla (il baseline è costruito per posizione). Sonno e diario restano facoltativi.
+    if(!ctx.pos){ alert('Prima scegli la posizione: stai misurando da seduto o da sdraiato?\n\nServe perché l\'HRV da sdraiato è più alto: il confronto vale solo fra misure nella stessa posizione.'); return; }
     // Codice atleta + consenso una-tantum per l'avviso al medico (facoltativi). Senza, la misura
     // resta solo sul telefono. Prefill/nascondi il consenso una volta dato: nessun attrito ogni mattina.
     // Il codice arriva dalla finestra di attivazione (profilo condiviso), non più da una casella qui.
@@ -3373,6 +3493,13 @@ const MorningTest = (() => {
   function abort(){
     if(!confirm('Interrompere il test del mattino? La misura andrà persa.')) return;
     stopRaf(); HRV.endMorning(); try{ WakeLock.release(); }catch(e){} try{ Audio.keepAliveOff(); }catch(e){} show('Setup');
+  }
+  // Scarta la misura appena fatta e torna al punto di partenza. Serve soprattutto quando
+  // l'app stessa dice che ci sono troppi artefatti: prima l'unica uscita era salvarla.
+  function discard(){
+    if(!confirm('Scartare questa misura e ripetere il test?\n\nLa misura non verrà salvata né inviata al medico: è come non averla mai fatta.')) return;
+    beats=[]; rawRR=[];
+    show('Setup');
   }
   function finishCapture(){
     stopRaf();
@@ -3454,23 +3581,38 @@ const MorningTest = (() => {
       h = h.filter(e=>e.d!==d);
       // I battiti grezzi e gli indici esclusi restano con la misura: senza di essi un'anomalia
       // non è più ispezionabile a posteriori (né dal medico né da noi).
+      // Con essi resta il CONTESTO: posizione, sonno e diario della sera prima sono il
+      // motivo per cui il medico può poi spiegare una readiness bassa.
       h.push({ d, ts:new Date().toISOString(), rmssd:+rmssd.toFixed(1), ln, hr:Math.round(hr),
                nRaw:beats.length, nKept:nn.length, pctExcl:+pct.toFixed(1), lowq,
+               pos:ctx.pos, sleep:ctx.sleep, yest:ctx.yest.slice(),
                rrRaw:rawRR.map(v=>Math.round(v)),
                excl:beats.map((b,i)=>b.excl?i:-1).filter(i=>i>=0) });
       h.sort((a,b)=> a.d<b.d?-1:1);
+      // La prima misura valida fissa la posizione di riferimento per tutte le successive.
+      if(!lowq && !posRef() && ctx.pos) setPosRef(ctx.pos);
       saveHist(h);
     }
-    renderResult(h, {rmssd, ln, lowq, pct, notSaved:!replace, prevRmssd:prev?prev.rmssd:null});
+    const offPos = !!posRef() && ctx.pos!==posRef();
+    renderResult(h, {rmssd, ln, lowq, pct, offPos, pos:ctx.pos, notSaved:!replace, prevRmssd:prev?prev.rmssd:null});
     show('Result');
     if(lowq || !replace) return;                    // misura sporca o ripetizione: niente verdetto, niente invio
-    // Invio al medico (pseudonimizzato): riga di readiness sempre, avviso Telegram solo se Recupero.
-    const b=baseline(h);
-    if(b){ const v=classify(ln,b); sendReadiness({rmssd, ln, hr:Math.round(hr)}, {big:v.big, baseRmssd:Math.exp(b.m)}); }
+    // Invio al medico (pseudonimizzato). Si invia SEMPRE, anche prima che il baseline
+    // esista e anche quando la posizione è diversa dal solito: senza queste righe il
+    // database del medico avrebbe un buco proprio nelle prime settimane. Il verdetto
+    // (e l'avviso Telegram) partono solo quando il confronto è lecito.
+    const b = offPos ? null : baseline(h);
+    const v = b ? classify(ln,b) : null;
+    sendReadiness({rmssd, ln, hr:Math.round(hr), pos:ctx.pos, sleep:ctx.sleep, yest:ctx.yest, pct},
+                  {big:v?v.big:'', baseRmssd:b?Math.exp(b.m):null, inBase:!offPos});
   }
   function baseline(h){
+    // Solo le misure fatte nella posizione di riferimento: da sdraiato l'RMSSD è più alto
+    // e mescolarle farebbe oscillare il verdetto con la postura, non con la readiness.
+    const ref=posRef();
+    if(!ref) return null;
     const cutoff=Date.now()-WINDOW_DAYS*864e5;
-    const vals=h.filter(e=>!e.lowq && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
+    const vals=h.filter(e=>!e.lowq && e.pos===ref && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
     if(vals.length<MIN_READINGS) return null;
     const m=vals.reduce((s,x)=>s+x,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
@@ -3494,6 +3636,17 @@ const MorningTest = (() => {
       host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:#545e62">Misura non registrata</span></div>'
         +'<div class="morn-rmssd">Questa misura: <b>'+today.rmssd.toFixed(0)+'</b> ms · quella di oggi resta <b>'+today.prevRmssd+'</b> ms</div>'
         +'<div class="morn-sub">Vale la prima misura del mattino. Questa ripetizione non entra nella tua media di riferimento e non è stata inviata al medico.</div>';
+      renderTrend(h, b); return;
+    }
+    // Posizione diversa dal solito: la misura è buona, ma confrontarla con un riferimento
+    // costruito in un'altra postura darebbe un verdetto falso. Meglio nessun verdetto che
+    // uno sbagliato: il valore resta, ed è comunque arrivato al medico.
+    if(today.offPos){
+      host.innerHTML='<div class="morn-verdict"><span class="morn-chip" style="background:#e8820c">Fuori riferimento</span></div>'
+        +'<div class="morn-rmssd">RMSSD di oggi: <b>'+today.rmssd.toFixed(0)+'</b> ms</div>'
+        +'<div class="morn-sub">Hai misurato <b>'+(today.pos||'in un\'altra posizione')+'</b>, mentre il tuo riferimento è costruito <b>'+posRef()+'</b>. '
+        +'Da sdraiato l\'HRV è più alto che da seduto: confrontare le due darebbe un verdetto sbagliato. '
+        +'La misura è salvata ed è stata inviata al medico, ma resta fuori dalla tua media. Domani rimisura '+posRef()+'.</div>';
       renderTrend(h, b); return;
     }
     if(!b){
@@ -3572,7 +3725,24 @@ const MorningTest = (() => {
     el('mornAuto').addEventListener('click', autoFlag);
     el('mornAll').addEventListener('click', includeAll);
     el('mornSave').addEventListener('click', save);
-    el('mornNew').addEventListener('click', ()=> show('Setup'));
+    el('mornDiscard').addEventListener('click', discard);
+    el('mornNew').addEventListener('click', ()=>{ initCtx(); show('Setup'); });
+    // Questionario di contesto: un tocco per risposta, nessuna tastiera alle 6 del mattino
+    el('mornPos').addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      ctx.pos=b.dataset.v; chipSet(el('mornPos'), ctx.pos); updatePosWarn();
+    });
+    el('mornSleep').addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      ctx.sleep=b.dataset.v; chipSet(el('mornSleep'), ctx.sleep);
+    });
+    el('mornYest').addEventListener('click', e=>{
+      const b=e.target.closest('button'); if(!b) return;
+      const v=b.dataset.v, i=ctx.yest.indexOf(v);
+      if(i>=0) ctx.yest.splice(i,1); else ctx.yest.push(v);
+      b.classList.toggle('on', i<0);
+    });
+    initCtx();
     const hb=el('mornHistBtn'); if(hb) hb.addEventListener('click', ()=>{
       const box=el('mornHistBox'); if(!box) return;
       const open = box.style.display==='none';
@@ -4380,6 +4550,14 @@ const Screens = (() => {
     });
     const back=document.getElementById('backHome');
     if(back) back.addEventListener('click', ()=>go(HOME));
+    // Tasto della Home: collega la fascia SENZA cambiare schermata. Si inoltra il tocco
+    // al tasto vero della card di connessione: il Bluetooth pretende un gesto utente e
+    // questo lo è ancora (stesso click, nessuna attesa in mezzo).
+    const hb=document.getElementById('homeConnect');
+    if(hb) hb.addEventListener('click', ()=>{
+      const real=document.getElementById('hrvConnect');
+      if(real && !real.disabled) real.click();
+    });
   }
   return { init, go };
 })();

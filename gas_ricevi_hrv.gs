@@ -75,13 +75,22 @@ function doPost(e) {
 
     // ── Test del mattino (READINESS): una riga sul foglio "readiness_atleti" ──
     // + avviso Telegram al medico quando il verdetto è "Recupero" (alert=1).
+    // Le colonne del CONTESTO stanno IN CODA di proposito: _sheetRow aggiunge da solo le
+    // intestazioni mancanti in fondo, quindi inserirle in mezzo disallineerebbe le righe
+    // già presenti sul foglio (i vecchi valori finirebbero sotto le intestazioni nuove).
     if (kind === 'readiness') {
       var rrow = [
         p.local || ts, code, p.verdetto || '', p.lnrmssd || '',
-        p.rmssd || '', p.base_rmssd || '', p.fc_media || '', p.alert || '0', ts
+        p.rmssd || '', p.base_rmssd || '', p.fc_media || '', p.alert || '0', ts,
+        p.posizione || '', p.pos_riferimento || '', p.in_baseline || '',
+        p.sonno || '', p.esercizio_ieri || '', p.alcol_ieri || '', p.pasto_tardi || '',
+        p.pct_scartati || ''
       ];
       _sheetRow(folder, 'readiness_atleti',
-        ['data e ora', 'codice', 'verdetto', 'lnRMSSD', 'RMSSD', 'RMSSD base', 'FC media', 'alert', 'ts ISO'],
+        ['data e ora', 'codice', 'verdetto', 'lnRMSSD', 'RMSSD', 'RMSSD base', 'FC media', 'alert', 'ts ISO',
+         'posizione', 'posizione di riferimento', 'entra nel baseline',
+         'sonno percepito', 'esercizio intenso ieri', 'alcolici ieri', 'pasto tardi/abbondante ieri',
+         '% battiti scartati'],
         rrow);
       if (p.alert === '1') _notifyReadiness(code, p);
       return _json({ ok: true, kind: 'readiness' });
