@@ -3103,7 +3103,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v66';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v67';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3396,9 +3396,26 @@ const MorningTest = (() => {
      verdetto la postura invece della readiness. Una misura in posizione diversa si
      salva e si invia lo stesso (serve al medico), ma resta fuori dal baseline. */
   const POS_KEY = 'respiroPacer.morningPos.v1';
+  const MIGR_KEY = 'respiroPacer.morningPosMigr.v1';
   let ctx = { pos:'', sleep:'', yest:[] };
   function posRef(){ try{ return localStorage.getItem(POS_KEY)||''; }catch(e){ return ''; } }
   function setPosRef(p){ try{ localStorage.setItem(POS_KEY, p); }catch(e){} }
+  // Migrazione una-tantum (17 lug 2026). Le misure fatte prima di questa versione non
+  // hanno la posizione: senza etichetta resterebbero fuori dal baseline e il verdetto
+  // sparirebbe per una settimana. L'unico storico esistente è quello di Federico, che
+  // ha dichiarato di aver sempre misurato da SDRAIATO: le si etichetta di conseguenza,
+  // marcandole come dichiarate a posteriori (posLegacy). Su un telefono nuovo non c'è
+  // nulla da migrare e questa funzione non fa niente.
+  function migraPosizioneStorico(){
+    try{ if(localStorage.getItem(MIGR_KEY)) return; }catch(e){ return; }
+    const h=loadHist(), senza=h.filter(e=>!e.pos);
+    if(senza.length){
+      senza.forEach(e=>{ e.pos='sdraiato'; e.posLegacy=true; });
+      saveHist(h);
+      if(!posRef()) setPosRef('sdraiato');
+    }
+    try{ localStorage.setItem(MIGR_KEY,'1'); }catch(e){}
+  }
   function chipSet(host, val){
     host.querySelectorAll('button').forEach(b=> b.classList.toggle('on', b.dataset.v===val));
   }
@@ -3742,6 +3759,7 @@ const MorningTest = (() => {
       if(i>=0) ctx.yest.splice(i,1); else ctx.yest.push(v);
       b.classList.toggle('on', i<0);
     });
+    migraPosizioneStorico();   // prima di initCtx: fissa il riferimento da preselezionare
     initCtx();
     const hb=el('mornHistBtn'); if(hb) hb.addEventListener('click', ()=>{
       const box=el('mornHistBox'); if(!box) return;
