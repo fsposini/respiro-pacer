@@ -415,7 +415,7 @@
       <span class="ht-ico">🌅</span><b>Test del mattino</b><i>Readiness, 1 minuto con la fascia</i>
     </button>
     <button type="button" class="home-tile" data-go="test">
-      <span class="ht-ico">🩺</span><b>Test tonico/fasico</b><i>Valutazione clinica, 5′ + 1′</i>
+      <span class="ht-ico">🩺</span><b>Test tonico/fasico</b><i>Valutazione clinica, 5–8′ + 1′</i>
     </button>
     <button type="button" class="home-tile" data-go="alpha">
       <span class="ht-ico">📉</span><b>Test α1</b><i>DFA α1 a riposo, 5 minuti</i>
@@ -700,7 +700,7 @@
     .guide-top{display:block;text-align:right;font-size:.8rem;color:var(--muted);text-decoration:none;margin-top:8px}
   </style>
   <div class="hrv-test" data-feat="test">
-    <h3>🩺 Test clinico — tonico 5′ + fasico 1′</h3>
+    <h3>🩺 Test clinico — tonico 5–8′ + fasico 1′</h3>
     <div id="hrvTestSetup">
       <div class="code-badge" id="hrvTestCodeBadge" hidden></div>
       <div class="hrv-test-fields">
@@ -729,7 +729,7 @@
         </ul>
       </details>
       <button id="hrvTestStart" class="btn">Avvia test clinico</button>
-      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Il test inizia con <b>30 secondi di stabilizzazione</b> (non si registra), poi la <b>fase tonica di 5 minuti</b>. Al termine potrai <b>concludere</b> o <b>aggiungere la fase fasica</b> (1′). Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.</div>
+      <div class="hrv-test-hint">Serve una fascia cardio connessa che invii gli intervalli RR. Il test inizia con <b>30 secondi di stabilizzazione</b> (non si registra), poi la <b>fase tonica</b>. Al termine potrai <b>concludere</b> o <b>aggiungere la fase fasica</b> (1′). Durante il test non vengono mostrati numeri: il paziente registra soltanto, l'analisi la fa il medico.<br><b>La durata del tonico si adatta al tuo battito</b> (da 5 a 8 minuti): l'analisi richiede almeno 300 battiti, quindi con una frequenza cardiaca bassa serve qualche minuto in più. Il tempo esatto compare nel countdown appena la fase inizia.</div>
     </div>
     <div id="hrvTestRun" class="hrv-test-run" style="display:none">
       <div class="hrv-test-orb-wrap"><div id="hrvTestOrb"></div></div>
@@ -1108,15 +1108,19 @@
       <h3>5 · Il test tonico e fasico: come si esegue</h3>
       <p>È il protocollo clinico riprodotto dall'app (sezione "Test clinico"). Misura due cose diverse:</p>
       <ul>
-        <li><b>Tonico (5 minuti, a riposo):</b> fotografa lo <b>stato funzionale di fondo</b> — come "gira il motore" mentre l'organismo mantiene l'omeostasi.</li>
+        <li><b>Tonico (5–8 minuti, a riposo):</b> fotografa lo <b>stato funzionale di fondo</b> — come "gira il motore" mentre l'organismo mantiene l'omeostasi.</li>
         <li><b>Fasico (1 minuto, respiro guidato a 6/min):</b> introduce una <b>perturbazione controllata</b> e misura la <b>riserva di adattamento</b> e la velocità di rientro.</li>
       </ul>
       <p>Tonico e fasico sono <b>due atti separati</b>: puoi fare solo il tonico, oppure aggiungere il fasico subito dopo. Se li fai entrambi, falli in sequenza (a pochi secondi di distanza).</p>
+      <h4>Perché il tonico non dura sempre 5 minuti</h4>
+      <p>Il requisito dell'analisi non è il tempo ma il <b>numero di battiti</b>: ne servono almeno <b>300</b>, altrimenti le componenti in frequenza (in particolare le VLF) non sono stimabili in modo attendibile. I classici "5 minuti" sono semplicemente il tempo che occorre a <b>60 battiti al minuto</b>. Chi ha una frequenza cardiaca più bassa — atleti di endurance, soggetti bradicardici, chi assume β-bloccanti — in 5 minuti non ci arriva.</p>
+      <p>Per questo l'app <b>misura la frequenza cardiaca durante i 30 secondi di stabilizzazione</b> e da lì calcola quanto deve durare il tonico: <b>5 minuti se la frequenza è di 64 bpm o più</b>, poi via via di più fino a un <b>massimo di 8 minuti</b>. La durata è decisa <b>prima</b> che la fase inizi, quindi il countdown a schermo è quello definitivo e non cambia durante il test.</p>
+      <div class="tip">Conseguenza da tenere presente nel confronto fra test: <b>SDNN dipende dalla durata della misurazione</b>, quindi ha senso confrontare tra loro test della stessa persona (che avrà sempre durate simili, perché dipendono dalla sua frequenza) e non test di durata diversa di persone diverse. Il file inviato al medico riporta durata e numero di battiti di ogni fase.</div>
       <h4>Passi nell'app</h4>
       <ol>
         <li>Connetti la fascia (indicatore "Intervalli RR: sì").</li>
         <li>Il <b>codice paziente</b> è quello dell'attivazione (in alto). Imposta <b>sesso, età, categoria</b> (servono per le scale di riferimento).</li>
-        <li>Avvia: 30 s di stabilizzazione, poi il <b>tonico di 5 minuti</b> — schermo con sola sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
+        <li>Avvia: 30 s di stabilizzazione, poi il <b>tonico</b> — schermo con sola sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
         <li>A fine tonico scegli: <b>Concludi</b> (invii il solo tonico) oppure <b>Aggiungi fase fasica</b>.</li>
         <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino a circa il <b>75%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
         <li>A fine test i dati grezzi vengono inviati/esportati e analizzati nel software HRV (pulizia artefatti + referto).</li>
@@ -2717,6 +2721,26 @@ const HRV = (() => {
   /* ----------------------- Modalità Test clinico ----------------------- */
   // Pronta = fascia connessa che sta inviando intervalli RR.
   function isReady(){ return connected && rrSeen; }
+  // FC mediana degli ultimi `ms`, letta dall'onda live (che si popola anche quando NON
+  // si sta registrando): serve a dimensionare la durata del tonico già in stabilizzazione.
+  // Mediana e non media: un paio di battiti spuri non spostano la stima. 0 = non stimabile.
+  function recentHR(ms){
+    const now = performance.now(), v = [];
+    for(let i=wave.length-1;i>=0;i--){
+      if(now - wave[i].t > ms) break;
+      const h = wave[i].hr; if(h>=30 && h<=200) v.push(h);
+    }
+    if(v.length<5) return 0;
+    v.sort((a,b)=>a-b);
+    return v[v.length>>1];
+  }
+  // Conteggio live dei battiti plausibili già registrati per una fase: è il criterio
+  // vero della soglia professionale (300 IBI), che il tempo si limita ad approssimare.
+  function phaseBeats(p){
+    let n = 0;
+    for(const o of rr){ if(o.ph===p && o.rr>300 && o.rr<2000) n++; }
+    return n;
+  }
   function beginTest(code, sex, age, pop){
     testCode = code || ''; testPhase = null; consentMark = '';
     testSex = sex || ''; testAge = (age!=null?String(age):''); testPop = pop || '';
@@ -2747,7 +2771,10 @@ const HRV = (() => {
       ibi: filt.map(o=>o.rr), attr: filt.map(()=>'L'),
       sdnn: td?td.sdnn:'', rmssd: td?td.rmssd:'',
       tp: '', vlf: '', lf: '', hf: '',
-      coh: '', mhr: td?td.meanHR:'', mhrr
+      coh: '', mhr: td?td.meanHR:'', mhrr,
+      // durata reale della fase = somma degli RR registrati. Serve al medico per sapere
+      // su che finestra sta leggendo SDNN, che dipende dalla durata della misurazione.
+      durS: beats.reduce((a,o)=>a+o.rr, 0)/1000
     };
   }
   // Costruisce il CSV stile emWave Pro Plus importabile da HRV Self Coherence.
@@ -2782,7 +2809,14 @@ const HRV = (() => {
       ['Normal Coherence',      s => num(s.m.coh,1) ],
       ['Mean Heart Rate',       s => num(s.m.mhr,0) ],
       ['Mean Heart Rate Range', s => num(s.m.mhrr,1) ],
-      // riga extra ignorata dal parser dell'HRV test: traccia il consenso col dato
+      // Righe extra ignorate dal parser dell'HRV test (legge solo le etichette note).
+      // Servono al medico per sapere su quale finestra sta leggendo i dati: la durata
+      // del tonico è variabile (si adatta alla FC per arrivare a 300 IBI) e SDNN
+      // dipende dalla durata, quindi il confronto fra test va fatto sapendolo.
+      ['Battiti registrati',    s => s.m.ibi.length ],
+      ['Durata fase (s)',       s => num(s.m.durS,0) ],
+      ['Soglia 300 IBI',        s => s.type==='Deep Breathing' ? 'n/a (fasico)'
+                                     : (s.m.ibi.length>=300 ? 'raggiunta' : 'NON raggiunta') ],
       ['Consenso trattamento',  ()=> consentMark ]
     ];
     const ncol = 1 + sess.length*2, rows = [];
@@ -3103,7 +3137,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v67';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v68';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3111,7 +3145,7 @@ const HRV = (() => {
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
-           isReady, beginTest, setTestPhase, endTest, exportEmwave,
+           isReady, recentHR, phaseBeats, beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
@@ -3119,13 +3153,26 @@ const HRV = (() => {
 })();
 window.HRV = HRV;
 
-/* ================= MODALITÀ TEST CLINICO (tonico 5' + fasico 1') ================= */
+/* ================= MODALITÀ TEST CLINICO (tonico 5–8' + fasico 1') ================= */
+/* DURATA DEL TONICO VARIABILE. Il criterio professionale non è il tempo ma il numero    */
+/* di battiti: "soglia minima professionale: 5 minuti o 300 IBI; nei bradicardici        */
+/* prolungare" (dispensa Master HRV cap. 4). I 5 minuti sono solo la traduzione di 300   */
+/* battiti a FC 60: sotto i 60 bpm la finestra resta corta e le frequenze (VLF in testa) */
+/* non sono stimabili. La durata viene quindi calcolata dalla FC misurata in             */
+/* stabilizzazione, PRIMA di iniziare, così il countdown resta fisso: un timer che si    */
+/* allunga mentre il paziente lo guarda sarebbe esso stesso un perturbatore del tonico.  */
 const TestMode = (() => {
   const el = id => document.getElementById(id);
-  const TONIC_MS = 300000, PHASIC_MS = 60000, BREATH_MS = 10000; // 6 atti/min = ciclo 10 s
+  const PHASIC_MS = 60000, BREATH_MS = 10000;   // fasico: 1', 6 atti/min = ciclo 10 s
+  const TONIC_MIN_MS    = 300000;   // 5' — standard short-term, mai meno
+  const TONIC_MAX_MS    = 480000;   // 8' — tetto: oltre non è ragionevole chiederlo
+  const TONIC_MIN_BEATS = 300;      // la soglia vera
+  const TONIC_TARGET    = 320;      // margine: a riposo la FC scende sotto quella di stabilizzazione
   const STAB_MS = 30000;                                          // stabilizzazione: collegati ma non si registra
   let pending = null;                                             // dati paziente in attesa di avviare la cattura
   let raf = null, t0 = 0, phase = null, lastHalf = null, prepTimer = null;
+  let tonicMs = TONIC_MIN_MS;       // durata della fase tonica, decisa a fine stabilizzazione
+  let tonicChecked = false;         // verifica di proiezione dei battiti già fatta?
   // Profilo paziente memorizzato in locale (SOLO sul telefono del paziente): evita di
   // reinserire codice/sesso/età/categoria ad ogni test. Nessun nome, mai trasmesso.
   const PROFILE_KEY = 'respiroPacer.testProfile.v1';
@@ -3183,9 +3230,20 @@ const TestMode = (() => {
     el('hrvTestOrb').style.transform = 'scale(1)';
     loop();
   }
+  // Durata del tonico dalla FC degli ultimi 20 s di stabilizzazione (i primi 10 s sono
+  // ancora "sporchi" di movimento). Arrotondata ai 30 s superiori, fra 5 e 8 minuti.
+  // Se la FC non è stimabile si resta sui 5 minuti standard.
+  function planTonicDuration(){
+    const hr = HRV.recentHR(20000);
+    if(!hr) return TONIC_MIN_MS;
+    const need = (TONIC_TARGET / hr) * 60000;
+    const rounded = Math.ceil(need / 30000) * 30000;
+    return Math.min(TONIC_MAX_MS, Math.max(TONIC_MIN_MS, rounded));
+  }
   // Suono d'inizio e via alla fase tonica: da qui in poi i battiti vengono registrati.
   function beginCapture(){
     HRV.beginTest(pending.code, pending.sex, pending.age, pending.pop);
+    tonicMs = planTonicDuration(); tonicChecked = false;
     try{ Audio.recStart(); }catch(e){}
     runPhase('tonic');
   }
@@ -3202,10 +3260,24 @@ const TestMode = (() => {
     }
     loop();
   }
+  // A 45 s dalla fine proietto i battiti attesi al termine: se non arrivano a 300 (FC
+  // scesa più del previsto) allungo la fase quanto basta, restando sotto il tetto.
+  // Fatto una volta sola e in anticipo, così il countdown non rimbalza indietro da zero.
+  function checkTonicBeats(elapsed, dur){
+    if(tonicChecked || tonicMs >= TONIC_MAX_MS) return;
+    if(elapsed < dur - 45000) return;
+    const n = HRV.phaseBeats('tonic');
+    if(n < 20) return;                                    // troppo pochi per proiettare
+    tonicChecked = true;
+    if(n * (dur/elapsed) >= TONIC_MIN_BEATS) return;      // la proiezione basta già
+    const need = (TONIC_MIN_BEATS + 10) * (elapsed / n);  // ms totali al ritmo osservato
+    tonicMs = Math.min(TONIC_MAX_MS, Math.max(tonicMs, Math.ceil(need/10000)*10000));
+  }
   function loop(){
     const now = performance.now(), elapsed = now - t0;
-    const dur = phase==='stab' ? STAB_MS : (phase==='tonic' ? TONIC_MS : PHASIC_MS);
+    const dur = phase==='stab' ? STAB_MS : (phase==='tonic' ? tonicMs : PHASIC_MS);
     el('hrvTestCount').textContent = fmt(dur - elapsed);
+    if(phase==='tonic') checkTonicBeats(elapsed, dur);
     if(phase==='phasic'){
       const ph = (elapsed % BREATH_MS) / BREATH_MS;          // 0..1
       const full = (1 - Math.cos(2*Math.PI*ph)) / 2;          // 0..1..0
@@ -3215,7 +3287,15 @@ const TestMode = (() => {
     }
     if(elapsed >= dur){
       if(phase==='stab'){ beginCapture(); return; }
-      if(phase==='tonic'){ onTonicEnd(); return; }   // NON parte più il fasico da solo: scelta esplicita
+      if(phase==='tonic'){
+        // Rete di sicurezza: se nemmeno così i battiti validi arrivano a 300, prolungo a
+        // scatti di 20 s fino al tetto. Col margine dei 320 battiti è un caso raro.
+        if(HRV.phaseBeats('tonic') < TONIC_MIN_BEATS && tonicMs < TONIC_MAX_MS){
+          tonicMs = Math.min(TONIC_MAX_MS, tonicMs + 20000);
+          raf = requestAnimationFrame(loop); return;
+        }
+        onTonicEnd(); return;   // NON parte più il fasico da solo: scelta esplicita
+      }
       try{ Audio.recEnd(); }catch(e){}
       finish(); return;
     }
