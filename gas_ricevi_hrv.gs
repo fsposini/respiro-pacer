@@ -168,6 +168,10 @@ function doGet(e) {
     return _json(result);
   }
 
+  // Nota: l'export dei dati verso il PC NON passa di qui. Lo fa esportaFogliCSV()
+  // (in fondo a questo file), che scrive i CSV nella cartella Drive: Drive li
+  // sincronizza sul PC e la cartella clinica li legge in locale, senza token né
+  // chiamate di rete. Vedi Clinica/sync_hrv.py.
   return _json({ ok: true, service: 'ricevi-hrv' });   // verifica rapida che l'app sia viva
 }
 
@@ -332,6 +336,73 @@ function _notifyReadiness(code, p) {
       muteHttpExceptions: true,
     });
   } catch (_) {}
+}
+
+// ───────────────────── EXPORT DEI FOGLI IN CSV (per l'agente HRV) ─────────────────────
+// Perche' serve: Google Drive for Desktop sincronizza sul PC i file veri (CSV, PNG) ma
+// NON i fogli Google, che sul disco restano segnaposto vuoti (.gsheet). L'agente locale
+// (Code\tools\agente_hrv) quindi non potrebbe leggere coerenza/readiness/alpha1.
+// Questa funzione scrive accanto a ogni foglio una copia CSV "export_<nome>.csv": quella
+// Drive la scarica davvero, e l'agente la legge in locale senza nessuna API o credenziale.
+//
+// ⚠️ NON serve una nuova distribuzione: e' una funzione interna, non passa da doPost.
+// Basta incollarla nell'editor Apps Script e creare il trigger (vedi sotto).
+//
+// ATTIVAZIONE (una volta sola):
+//   1. Apri script.google.com → il progetto "ricevi-hrv" → incolla questo blocco.
+//   2. Menu ▶ Esegui → scegli  esportaFogliCSV  → autorizza se richiesto.
+//      (verifica: nella cartella "HRV pazienti" compaiono i file export_*.csv)
+//   3. Sinistra ⏰ Attivazioni → Aggiungi attivazione:
+//        funzione: esportaFogliCSV · origine: Basato sul tempo ·
+//        tipo: Timer giornaliero · orario: 03:00-04:00
+//      Cosi' il PC la mattina trova i dati gia' pronti.
+var FOGLI_DA_ESPORTARE = ['coerenza_pazienti', 'readiness_atleti', 'alpha1_atleti',
+                          'risonanza_pazienti', 'risonanza_esiti'];
+
+function esportaFogliCSV() {
+  var folder = DriveApp.getFolderById(FOLDER_ID);
+  var fatti = [];
+  for (var i = 0; i < FOGLI_DA_ESPORTARE.length; i++) {
+    var nome = FOGLI_DA_ESPORTARE[i];
+    var it = folder.getFilesByName(nome);
+    if (!it.hasNext()) continue;                 // foglio non ancora creato: si salta
+    try {
+      var ss = SpreadsheetApp.open(it.next());
+      var csv = _foglioInCsv(ss.getActiveSheet());
+      var nomeCsv = 'export_' + nome + '.csv';
+      // Sovrascrive la copia precedente invece di affiancarne una nuova: altrimenti
+      // Drive riempirebbe la cartella di "export_… (1).csv" e l'agente leggerebbe
+      // sempre la piu' vecchia.
+      var vecchi = folder.getFilesByName(nomeCsv);
+      while (vecchi.hasNext()) vecchi.next().setTrashed(true);
+      folder.createFile(Utilities.newBlob(csv, 'text/csv', nomeCsv));
+      fatti.push(nome);
+    } catch (e) {
+      // Un foglio rotto non deve impedire l'export degli altri.
+      Logger.log('export fallito per ' + nome + ': ' + e);
+    }
+  }
+  Logger.log('Esportati: ' + (fatti.join(', ') || 'nessuno'));
+  return fatti;
+}
+
+// Converte un foglio in CSV. Le date diventano ISO (l'agente le riconosce senza
+// dipendere dal formato con cui il foglio le mostra a schermo), e le celle con
+// virgole/virgolette/a-capo vengono quotate come vuole il formato CSV.
+function _foglioInCsv(sheet) {
+  var dati = sheet.getDataRange().getValues();
+  var fuso = Session.getScriptTimeZone();
+  var righe = dati.map(function (riga) {
+    return riga.map(function (c) {
+      if (c instanceof Date) return Utilities.formatDate(c, fuso, "yyyy-MM-dd'T'HH:mm:ss");
+      var s = String(c === null || c === undefined ? '' : c);
+      if (s.indexOf('"') >= 0 || s.indexOf(',') >= 0 || s.indexOf('\n') >= 0) {
+        s = '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }).join(',');
+  });
+  return righe.join('\n');
 }
 
 function _json(obj) {
