@@ -688,6 +688,8 @@
     .coh-soft b{font-weight:800}
     /* Tachimetro dello stato di attivazione (Stress Index) a fine test tonico */
     .stress-card{background:#F4FBF8;border:1px solid rgba(27,84,155,.18);border-radius:14px;padding:16px;margin:14px auto 6px;max-width:420px;text-align:center;color:#2b3a44}
+    .stress-title{font-weight:800;color:#1B549B;font-size:1.22rem;line-height:1.25;letter-spacing:-.01em;margin:2px auto 4px;max-width:380px}
+    .stress-titlesub{font-size:.88rem;line-height:1.45;color:#545E62;max-width:340px;margin:0 auto 10px}
     .stress-gauge svg{max-width:300px;width:100%;height:auto;margin:0 auto;display:block}
     .stress-chip{display:inline-block;font-weight:800;font-size:1.05rem;padding:6px 16px;border-radius:22px;color:#fff;margin:6px 0 4px}
     .stress-sub{font-size:.92rem;line-height:1.5;color:#3a4a52;margin:4px auto 0;max-width:360px}
@@ -697,6 +699,12 @@
     .stress-lev ul{margin:0;padding-left:18px}
     .stress-lev li{font-size:.85rem;line-height:1.5;color:#3a4a52;margin-bottom:4px}
     .stress-guard-t{font-weight:800;color:#b3201e;font-size:1rem;margin-bottom:6px}
+    /* Barra della capacità di adattamento (report del test fasico) */
+    .phas-res{margin:10px auto 4px;max-width:340px}
+    .phas-res-t{font-size:.85rem;color:#545E62;margin-bottom:6px}
+    .phas-bar{height:16px;border-radius:9px;background:rgba(27,84,155,.12);overflow:hidden}
+    .phas-bar i{display:block;height:100%;border-radius:9px;transition:width .6s ease}
+    .phas-res-n{font-weight:800;font-size:1.6rem;margin-top:6px;letter-spacing:-.02em}
     /* ---- Guida utente ---- */
     .guide-btn{margin-left:auto;align-self:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:inherit;font-size:.85rem;padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap}
     .guide-overlay{position:fixed;inset:0;z-index:1000;background:rgba(8,16,24,.98);overflow-y:auto;display:none}
@@ -1619,9 +1627,14 @@ const StressGauge = (() => {
     +'<li><b>Respirazione di coerenza</b> — pochi minuti al giorno allenano direttamente il sistema nervoso.</li>'
     +'</ul></div>';
   const NOTA = '<div class="stress-note">📸 Questa è una <b>fotografia del tuo stato di attivazione di oggi</b>, non una diagnosi. Un singolo valore oscilla con il sonno, i pasti e la giornata: quello che conta è <b>l\'andamento nel tempo</b>, che valuterai insieme al tuo medico.</div>';
+  // Titolo esplicito: il tachimetro da solo non dice COSA misura. Deve leggersi
+  // prima del disegno, con più peso visivo del verdetto.
+  const TITOLO = '<div class="stress-title">Indice di stress del sistema nervoso</div>'
+    + '<div class="stress-titlesub">Quanto il tuo sistema nervoso sta lavorando per tenerti in equilibrio</div>';
   function cardHTML(si){
     const v = verdict(si);
     return '<div class="stress-card">'
+      +TITOLO
       +'<div class="stress-gauge">'+gaugeSVG(si)+'</div>'
       +'<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
       +'<div class="stress-sub">'+v.sub+'</div>'
@@ -1629,6 +1642,7 @@ const StressGauge = (() => {
   }
   function guardHTML(){
     return '<div class="stress-card">'
+      +TITOLO
       +'<div class="stress-guard-t">⚠️ Misura troppo disturbata</div>'
       +'<div class="stress-sub">Il tracciato di oggi ha troppi battiti irregolari o troppo movimento per una lettura affidabile dello stato. Ripeti da fermo, in silenzio, con la fascia ben aderente. I dati sono comunque stati inviati al tuo medico.</div>'
       +'</div>';
@@ -1642,6 +1656,91 @@ const StressGauge = (() => {
   return { cardFor };
 })();
 window.StressGauge = StressGauge;
+
+/* ── Report del test fasico (respiro guidato a 6/min) ───────────────────────
+   Criteri della dispensa Master HRV SC, lezione 4 — test respiratorio Harmat:
+     · FC senza variazioni significative (se SALE = sforzo o disfunzione
+       diaframmatica: è l'unico criterio dove "aumento" è un segnale negativo)
+     · SDNN in espansione (aumenta più dell'RMSSD per influenza respiratoria)
+     · RMSSD in aumento (vago reattivo); se PEGGIORA = mancanza di risorse
+     · coerenza normalizzata ≥ 80%
+   Pesi identici a quelli dello strumento medico (19/25/19/37, −25 se l'RMSSD
+   peggiora): la percentuale che vede il paziente è la stessa che legge Federico.
+   L'MHRR NON entra: non compare in nessuna fonte della knowledge base.
+   Al paziente: tre livelli attenuati, mai le etichette cliniche (iporeattiva,
+   disregolata, vago ipertonico). Caso particolare: una risposta abnorme (SDNN
+   quasi triplicato con RMSSD che raggiunge l'SDNN) prende un punteggio ALTO ma
+   secondo la dispensa può essere un primo segno di overtraining → non va mai
+   restituita al paziente come una buona notizia. */
+const PhasicReport = (() => {
+  const TITOLO = '<div class="stress-title">Risposta al respiro guidato</div>'
+    + '<div class="stress-titlesub">Quanta capacità di adattamento ha mostrato il tuo sistema nervoso</div>';
+  const NOTA = '<div class="stress-note">📸 Anche questa è una <b>fotografia di oggi</b>, non una diagnosi. '
+    + 'Il valore va letto insieme al resto della misura: se ne parla col tuo medico, che riceve i dati completi.</div>';
+
+  function reserve(t, f){
+    const dSp = t.sdnn ? (f.sdnn-t.sdnn)/t.sdnn*100 : 0;
+    const dRp = t.rmssd ? (f.rmssd-t.rmssd)/t.rmssd*100 : 0;
+    const dH  = f.hr - t.hr;
+    const coh = (f.coh==null) ? 0 : f.coh;
+    const c = { hrStable:Math.abs(dH)<=6, sdnnUp:dSp>=5, rmssdUp:dRp>=5,
+                rmssdWorse:dRp<=-10, cohFull:coh>=80, cohOk:coh>=50,
+                hyper: dSp>=180 && f.rmssd > f.sdnn*0.9 };
+    let res = 0;
+    res += c.hrStable?19:0; res += c.sdnnUp?25:0; res += c.rmssdUp?19:0;
+    res += c.cohFull?37:(c.cohOk?22:0);
+    if(c.rmssdWorse) res -= 25;
+    res = Math.max(0, Math.min(100, res));
+    return { res, c, dSp, dRp, dH, coh };
+  }
+  function verdict(r){
+    // La risposta abnorme non è una promozione: messaggio neutro, rimando al medico.
+    if(r.c.hyper) return { big:'Risposta molto ampia', col:'#e8820c',
+      sub:'Oggi il tuo sistema ha reagito al respiro guidato in modo molto marcato. Non è un dato da leggere da soli: falla vedere al tuo medico insieme al resto della misura.' };
+    if(r.res>=66) return { big:'Buona capacità di adattamento', col:'#1b8a5a',
+      sub:'Il tuo sistema nervoso ha risposto bene al respiro guidato: le risorse per recuperare ci sono, anche se la misura a riposo non fosse brillante.' };
+    if(r.res>=40) return { big:'Adattamento parziale', col:'#e8820c',
+      sub:'Il tuo sistema ha risposto solo in parte. È la situazione in cui l\'allenamento regolare alla respirazione di coerenza dà i risultati più visibili.' };
+    return { big:'Adattamento ridotto oggi', col:'#b3201e',
+      sub:'Oggi il sistema ha faticato a rispondere al respiro guidato. Da una misura sola non si conclude nulla: proprio per questo vale la pena parlarne col tuo medico.' };
+  }
+  function rows(r){
+    const li = [];
+    li.push(r.c.hrStable
+      ? '<li>Frequenza cardiaca <b>stabile</b> durante il respiro guidato — nessuno sforzo respiratorio</li>'
+      : '<li>Frequenza cardiaca <b>in aumento di '+Math.abs(r.dH).toFixed(0)+' battiti</b> — segno che il respiro è stato faticoso</li>');
+    li.push('<li>Ampiezza della variabilità <b>'+(r.dSp>=0?'+':'')+r.dSp.toFixed(0)+'%</b> rispetto alla fase a riposo'
+      + (r.c.sdnnUp?' — attesa in aumento col respiro lento':' — attesa in aumento, oggi non è cresciuta')+'</li>');
+    li.push('<li>Coerenza raggiunta: <b>'+(r.coh?r.coh.toFixed(0)+'%':'non calcolabile')+'</b>'
+      + (r.c.cohFull?' — obiettivo dell\'80% raggiunto':' — l\'obiettivo è l\'80%')+'</li>');
+    return '<div class="stress-lev"><div class="stress-lev-t">Cosa è successo durante il minuto di respiro guidato</div><ul>'
+      + li.join('') + '</ul></div>';
+  }
+  function gaugeBar(res, col){
+    return '<div class="phas-res"><div class="phas-res-t">Capacità di adattamento</div>'
+      + '<div class="phas-bar"><i style="width:'+res+'%;background:'+col+'"></i></div>'
+      + '<div class="phas-res-n" style="color:'+col+'">'+res+'%</div></div>';
+  }
+  function guardHTML(){
+    return '<div class="stress-card">'+TITOLO
+      +'<div class="stress-guard-t">⚠️ Misura troppo disturbata</div>'
+      +'<div class="stress-sub">Il minuto di respiro guidato ha troppi battiti irregolari per una lettura affidabile. I dati sono comunque stati inviati al tuo medico.</div>'
+      +'</div>';
+  }
+  // ton/fas = HRV.phaseStats('tonic'/'phasic'); '' se manca il confronto.
+  function cardFor(ton, fas){
+    if(!ton || !fas) return '';
+    if(!fas.reliable) return guardHTML();
+    const r = reserve(ton, fas), v = verdict(r);
+    return '<div class="stress-card">'+TITOLO
+      + gaugeBar(r.res, v.col)
+      + '<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
+      + '<div class="stress-sub">'+v.sub+'</div>'
+      + rows(r) + NOTA + '</div>';
+  }
+  return { cardFor, reserve };
+})();
+window.PhasicReport = PhasicReport;
 
 /* ---------- MOTORE RESPIRAZIONE ---------- */
 const App = (() => {
@@ -2970,6 +3069,40 @@ const HRV = (() => {
              keptPct: b.quality.keptPct, kept: b.quality.kept,
              reliable: b.quality.keptPct >= 90 && b.quality.kept >= 150 };
   }
+  // Coerenza media di un tratto con la STESSA metodica dell'HRV Self Coherence:
+  // finestra scorrevole di 64 s a passo 5 s mediata; finestra unica se il tratto è
+  // più corto (il fasico dura 1'). Il grezzo va calibrato su scala emWave col fattore
+  // 1,25 ricavato dai 49 test appaiati: la soglia dell'80% della dispensa è su QUELLA
+  // scala, non sulla nostra — senza calibrazione il criterio sarebbe applicato male.
+  const COH_CAL_EMWAVE = 1.25;
+  function cohMeanPct(series){
+    const kept = filterSeries(series).filter(o=>o.kept);
+    if(kept.length < 16) return null;
+    const t0 = kept[0].tcum, tEnd = kept[kept.length-1].tcum;
+    const out = [];
+    if(tEnd - t0 <= COH_WIN_MS){
+      const c = coherenceCore(kept.map(o=>o.rr)); if(c) out.push(c.pct);
+    } else {
+      for(let s=t0; s+COH_WIN_MS<=tEnd; s+=5000){
+        const seg = kept.filter(o=>o.tcum>=s && o.tcum<=s+COH_WIN_MS).map(o=>o.rr);
+        const c = seg.length>=16 ? coherenceCore(seg) : null;
+        if(c) out.push(c.pct);
+      }
+    }
+    if(!out.length) return null;
+    return Math.min(100, (out.reduce((a,b)=>a+b,0)/out.length) * COH_CAL_EMWAVE);
+  }
+  // Metriche di una fase per il confronto tonico→fasico (test respiratorio Harmat).
+  function phaseStats(ph){
+    const series = rr.filter(o => o.ph === ph);
+    if(series.length < 40) return null;
+    const b = analyzeBlock(series);
+    if(!b || !b.time || !(b.time.sdnn > 0) || !(b.time.rmssd > 0)) return null;
+    return { sdnn: b.time.sdnn, rmssd: b.time.rmssd, hr: b.time.meanHR,
+             coh: cohMeanPct(series),
+             keptPct: b.quality.keptPct, kept: b.quality.kept,
+             reliable: b.quality.keptPct >= 90 && b.quality.kept >= 45 };
+  }
   // Metriche + colonne IBI/attributo per una fase (emWave-compatibile).
   function phaseMeta(beats){
     const filt = filterSeries(beats);              // {tcum,rr,kept}
@@ -3360,7 +3493,7 @@ const HRV = (() => {
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, recentHR, phaseBeats, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, cohOf: coherenceCore,
+           sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, phaseStats, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
            liveRR: ()=> rr.map(o=>o.rr) };
@@ -3521,7 +3654,14 @@ const TestMode = (() => {
   function renderStress(id){
     const host = el(id); if(!host) return;
     const ts = (window.HRV && HRV.tonicStress) ? HRV.tonicStress() : null;
-    host.innerHTML = window.StressGauge ? StressGauge.cardFor(ts) : '';
+    let html = window.StressGauge ? StressGauge.cardFor(ts) : '';
+    // Report del fasico: solo se la fase è stata davvero eseguita (serve il confronto
+    // col tonico). Chi conclude dopo il solo tonico non vede nulla in più.
+    if(window.PhasicReport && window.HRV && HRV.phaseStats){
+      const fas = HRV.phaseStats('phasic');
+      if(fas) html += PhasicReport.cardFor(HRV.phaseStats('tonic'), fas);
+    }
+    host.innerHTML = html;
   }
   function onTonicEnd(){
     if(raf){ cancelAnimationFrame(raf); raf=null; }
