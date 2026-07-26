@@ -683,6 +683,20 @@
     .cam-sum-row{font-size:1rem;margin:12px 0 4px}
     .cam-sum-row b{font-size:1.35rem}
     .cam-sum-sub{font-size:.85rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
+    /* Feedback motivazionale locale sull'allenamento di coerenza (mai clinico) */
+    .coh-soft{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-left:4px solid #9F7A6C;border-radius:12px;padding:14px 16px;margin:14px auto 6px;max-width:420px;font-size:1rem;line-height:1.55;color:var(--text,#e8eef0);text-align:left}
+    .coh-soft b{font-weight:800}
+    /* Tachimetro dello stato di attivazione (Stress Index) a fine test tonico */
+    .stress-card{background:#F4FBF8;border:1px solid rgba(27,84,155,.18);border-radius:14px;padding:16px;margin:14px auto 6px;max-width:420px;text-align:center;color:#2b3a44}
+    .stress-gauge svg{max-width:300px;width:100%;height:auto;margin:0 auto;display:block}
+    .stress-chip{display:inline-block;font-weight:800;font-size:1.05rem;padding:6px 16px;border-radius:22px;color:#fff;margin:6px 0 4px}
+    .stress-sub{font-size:.92rem;line-height:1.5;color:#3a4a52;margin:4px auto 0;max-width:360px}
+    .stress-note{font-size:.85rem;line-height:1.5;color:#545E62;background:rgba(27,84,155,.06);border-radius:10px;padding:10px 12px;margin:12px auto 0;max-width:380px;text-align:left}
+    .stress-lev{margin:12px auto 0;max-width:380px;text-align:left}
+    .stress-lev-t{font-weight:800;color:#1B549B;font-size:.9rem;margin-bottom:6px}
+    .stress-lev ul{margin:0;padding-left:18px}
+    .stress-lev li{font-size:.85rem;line-height:1.5;color:#3a4a52;margin-bottom:4px}
+    .stress-guard-t{font-weight:800;color:#b3201e;font-size:1rem;margin-bottom:6px}
     /* ---- Guida utente ---- */
     .guide-btn{margin-left:auto;align-self:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:inherit;font-size:.85rem;padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap}
     .guide-overlay{position:fixed;inset:0;z-index:1000;background:rgba(8,16,24,.98);overflow-y:auto;display:none}
@@ -748,6 +762,7 @@
     </div>
     <div id="hrvTestChoice" style="display:none">
       <div class="hrv-test-doneMsg">✓ Fase tonica completata.</div>
+      <div id="hrvTestStress"></div>
       <div class="hrv-test-hint">Puoi <b>concludere qui</b>, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
       <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′)</button>
       <button id="hrvTestConclude" class="btn ghost">Concludi qui</button>
@@ -767,6 +782,7 @@
     </div>
     <div id="hrvTestDone" style="display:none">
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
+      <div id="hrvTestStressDone"></div>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestSend" class="btn ghost">Invia i dati al medico</button>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
@@ -945,6 +961,8 @@
     <div class="hrv-wave-note" id="hrvWaveNote">Connetti la fascia: l'onda della frequenza cardiaca apparirà qui. In coerenza, sale in inspirazione e scende in espirazione, in sincrono col respiro.</div>
     <div class="hrv-coh-hint">La <b>coerenza</b> qui sopra è il picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
   </div>
+
+  <div class="coh-soft" id="cohSoftBox" data-feat="coherence" style="display:none"></div>
 
   <div class="hrv-results" id="hrvResults" data-feat="coherence">
     <h3>Time domain</h3>
@@ -1456,6 +1474,174 @@ const WakeLock = (() => {
   });
   return{acquire,release};
 })();
+
+/* ── Feedback motivazionale locale sull'allenamento di coerenza ──────────────
+   Confronta la coerenza media (0–100) della seduta con quella precedente e
+   restituisce un messaggio di incoraggiamento, MAI clinico. Tutto in locale:
+   lo storico qui sotto tiene solo due numeri per seduta (coerenza media e
+   minuti) — nessun dato clinico, nessuna rete, nessun modello. Le frasi sono
+   validate dal medico; se ne pesca una a caso evitando di ripetere l'ultima. */
+const CohFeedback = (() => {
+  const KEY   = 'PROVA-respiroPacer.cohFeedback.v1';      // storico: [{ts, coh, min}]
+  const LAST  = 'PROVA-respiroPacer.cohFeedbackLast.v1';  // ultimo indice usato per scenario
+  const BANDA = 3;                                   // ±punti entro cui è "stabile"
+  const MSG = {
+    prima: [
+      "Hai completato <b>{min} minuti</b> di respirazione di coerenza. È la tua prima seduta registrata: da qui parte il percorso. Il valore di oggi è il tuo punto di partenza — conta tornarci con costanza.",
+      "Prima seduta fatta: <b>{min} minuti</b> di coerenza. Oggi metti la prima pietra. Da adesso ogni sessione costruisce sulla precedente.",
+      "<b>{min} minuti</b>, e il tuo percorso inizia qui. Questa prima misura è il tuo riferimento: sarà bello vederla evolvere seduta dopo seduta.",
+      "Ottimo, hai registrato la tua prima sessione: <b>{min} minuti</b>. Non serve un numero alto oggi — serve iniziare, e l'hai fatto.",
+      "Prima volta fatta: <b>{min} minuti</b> di respiro coerente. Segna questo momento: è la base da cui misureremo i tuoi progressi.",
+      "<b>{min} minuti</b> nella tua prima seduta. Il primo passo è sempre il più importante. Ci vediamo alla prossima.",
+      "Hai chiuso la tua prima sessione di coerenza (<b>{min} minuti</b>). Da qui in poi conta una cosa sola: la costanza. Un passo alla volta.",
+      "Bene: <b>{min} minuti</b>, prima registrazione completata. Oggi hai aperto il percorso — il resto lo costruisce la ripetizione."
+    ],
+    su: [
+      "Hai completato <b>{min} minuti</b>. La tua coerenza è <b>in crescita</b> rispetto all'ultima seduta: l'allenamento sta funzionando. Continua così.",
+      "<b>{min} minuti</b>, e oggi la coerenza è salita rispetto alla volta scorsa. Segno che il corpo sta imparando. Ottimo lavoro.",
+      "Bel passo avanti: <b>{min} minuti</b> con una coerenza migliore dell'ultima volta. La strada è quella giusta.",
+      "Hai fatto <b>{min} minuti</b> e la coerenza è in miglioramento. Questi progressi nascono proprio dalla costanza che stai mettendo.",
+      "<b>{min} minuti</b> completati, coerenza in aumento sulla seduta precedente. Il sistema nervoso risponde: continua a coltivarlo.",
+      "Oggi meglio dell'ultima volta: <b>{min} minuti</b> e coerenza in crescita. Piccoli miglioramenti ripetuti fanno la differenza vera.",
+      "Sessione da <b>{min} minuti</b>, coerenza in salita. Stai allenando la calma come si allena un muscolo. Bravo.",
+      "<b>{min} minuti</b>, e il trend è in miglioramento. Non è un caso: è l'effetto della pratica regolare. Avanti così."
+    ],
+    stabile: [
+      "Hai completato <b>{min} minuti</b>. La coerenza è in linea con l'ultima seduta. La costanza è già un risultato: è la ripetizione che allena il sistema.",
+      "<b>{min} minuti</b>, coerenza stabile rispetto alla volta scorsa. Mantenere è tutt'altro che poco: è la base su cui si costruisce.",
+      "Sessione da <b>{min} minuti</b>, in linea con le precedenti. Il corpo consolida ciò che impara quando la pratica è regolare.",
+      "<b>{min} minuti</b> fatti, valori stabili. Non ogni seduta deve salire: la regolarità conta più del singolo picco.",
+      "Hai chiuso <b>{min} minuti</b> con una coerenza costante. La continuità è esattamente ciò che rieduca il sistema nervoso nel tempo.",
+      "<b>{min} minuti</b>, andamento stabile. Stai tenendo il ritmo — ed è il ritmo, più del singolo dato, a fare il percorso.",
+      "Coerenza in linea con l'ultima volta, <b>{min} minuti</b> completati. Presenza costante: continua a presentarti all'appuntamento con te stesso.",
+      "<b>{min} minuti</b>, valori stabili. Ogni seduta uguale è un mattone in più. La costanza lavora anche quando i numeri non cambiano."
+    ],
+    giu: [
+      "Hai completato <b>{min} minuti</b>. Oggi la coerenza è un po' più bassa del solito — capita, è normale: dipende da sonno, stress e giornata. Non è un voto, conta la costanza nel tempo.",
+      "<b>{min} minuti</b> fatti. La coerenza oggi è sotto la tua media: succede, e va benissimo così. Una giornata storta non cambia il percorso.",
+      "Sessione da <b>{min} minuti</b>, oggi con valori più bassi. Il corpo ha i suoi alti e bassi — l'importante è che tu ci sia tornato.",
+      "<b>{min} minuti</b> completati. Oggi la coerenza è calata un po': niente di preoccupante, dipende da tanti fattori del momento. Il valore vero è la continuità.",
+      "Hai fatto <b>{min} minuti</b> anche in una giornata meno brillante: questo conta più del numero. Gli alti e bassi fanno parte dell'allenamento.",
+      "<b>{min} minuti</b>, coerenza sotto la tua media abituale. Non leggerlo come un passo indietro — è fisiologico. Domani è un'altra seduta.",
+      "Oggi i numeri sono più bassi, ma hai comunque fatto i tuoi <b>{min} minuti</b>. Presentarsi anche nei giorni no è proprio ciò che allena il sistema.",
+      "<b>{min} minuti</b> completati. La coerenza oggi ha ceduto un po': sonno, stress, stanchezza incidono sempre. Guarda il percorso, non la singola seduta."
+    ]
+  };
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+  function pick(scen){
+    const arr = MSG[scen]; if(!arr || !arr.length) return '';
+    let last = {}; try{ last = JSON.parse(localStorage.getItem(LAST))||{}; }catch(e){}
+    let i = Math.floor(Math.random()*arr.length);
+    if(arr.length>1 && i===last[scen]) i = (i+1)%arr.length;   // mai due uguali di fila
+    last[scen] = i; try{ localStorage.setItem(LAST, JSON.stringify(last)); }catch(e){}
+    return arr[i];
+  }
+  // Registra la seduta e restituisce il messaggio soft (con {min} sostituito).
+  function record(cohMedia, minuti){
+    if(cohMedia==null || !isFinite(cohMedia)) return '';
+    const list = load();
+    const prev = list.length ? list[list.length-1].coh : null;
+    const min = Math.max(0, Math.round(minuti||0));
+    let scen;
+    if(prev==null)                  scen = 'prima';
+    else if(cohMedia >= prev+BANDA) scen = 'su';
+    else if(cohMedia <= prev-BANDA) scen = 'giu';
+    else                            scen = 'stabile';
+    list.push({ ts:new Date().toISOString(), coh:Math.round(cohMedia), min });
+    if(list.length>200) list.splice(0, list.length-200);
+    try{ localStorage.setItem(KEY, JSON.stringify(list)); }catch(e){}
+    return pick(scen).replace('{min}', min);
+  }
+  return { record };
+})();
+window.CohFeedback = CohFeedback;
+
+/* ── Tachimetro dello stato di attivazione (Stress Index) a fine test tonico ──
+   Porta il metodo già validato nell'app self-coherence: formula di Baevsky
+   (SI = AMo/(2·Mo·MxDMn)) stimata da SDNN + FC media, con le stesse soglie
+   (riferimento 150; zone 50/150/500). Tono basso, non allarmistico: le etichette
+   descrivono lo stato DI OGGI, non un giudizio sulla persona; nella fascia alta
+   rimandano sempre al medico. Guardia di qualità sui tracciati troppo disturbati. */
+const StressGauge = (() => {
+  const SI_REF = 150;
+  function erf(x){
+    const s = x<0 ? -1 : 1; x = Math.abs(x);
+    const t = 1/(1+0.3275911*x);
+    const y = 1-(((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t)*Math.exp(-x*x);
+    return s*y;
+  }
+  // SI stimato da statistiche di sintesi (gaussiana, bin 50 ms, MxDMn≈5,5·SDNN).
+  function stressIndex(sdnn, meanRRms){
+    if(meanRRms<=0 || sdnn<=0) return 0;
+    const Mo = meanRRms/1000;
+    const AMo = 100*erf(25/(sdnn*Math.SQRT2));
+    const MxDMn = 5.5*sdnn/1000;
+    return AMo/(2*Mo*MxDMn);
+  }
+  // Verdetto in linguaggio paziente — stato di oggi, mai giudizio sulla persona.
+  function verdict(si){
+    if(isNaN(si))  return {big:'—', col:'#7a8a90', sub:'Dato non disponibile.'};
+    if(si<50)   return {big:'Oggi molto rilassato', col:'#1b8a5a', sub:'Oggi il sistema nervoso è in forte risparmio energetico. Va letto insieme agli altri indici: non sempre indica solo riposo.'};
+    if(si<=150) return {big:'Oggi in equilibrio', col:'#1b8a5a', sub:'Oggi il tuo sistema nervoso gestisce bene lo stress fisiologico: un buon segnale di equilibrio.'};
+    if(si<=500) return {big:'Oggi attivazione alta', col:'#e8820c', sub:'Oggi il tuo sistema nervoso è piuttosto attivato. Capita, e dipende da tanti fattori del momento: è comunque il segnale che vale la pena curare il recupero.'};
+    return {big:'Oggi attivazione molto alta', col:'#b3201e', sub:'Oggi il tuo sistema nervoso risulta molto attivato. Da una misura sola non si traggono conclusioni: proprio per questo vale la pena parlarne col tuo medico e dare priorità al recupero.'};
+  }
+  function frac(si){
+    if(isNaN(si)) return 0;
+    if(si<=50)  return (si/50)*0.25;
+    if(si<=150) return 0.25+(si-50)/100*0.25;
+    if(si<=500) return 0.50+(si-150)/350*0.25;
+    return 0.75+Math.min(1,(si-500)/500)*0.25;
+  }
+  function gaugeSVG(si){
+    const cx=180, cy=176, R=140, sw=30;
+    const pol=(r,deg)=>{ const a=deg*Math.PI/180; return [cx+r*Math.cos(a), cy-r*Math.sin(a)]; };
+    const arc=(d0,d1)=>{ const n=Math.max(2,Math.ceil(Math.abs(d0-d1)/4)), p=[];
+      for(let i=0;i<=n;i++){ const d=d0+(d1-d0)*i/n, xy=pol(R,d); p.push(xy[0].toFixed(1)+','+xy[1].toFixed(1)); }
+      return p.join(' '); };
+    const zones=[[180,135,'#1b8a5a'],[135,90,'#7cb342'],[90,45,'#f4a82c'],[45,0,'#b3201e']];
+    let s='<svg viewBox="0 0 360 210" role="img" aria-label="Stato di attivazione">';
+    zones.forEach(z=>{ s+='<polyline points="'+arc(z[0],z[1])+'" fill="none" stroke="'+z[2]+'" stroke-width="'+sw+'" stroke-linecap="butt"/>'; });
+    [135,90,45].forEach(d=>{ const a=pol(R+sw/2,d), b=pol(R-sw/2,d); s+='<line x1="'+a[0].toFixed(1)+'" y1="'+a[1].toFixed(1)+'" x2="'+b[0].toFixed(1)+'" y2="'+b[1].toFixed(1)+'" stroke="#fff" stroke-width="2"/>'; });
+    [[135,'50'],[90,'150'],[45,'500']].forEach(z=>{ const p=pol(R-sw/2-11,z[0]); s+='<text x="'+p[0].toFixed(1)+'" y="'+p[1].toFixed(1)+'" font-size="11.5" font-weight="700" fill="#5a6b72" text-anchor="middle" dominant-baseline="middle">'+z[1]+'</text>'; });
+    const deg=180-frac(si)*180, tip=pol(R-6,deg), tail=pol(-12,deg);
+    s+='<line x1="'+tail[0].toFixed(1)+'" y1="'+tail[1].toFixed(1)+'" x2="'+tip[0].toFixed(1)+'" y2="'+tip[1].toFixed(1)+'" stroke="#1f2d33" stroke-width="5" stroke-linecap="round"/>';
+    s+='<circle cx="'+cx+'" cy="'+cy+'" r="10" fill="#1f2d33"/>';
+    s+='<text x="'+cx+'" y="'+(cy-34)+'" text-anchor="middle" font-weight="800" fill="#1f2d33"><tspan font-size="44">'+Math.round(si)+'</tspan><tspan font-size="22" font-weight="600" fill="#7a8a90"> / '+SI_REF+'</tspan></text>';
+    s+='<text x="'+cx+'" y="'+(cy-14)+'" text-anchor="middle" font-size="13.5" fill="#7a8a90">Stato di attivazione · rif. ≤'+SI_REF+'</text>';
+    s+='</svg>';
+    return s;
+  }
+  const LEVE = '<div class="stress-lev"><div class="stress-lev-t">Su cosa puoi agire ogni giorno</div><ul>'
+    +'<li><b>Sonno</b> — regolare e sufficiente: è il primo motore del recupero.</li>'
+    +'<li><b>Movimento</b> — attività fisica costante, senza strafare nei periodi di carico.</li>'
+    +'<li><b>Alimentazione</b> — pasti equilibrati, senza eccessi che tengono alto il "motore".</li>'
+    +'<li><b>Respirazione di coerenza</b> — pochi minuti al giorno allenano direttamente il sistema nervoso.</li>'
+    +'</ul></div>';
+  const NOTA = '<div class="stress-note">📸 Questa è una <b>fotografia del tuo stato di attivazione di oggi</b>, non una diagnosi. Un singolo valore oscilla con il sonno, i pasti e la giornata: quello che conta è <b>l\'andamento nel tempo</b>, che valuterai insieme al tuo medico.</div>';
+  function cardHTML(si){
+    const v = verdict(si);
+    return '<div class="stress-card">'
+      +'<div class="stress-gauge">'+gaugeSVG(si)+'</div>'
+      +'<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
+      +'<div class="stress-sub">'+v.sub+'</div>'
+      +NOTA+LEVE+'</div>';
+  }
+  function guardHTML(){
+    return '<div class="stress-card">'
+      +'<div class="stress-guard-t">⚠️ Misura troppo disturbata</div>'
+      +'<div class="stress-sub">Il tracciato di oggi ha troppi battiti irregolari o troppo movimento per una lettura affidabile dello stato. Ripeti da fermo, in silenzio, con la fascia ben aderente. I dati sono comunque stati inviati al tuo medico.</div>'
+      +'</div>';
+  }
+  // ts = {sdnn, meanNN, reliable} da HRV.tonicStress(); '' se non c'è tonico valido.
+  function cardFor(ts){
+    if(!ts) return '';
+    if(!ts.reliable) return guardHTML();
+    return cardHTML(stressIndex(ts.sdnn, ts.meanNN));
+  }
+  return { cardFor };
+})();
+window.StressGauge = StressGauge;
 
 /* ---------- MOTORE RESPIRAZIONE ---------- */
 const App = (() => {
@@ -2177,6 +2363,7 @@ const HRV = (() => {
     updateCoherenceUI();
     sessionMeta = { start: new Date().toISOString(), breathRate: breathRate || 0 };
     el('hrvResults').classList.remove('show');
+    { const b = el('cohSoftBox'); if(b){ b.style.display='none'; b.innerHTML=''; } }
     if(!connected) status('⚠️ Fascia non connessa: la sessione di respirazione parte ma l\'HRV non verrà registrato.', true);
     else status('Registrazione HRV in corso…');
   }
@@ -2194,6 +2381,14 @@ const HRV = (() => {
     saveSession(report);
     status('Sessione completata: '+report.quality.kept+' battiti validi su '+report.quality.total+'. Risultati salvati.');
     sendCoherenceSession(report);   // invio automatico al medico (se codice + consenso)
+    // Feedback motivazionale locale (mai clinico): confronta con la seduta prima.
+    if(cohN >= 3 && window.CohFeedback){
+      const box = el('cohSoftBox');
+      if(box){
+        const msg = CohFeedback.record(cohPctSum/cohN, report.durationS/60);
+        if(msg){ box.innerHTML = msg; box.style.display = ''; }
+      }
+    }
   }
   // Invio automatico del riepilogo della seduta di coerenza fatta con la FASCIA.
   // Silenzioso e non bloccante: parte solo con codice paziente + consenso espresso.
@@ -2764,6 +2959,17 @@ const HRV = (() => {
     rr = []; tcum = 0; paused = false; capturing = true;
   }
   function endMorning(){ capturing = false; testPhase = null; return rr.map(o=>o.rr); }
+  // Stato di attivazione (Stress Index) del solo tratto tonico — per il feedback
+  // motivazionale al paziente a fine test. Stesso filtro artefatti del resto dell'app.
+  function tonicStress(){
+    const series = rr.filter(o => o.ph === 'tonic');
+    if(series.length < 60) return null;
+    const b = analyzeBlock(series);
+    if(!b || !b.time || !(b.time.sdnn > 0) || !(b.time.meanNN > 0)) return null;
+    return { sdnn: b.time.sdnn, meanNN: b.time.meanNN,
+             keptPct: b.quality.keptPct, kept: b.quality.kept,
+             reliable: b.quality.keptPct >= 90 && b.quality.kept >= 150 };
+  }
   // Metriche + colonne IBI/attributo per una fase (emWave-compatibile).
   function phaseMeta(beats){
     const filt = filterSeries(beats);              // {tcum,rr,kept}
@@ -3154,7 +3360,7 @@ const HRV = (() => {
   }
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, recentHR, phaseBeats, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
+           sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
            liveRR: ()=> rr.map(o=>o.rr) };
@@ -3311,11 +3517,18 @@ const TestMode = (() => {
   }
   // Fine del tonico: fermo il loop, chiudo il tag di fase (i battiti della pausa/countdown
   // restano fuori dall'export) e mostro la scelta "Concludi" / "Aggiungi fasico".
+  // Tachimetro dello stato di attivazione (Stress Index) del tonico, a fine test.
+  function renderStress(id){
+    const host = el(id); if(!host) return;
+    const ts = (window.HRV && HRV.tonicStress) ? HRV.tonicStress() : null;
+    host.innerHTML = window.StressGauge ? StressGauge.cardFor(ts) : '';
+  }
   function onTonicEnd(){
     if(raf){ cancelAnimationFrame(raf); raf=null; }
     HRV.setTestPhase(null);
     try{ Audio.recEnd(); }catch(e){}
     show('choice');
+    renderStress('hrvTestStress');
   }
   // Countdown di preparazione al fasico (15 s) con le raccomandazioni a schermo;
   // negli ultimi ~4 s il pannello si dissolve, poi parte la registrazione fasica.
@@ -3347,6 +3560,7 @@ const TestMode = (() => {
   }
   function finish(){
     stopCommon(); show('done');
+    renderStress('hrvTestStressDone');
     const status = el('hrvSendStatus');
     if(SendConsent.given()){
       HRV.setConsent(true);
@@ -4380,6 +4594,7 @@ const CameraCoherence = (() => {
       host.innerHTML='<div><span class="cam-sum-chip" style="background:'+col+'">'+lvl+'</span></div>'
         +'<div class="cam-sum-row">Coerenza media <b style="color:'+col+'">'+Math.round(avg)+'</b> · in coerenza il <b>'+Math.round(inZone)+'%</b> del tempo</div>'
         +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>'
+        +(window.CohFeedback ? '<div class="coh-soft" style="margin-top:14px">'+CohFeedback.record(avg, dur/60000)+'</div>' : '')
         +'<div class="cam-sum-sub" id="camSendStatus"></div>';
     }
     show('Done');
