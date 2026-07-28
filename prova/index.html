@@ -338,6 +338,17 @@
   .home-tile i{display:block;font-style:normal;font-size:.72rem;color:var(--muted);margin-top:3px;line-height:1.4}
   .home-tile:active,.home-hero:active,.home-alt:active{transform:translateY(1px)}
   .home-foot{font-size:.72rem;color:var(--muted);text-align:center;margin-top:20px;line-height:1.5}
+  /* Nota delle novità: compare UNA volta dopo un aggiornamento, solo a chi usava già l'app.
+     Sta in cima alla Home e non è un modale: non deve mai coprire né interrompere nulla. */
+  .novita{border:1px solid var(--accent);border-radius:14px;padding:14px 15px;margin-bottom:16px;
+    background:linear-gradient(180deg,var(--panel),var(--bg2));box-shadow:var(--shadow)}
+  .novita h4{margin:0 0 7px;font-size:.95rem;font-weight:800;color:var(--accent)}
+  .novita ul{margin:0;padding-left:18px}
+  .novita li{font-size:.82rem;line-height:1.5;margin-bottom:5px}
+  .novita .nv-calma{font-size:.75rem;color:var(--muted);line-height:1.45;margin:9px 0 0}
+  .novita .nv-ok{display:block;width:100%;margin-top:12px;padding:11px;border-radius:11px;cursor:pointer;
+    font-family:inherit;font-size:.86rem;font-weight:700;border:0;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
 </style>
 </head>
 <body>
@@ -405,6 +416,19 @@
 <!-- HOME: prima cosa che vede il paziente. In alto la cosa da fare per prima
      (agganciare la fascia), poi l'alternativa senza fascia, poi il menu delle attività. -->
 <div id="homeScreen">
+  <!-- Nota delle novità: la mostra il modulo Novita, una volta sola dopo l'aggiornamento
+       e SOLO a chi usava già l'app (a chi installa adesso non direbbe nulla). -->
+  <div class="novita" id="novitaBox" style="display:none">
+    <h4>✨ Cosa c'è di nuovo</h4>
+    <ul>
+      <li>Alla fine della <b>respirazione di coerenza</b> trovi un riquadro che confronta la seduta di oggi con la precedente.</li>
+      <li>Alla fine del <b>test tonico</b> compare l'<b>indice di stress del sistema nervoso</b>, con un tachimetro che mostra quanto il tuo sistema sta lavorando oggi.</li>
+      <li>Alla fine del <b>test fasico</b> trovi un riassunto di come il tuo sistema ha risposto.</li>
+      <li>Nell'allenamento <b>con la fotocamera</b>, la sessione non parte più subito: prima c'è una breve <b>fase di aggancio</b> del battito al dito, e la registrazione comincia da sola quando il segnale è stabile. Così la coerenza non risulta bassa solo perché il dito non era in posizione.</li>
+    </ul>
+    <p class="nv-calma">Non devi fare nulla: il tuo codice, i tuoi storici e il test del mattino restano esattamente come prima.</p>
+    <button type="button" class="nv-ok" id="novitaOk">Ho capito</button>
+  </div>
   <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
        poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
        quindi si può far partire la connessione direttamente da questo tasto. -->
@@ -679,6 +703,14 @@
     .cam-live b{color:var(--text,#e8eef0)}
     .cam-zone{display:inline-block;padding:1px 10px;border-radius:16px;font-size:.72rem;font-weight:700;color:#fff;margin-left:4px}
     .cam-count{font-variant-numeric:tabular-nums;font-size:1.6rem;font-weight:700;margin:2px 0}
+    /* Fase di aggancio del battito: la sessione non parte finché il segnale non è stabile */
+    .cam-stab-t{font-weight:700;font-size:1rem;margin:2px 0 4px}
+    .cam-stab-hint{font-size:.82rem;color:var(--muted);max-width:340px;margin:0 auto 6px;line-height:1.45}
+    .cam-stab-track{height:12px;border-radius:8px;background:rgba(255,255,255,.10);max-width:340px;margin:10px auto 0;overflow:hidden}
+    .cam-stab-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#e8820c,#1fd17a);transition:width .2s linear}
+    .cam-stab-msg{font-size:.9rem;font-weight:600;margin:8px 0 2px;min-height:1.2em}
+    .cam-stab-warn{font-size:.8rem;color:#ffb46b;max-width:340px;margin:8px auto 0;line-height:1.45;text-align:left}
+    .cam-stab-warn ul{margin:4px 0 0;padding-left:18px}
     .cam-sum-chip{display:inline-block;font-weight:800;font-size:18px;padding:7px 18px;border-radius:24px;color:#fff}
     .cam-sum-row{font-size:1rem;margin:12px 0 4px}
     .cam-sum-row b{font-size:1.35rem}
@@ -907,7 +939,7 @@
   <div class="hrv-cam" data-feat="cam">
     <h3>📷 Allenamento coerenza — fotocamera</h3>
     <div id="camSetup">
-      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer</b> (schermata <b>Respirazione di coerenza</b>). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer</b> (schermata <b>Respirazione di coerenza</b>). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br>Dopo l'avvio c'è una <b>fase di aggancio</b>: la sessione parte da sola quando il battito al dito è stabile, così la coerenza non viene falsata dai primi secondi di ricerca della posizione.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
       <label>Durata</label>
       <div class="cam-durs" id="camDurs">
         <button type="button" data-min="3" class="btn ghost">3 min</button>
@@ -932,23 +964,48 @@
         <span class="cam-dot" id="camDot"></span>
       </div>
       <div class="cam-sig" id="camSig">Avvicina il dito alla fotocamera…</div>
-      <div class="cam-orb-wrap"><div id="camOrb"></div></div>
-      <div class="cam-phase" id="camPhase">—</div>
-      <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
-      <div class="cam-graph">
-        <div class="cam-graph-lbl">Polso — battito al dito</div>
-        <canvas id="camWavePulse" class="cam-canvas" height="62"></canvas>
+
+      <!-- FASE DI AGGANCIO: la registrazione non parte finché il battito non è stabile.
+           Serve a non falsare la coerenza con i primi secondi di segnale sporco. -->
+      <div id="camStabBox" style="display:none">
+        <div class="cam-stab-t">Aggancio del battito</div>
+        <div class="cam-stab-hint">Appoggia il <b>polpastrello</b> sulla fotocamera posteriore coprendo anche il flash. Pressione <b>leggera e costante</b>, mano appoggiata. La sessione parte <b>da sola</b> quando il battito è agganciato.</div>
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Polso — battito al dito</div>
+          <canvas id="camStabWave" class="cam-canvas" height="62"></canvas>
+        </div>
+        <div class="cam-stab-track"><div class="cam-stab-fill" id="camStabBar"></div></div>
+        <div class="cam-stab-msg" id="camStabMsg">Appoggia il dito sulla fotocamera…</div>
+        <div class="cam-stab-warn" id="camStabWarn" style="display:none">Il battito non si aggancia. Prova così:
+          <ul>
+            <li>accendi la <b>torcia</b> (iPhone: Centro di Controllo)</li>
+            <li>alleggerisci la pressione: schiacciando troppo il polso sparisce</li>
+            <li>copri <b>tutto</b> l'obiettivo, senza lasciare spiragli di luce</li>
+            <li>appoggia la mano su un tavolo e resta immobile</li>
+          </ul>
+        </div>
+        <button id="camStabForce" class="btn ghost" style="display:none">Avvia comunque</button>
       </div>
-      <!-- Coerenza sopra l'onda, come nella schermata con la fascia: barra e sinusoide
-           insieme, così il feedback è immediato mentre si respira. -->
-      <div class="cam-graph">
-        <div class="cam-graph-lbl">Coerenza adesso</div>
-        <div class="hrv-coh-track"><div class="hrv-coh-fill" id="camCohBar"></div></div>
-        <div class="cam-graph-lbl" style="margin-top:10px">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
-        <canvas id="camWaveHrv" class="cam-canvas" height="88"></canvas>
-        <div class="cam-graph-note">La barra sale quando l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro: sale in inspirazione, scende in espirazione.</div>
+
+      <div id="camSessionBox" style="display:none">
+        <div class="cam-orb-wrap"><div id="camOrb"></div></div>
+        <div class="cam-phase" id="camPhase">—</div>
+        <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Polso — battito al dito</div>
+          <canvas id="camWavePulse" class="cam-canvas" height="62"></canvas>
+        </div>
+        <!-- Coerenza sopra l'onda, come nella schermata con la fascia: barra e sinusoide
+             insieme, così il feedback è immediato mentre si respira. -->
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Coerenza adesso</div>
+          <div class="hrv-coh-track"><div class="hrv-coh-fill" id="camCohBar"></div></div>
+          <div class="cam-graph-lbl" style="margin-top:10px">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
+          <canvas id="camWaveHrv" class="cam-canvas" height="88"></canvas>
+          <div class="cam-graph-note">La barra sale quando l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro: sale in inspirazione, scende in espirazione.</div>
+        </div>
+        <div class="cam-count" id="camCount"></div>
       </div>
-      <div class="cam-count" id="camCount"></div>
       <button id="camStop" class="cam-stopbtn">Termina sessione</button>
     </div>
     <div id="camDone" style="display:none">
@@ -1224,7 +1281,9 @@
         <li><b>iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia (il segnale diventa molto più forte). <b>Android:</b> il flash si accende da solo.</li>
         <li>Scegli la <b>durata</b> (3/5/10 minuti o libera).</li>
         <li>Appoggia il <b>polpastrello</b> sulla fotocamera posteriore coprendo anche il flash; tieni il dito <b>fermo e premi leggero</b>.</li>
-        <li>Quando il pallino diventa <b>verde</b> (FC plausibile e stabile), respira seguendo la sfera, che pulsa alla <b>tua frequenza di risonanza</b> impostata nel pacer.</li>
+        <li>Parte la <b>fase di aggancio</b>: vedi l'onda del polso e una barra che si riempie mentre il battito si stabilizza. <b>La sessione non registra ancora</b>: comincia da sola dopo qualche secondo di battito stabile (a quel punto il telefono vibra e compare la sfera del respiro).</li>
+        <li>Se dopo mezzo minuto l'aggancio non arriva, compaiono i suggerimenti (torcia, meno pressione, obiettivo coperto del tutto) e il tasto <b>Avvia comunque</b>.</li>
+        <li>Respira seguendo la sfera, che pulsa alla <b>tua frequenza di risonanza</b> impostata nel pacer. Se durante la sessione il dito si sposta, compare l'avviso «battito perso»: quel tratto <b>non viene conteggiato</b> nella coerenza.</li>
       </ol>
       <p>Durante la sessione il feedback è lo stesso della fascia: la <b>barra della coerenza</b> sopra l'<b>onda della frequenza cardiaca</b>. La barra si riempie via via che l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro. La coerenza compare dopo circa <b>20 secondi</b> di battito stabile.</p>
       <p>A fine sessione vedi la <b>coerenza media</b> e la <b>percentuale di tempo in coerenza</b>. L'obiettivo, con la costanza, è far salire quella percentuale.</p>
@@ -3484,7 +3543,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v68 · PROVA';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v69 · PROVA';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -4452,6 +4511,15 @@ const CameraCoherence = (() => {
   const BREATH_MS = 10000;          // 6 atti/min = risonanza
   const COH_WIN_MS = 64000, RECALC_MS = 2000;
   const BASELINE_MS = 1200;         // detrend: rimuove deriva/respiro, tiene il polso
+  // ── Fase di aggancio (stabilizzazione) ──
+  // Col dito la posizione giusta si trova per tentativi: nei primi secondi il segnale è
+  // sporco e i battiti letti sono inventati. Se la sessione parte subito, quei campioni
+  // finiscono nella media e la coerenza risulta bassa per un problema di presa, non di
+  // fisiologia. Quindi: si registra SOLO dopo che il battito è agganciato in modo stabile.
+  const LOCK_STR   = 0.45;          // forza minima dell'autocorrelazione (0-1) per dire "battito trovato"
+  const LOCK_SPREAD= 6;             // bpm: escursione massima ammessa fra le stime recenti di FC
+  const HOLD_MS    = 5000;          // per quanto deve restare agganciato prima di partire
+  const HINT_MS    = 25000;         // dopo quanto compaiono i suggerimenti e "Avvia comunque"
   let chosenMin = 5;
   let guideMode = 'campana';                    // guida al respiro: 'campana' | 'voce' | 'muto'
   let stream=null, track=null, video=null, canvas=null, cctx=null;
@@ -4462,6 +4530,10 @@ const CameraCoherence = (() => {
   let recentIbis=[];                // ultimi IBI accettati (per scarto outlier)
   let fingerPresent=false, lastPeakT=0;
   let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
+  let hrHist=[];                    // ultime stime di FC valide (per giudicare la stabilità dell'aggancio)
+  let phase='stab';                 // 'stab' = aggancio in corso · 'run' = sessione che registra
+  let stabT0=0, lockSince=0;        // inizio della fase di aggancio · da quando il battito è agganciato senza interruzioni
+  let qOk=0, qTot=0;                // campioni con segnale buono / campioni totali (qualità della sessione)
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
   let lastDraw=0;                              // throttle del disegno dei grafici
   let hrSum=0, hrN=0;                          // FC media della sessione (per il report)
@@ -4501,7 +4573,7 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; hrHist=[]; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; qOk=qTot=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
     sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.unlock(); }catch(e){}   // ridesta il motore (già sbloccato a inizio gesto)
@@ -4509,8 +4581,51 @@ const CameraCoherence = (() => {
     el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
     { const bar=el('camCohBar'); if(bar) bar.style.width='0%'; }
+    // Si entra in fase di AGGANCIO: niente timer, niente respiro guidato, niente coerenza.
+    phase='stab'; stabT0=performance.now(); lockSince=0;
+    { const b=el('camStabBox'); if(b) b.style.display='';
+      const s=el('camSessionBox'); if(s) s.style.display='none';
+      const w=el('camStabWarn'); if(w) w.style.display='none';
+      const f=el('camStabForce'); if(f) f.style.display='none';
+      const bar=el('camStabBar'); if(bar) bar.style.width='0%';
+      const m=el('camStabMsg'); if(m) m.textContent='Appoggia il dito sulla fotocamera…';
+      const st=el('camStop'); if(st) st.textContent='Annulla'; }
     show('Run'); t0=performance.now();
     sampleLoop(); orbLoop();
+  }
+
+  /* ---- passaggio da aggancio a sessione vera ---- */
+  // Da qui in poi si registra: azzera tutto ciò che è stato raccolto durante l'aggancio,
+  // così nella coerenza non entra nemmeno un battito della fase di ricerca della posizione.
+  function beginSession(){
+    if(phase==='run') return;
+    phase='run';
+    rr=[]; recentIbis=[]; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; qOk=qTot=0;
+    lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    t0=performance.now(); sessionWallStart=Date.now();
+    const b=el('camStabBox'); if(b) b.style.display='none';
+    const s=el('camSessionBox'); if(s) s.style.display='';
+    const st=el('camStop'); if(st) st.textContent='Termina sessione';
+    const bar=el('camCohBar'); if(bar) bar.style.width='0%';
+    el('camCoh').textContent='—'; el('camZone').textContent='';
+    try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
+  }
+
+  /* ---- il battito è agganciato? ---- */
+  // Tre condizioni insieme: dito presente, periodicità forte (autocorrelazione) e FC
+  // STABILE negli ultimi secondi. La stabilità è la parte che conta: un segnale sporco
+  // può dare una periodicità forte per un istante, ma la FC salta di continuo.
+  // strict=true (per PARTIRE): criterio severo, meglio aspettare un secondo in più.
+  // strict=false (per RESTARE agganciati durante la sessione): criterio più permissivo,
+  // altrimenti una micro-oscillazione butterebbe via battiti buoni.
+  function isLocked(strict){
+    const minStr = strict ? LOCK_STR : LOCK_STR-0.12;
+    const maxSpread = strict ? LOCK_SPREAD : LOCK_SPREAD*2;
+    const minN = strict ? 6 : 4, minSpan = strict ? 2000 : 1200;
+    if(!fingerPresent || hrStrength<minStr || !(hrAuto>=40 && hrAuto<=180)) return false;
+    if(hrHist.length<minN || (hrHist[hrHist.length-1].t-hrHist[0].t)<minSpan) return false;
+    let mn=1e9, mx=-1e9; for(const o of hrHist){ if(o.hr<mn) mn=o.hr; if(o.hr>mx) mx=o.hr; }
+    return (mx-mn)<=maxSpread;
   }
 
   /* ---- campionamento PPG e rilevamento battito ---- */
@@ -4527,7 +4642,7 @@ const CameraCoherence = (() => {
   function processSample(t, r, g, bl){
     // Dito presente = obiettivo coperto (predominanza del rosso, con torcia molto luminoso).
     fingerPresent = r>40 && r>g+4 && r>bl+8;
-    if(!fingerPresent){ raw.length=0; bpArr.length=0; hrAuto=0; hrStrength=0; return; }
+    if(!fingerPresent){ raw.length=0; bpArr.length=0; hrAuto=0; hrStrength=0; hrHist.length=0; return; }
     const v = (g>12)? g : r;                                  // VERDE = miglior segnale PPG; ripiego rosso
     raw.push({t,v}); while(raw.length>2 && t-raw[0].t>8000) raw.shift();
     // passa-banda: media corta (~160ms) − media lunga (baseline ~1100ms)
@@ -4535,7 +4650,12 @@ const CameraCoherence = (() => {
     let b=0,bc=0; for(let i=0;i<raw.length;i++){ if(t-raw[i].t<=BASELINE_MS){ b+=raw[i].v; bc++; } } b/=(bc||1);
     bpArr.push({t, bp:lp-b}); while(bpArr.length>2 && t-bpArr[0].t>8000) bpArr.shift();
     // FC robusta via AUTOCORRELAZIONE, ogni 300ms (immune ai falsi picchi)
-    if(t-lastHrCalc>300){ lastHrCalc=t; const e=estimateHR(); hrAuto=e.hr; hrStrength=e.strength; }
+    if(t-lastHrCalc>300){ lastHrCalc=t; const e=estimateHR(); hrAuto=e.hr; hrStrength=e.strength;
+      // storico delle stime buone: una sola stima scadente azzera la serie, così
+      // l'aggancio richiede davvero continuità e non una coincidenza fortunata.
+      if(hrStrength>=LOCK_STR && hrAuto>=40 && hrAuto<=180) hrHist.push({t, hr:hrAuto}); else hrHist.length=0;
+      while(hrHist.length && t-hrHist[0].t>3000) hrHist.shift();
+    }
     // rilevamento battiti per la coerenza, AGGANCIATO alla FC stimata
     if(bpArr.length<5) return;
     let m=0; for(const o of bpArr) m+=o.bp; m/=bpArr.length;
@@ -4544,7 +4664,9 @@ const CameraCoherence = (() => {
     const refr=expIbi?Math.max(300,0.55*expIbi):350;
     const a=bpArr[bpArr.length-3], bb=bpArr[bpArr.length-2], cc=bpArr[bpArr.length-1];
     if(bb.bp>a.bp && bb.bp>=cc.bp && bb.bp> Math.max(0.5, 0.9*std) && (bb.t-lastPeakT)>refr){
-      if(lastPeakT){ acceptBeat(bb.t, bb.t-lastPeakT, expIbi); }
+      // Nella serie RR entrano SOLO i battiti letti con segnale agganciato: un picco
+      // trovato mentre il dito si sta ancora sistemando non è un battito.
+      if(lastPeakT && isLocked(false)){ acceptBeat(bb.t, bb.t-lastPeakT, expIbi); }
       lastPeakT=bb.t;
     }
   }
@@ -4575,8 +4697,51 @@ const CameraCoherence = (() => {
   }
 
   /* ---- loop respiro + coerenza + timer ---- */
+  /* ---- stato del segnale mostrato all'utente (pallino + riga di stato) ---- */
+  function updateSignalUI(locked){
+    const dot=el('camDot');
+    // in fase di aggancio il messaggio è quello della barra: qui si eviterebbe un doppione
+    const sig=el('camSig'); if(sig) sig.style.display=(phase==='stab')?'none':'';
+    if(!fingerPresent){
+      el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
+    } else if(!locked){
+      el('camSig').textContent = (phase==='run')
+        ? '⚠️ Battito perso — risistema il dito: questo tratto non viene conteggiato.'
+        : 'Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot weak';
+    } else {
+      el('camSig').textContent = (phase==='run') ? 'Battito agganciato ✓ — misurazione in corso' : 'Battito agganciato ✓';
+      el('camHR').textContent=Math.round(hrAuto)+' bpm'; if(dot) dot.className='cam-dot ok';
+    }
+  }
+
+  /* ---- fase di aggancio: barra di avanzamento e partenza automatica ---- */
+  function stabTick(now, locked){
+    if(locked){ if(!lockSince) lockSince=now; } else lockSince=0;
+    const held = lockSince ? now-lockSince : 0;
+    const bar=el('camStabBar'); if(bar) bar.style.width=Math.min(100, held/HOLD_MS*100).toFixed(0)+'%';
+    const msg=el('camStabMsg');
+    if(msg){
+      if(!fingerPresent) msg.textContent='Appoggia il dito e copri tutto l\'obiettivo…';
+      else if(!locked)   msg.textContent='Dito rilevato — cerco il battito, tieni fermo…';
+      else               msg.textContent='Battito agganciato ✓ — si parte fra '+Math.max(1, Math.ceil((HOLD_MS-held)/1000))+'…';
+    }
+    if(now-stabT0>HINT_MS && !locked){
+      const w=el('camStabWarn'); if(w) w.style.display='';
+      const f=el('camStabForce'); if(f) f.style.display='';
+    }
+    if(held>=HOLD_MS) beginSession();
+  }
+
   function orbLoop(){
-    const now=performance.now(), elapsed=now-t0;
+    const now=performance.now();
+    const locked=isLocked(phase==='stab');
+    updateSignalUI(locked);
+    // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
+    if(now-lastDraw>80){ lastDraw=now; try{ drawGraphs(now); }catch(e){} }
+    if(phase==='stab'){ stabTick(now, locked); orbRAF=requestAnimationFrame(orbLoop); return; }
+    const elapsed=now-t0;
     // Respiro alla frequenza di RISONANZA impostata nel pacer (non 6/min fisso)
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
@@ -4585,34 +4750,19 @@ const CameraCoherence = (() => {
       if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} }
       else if(guideMode==='campana'){ try{ phaseName==='inhale'?Audio.ding():Audio.dong(); }catch(e){} }   // ding acuto / dong grave (ottava sotto, lungo)
     }
-    // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
-    // periodicità è forte → niente numeri sballati tipo 163)
-    const dot=el('camDot'), locked=(hrStrength>0.4 && hrAuto>=40 && hrAuto<=180);
-    if(!fingerPresent){
-      el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
-      el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
-    } else if(!locked){
-      el('camSig').textContent='Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
-      el('camHR').textContent='—'; if(dot) dot.className='cam-dot weak';
-    } else {
-      el('camSig').textContent='Dito rilevato ✓ — misurazione in corso';
-      el('camHR').textContent=Math.round(hrAuto)+' bpm'; if(dot) dot.className='cam-dot ok';
-    }
-    // coerenza ogni 2s
+    // coerenza ogni 2s — i campioni entrano nella media SOLO con battito agganciato
     if(now-lastRecalc>RECALC_MS){
-      lastRecalc=now;
+      lastRecalc=now; qTot++; if(locked) qOk++;
       const tail=[]; for(let i=rr.length-1;i>=0;i--){ if(now-rr[i].t>COH_WIN_MS) break; const x=rr[i].ibi; if(x>=300&&x<=2000) tail.push(x); }
       tail.reverse();
-      const co=(tail.length>=16)?HRV.cohOf(tail):null;
+      const co=(tail.length>=16 && locked)?HRV.cohOf(tail):null;
       if(co){ const z=zoneOf(co.ratio);
         el('camCoh').textContent=Math.round(co.pct); const zEl=el('camZone'); zEl.textContent=z.txt; zEl.style.background=z.col;
         const bar=el('camCohBar'); if(bar) bar.style.width=Math.max(0,Math.min(100,co.pct))+'%';   // stessa barra della schermata con fascia
         cohSum+=co.pct; cohN++; if(co.ratio>=0.5) cohInZone++; if(co.pct>peakCoh) peakCoh=co.pct;
-        if(locked){ hrSum+=hrAuto; hrN++; }   // FC media solo su segnale agganciato
+        hrSum+=hrAuto; hrN++;   // FC media solo su segnale agganciato (co esiste solo se locked)
       }
     }
-    // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
-    if(now-lastDraw>80){ lastDraw=now; try{ drawGraphs(now); }catch(e){} }
     if(chosenMin>0){
       const left=chosenMin*60000-elapsed; el('camCount').textContent=fmt(left);
       if(left<=0){ finish(); return; }
@@ -4628,7 +4778,9 @@ const CameraCoherence = (() => {
   }
   function drawGraphs(now){
     // ── 1) Polso: ultimi 6 s del segnale PPG filtrato, con i battiti marcati ──
-    const cv1=el('camWavePulse');
+    // In fase di aggancio è l'unico grafico che serve (aiuta a trovare la posizione del
+    // dito) e va disegnato sul canvas di quella schermata.
+    const cv1=el(phase==='stab' ? 'camStabWave' : 'camWavePulse');
     if(cv1){
       const {ctx,w,h}=fitCanvas(cv1); ctx.clearRect(0,0,w,h);
       const WIN=6000, t1=now-WIN;
@@ -4645,6 +4797,7 @@ const CameraCoherence = (() => {
         ctx.fillText('In attesa del segnale dal dito…', w/2, h/2+4);
       }
     }
+    if(phase==='stab') return;                 // durante l'aggancio non c'è ancora una curva FC da mostrare
     // ── 2) Frequenza cardiaca: curva FC istantanea (ultimi 60 s), stile HeartMath ──
     const cv2=el('camWaveHrv'), rngEl=el('camHrvRange');
     if(cv2){
@@ -4731,9 +4884,14 @@ const CameraCoherence = (() => {
       host.innerHTML='<div class="cam-sum-row">Sessione di <b>'+fmt(dur).trim()+'</b>.</div>'
         +'<div class="cam-sum-sub">Segnale insufficiente per valutare la coerenza: la prossima volta tieni il dito fermo sulla fotocamera, in buona luce (o usa la fascia). L\'allenamento del respiro vale comunque.</div>';
     } else {
+      const qual = qTot? Math.round(qOk/qTot*100) : 100;
+      const qNote = (qual<90)
+        ? '<div class="cam-sum-sub" style="color:#ffb46b">Segnale buono per il <b>'+qual+'%</b> della sessione: nei tratti in cui il dito si è mosso la coerenza non è stata conteggiata. Tienilo più fermo, con pressione leggera.</div>'
+        : '';
       host.innerHTML='<div><span class="cam-sum-chip" style="background:'+col+'">'+lvl+'</span></div>'
         +'<div class="cam-sum-row">Coerenza media <b style="color:'+col+'">'+Math.round(avg)+'</b> · in coerenza il <b>'+Math.round(inZone)+'%</b> del tempo</div>'
         +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>'
+        +qNote
         +(window.CohFeedback ? '<div class="coh-soft" style="margin-top:14px">'+CohFeedback.record(avg, dur/60000)+'</div>' : '')
         +'<div class="cam-sum-sub" id="camSendStatus"></div>';
     }
@@ -4750,7 +4908,11 @@ const CameraCoherence = (() => {
       }
     }
   }
-  function stop(){ if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish(); }
+  // In fase di aggancio il tasto è "Annulla": non c'è nulla da riassumere, si torna indietro.
+  function stop(){
+    if(phase==='stab'){ stopAll(); show('Setup'); return; }
+    if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish();
+  }
 
   function init(){
     if(!el('camStart')) return;
@@ -4773,6 +4935,8 @@ const CameraCoherence = (() => {
     });
     el('camStart').addEventListener('click', start);
     el('camStop').addEventListener('click', stop);
+    const force=el('camStabForce');
+    if(force) force.addEventListener('click', ()=>{ if(phase==='stab') beginSession(); });   // via d'uscita: non si resta bloccati
     el('camNew').addEventListener('click', ()=>{ stopAll(); show('Setup'); });
   }
   return { init };
@@ -5023,6 +5187,37 @@ const Screens = (() => {
   return { init, go };
 })();
 Screens.init();
+
+/* ---- Nota delle novità dopo un aggiornamento ----
+   Perché esiste: il service worker è network-first, quindi la nuova versione arriva
+   sul telefono del paziente da sola, senza che lui abbia chiesto nulla. Se compaiono
+   riquadri nuovi a fine attività senza una parola di spiegazione, la reazione è
+   "si è rotto qualcosa". Questa nota lo dice, una volta sola.
+
+   Regole del comportamento:
+   - NON tocca nessun dato: né il codice, né gli storici, né la baseline del mattino.
+   - Si mostra SOLO a chi usava già l'app. A chi la installa adesso non direbbe nulla,
+     quindi per lui la versione viene segnata come già vista, in silenzio.
+   - Non è un modale e non si sovrappone alla finestra del consenso del primo avvio:
+     i due casi si escludono a vicenda (o sei nuovo, o hai già usato l'app). */
+(function(){
+  const VER = '69';                                  // ← alzare a ogni versione che ha novità da raccontare
+  const SEEN = 'PROVA-respiroPacer.seenVer.v1';
+  // Tracce di un uso precedente: se c'è anche una sola di queste, il paziente non è nuovo.
+  const TRACCE = ['respiroPacer.license.v1','respiroPacer.testProfile.v1','PROVA-respiroPacer.morning.v1',
+                  'PROVA-respiroPacer.hrv.v1','PROVA-respiroPacer.alpha.v1','respiroPacer.consentAsked.v1'];
+  const get=k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+  const segna=()=>{ try{ localStorage.setItem(SEEN, VER); }catch(e){} };
+
+  if(get(SEEN) === VER) return;                      // già vista per questa versione
+  const giaUtente = TRACCE.some(k => !!get(k));
+  if(!giaUtente){ segna(); return; }                 // installazione nuova: niente nota
+
+  const box = document.getElementById('novitaBox'), ok = document.getElementById('novitaOk');
+  if(!box || !ok){ segna(); return; }
+  box.style.display = '';
+  ok.addEventListener('click', ()=>{ segna(); box.style.display = 'none'; });
+})();
 
 /* ---- Guida utente (overlay) ---- */
 (function(){
