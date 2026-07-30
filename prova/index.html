@@ -349,6 +349,26 @@
   .novita .nv-ok{display:block;width:100%;margin-top:12px;padding:11px;border-radius:11px;cursor:pointer;
     font-family:inherit;font-size:.86rem;font-weight:700;border:0;
     background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
+  /* Riepilogo della settimana: compare in cima alla Home al primo avvio di una
+     settimana nuova e racconta quella appena chiusa. Bordo rame come il riquadro
+     motivazionale di fine seduta: al paziente devono sembrare la stessa voce. */
+  .week-card{border:1px solid var(--line);border-left:4px solid #9F7A6C;border-radius:14px;
+    padding:14px 15px;margin-bottom:16px;background:linear-gradient(180deg,var(--panel),var(--bg2));
+    box-shadow:var(--shadow)}
+  .week-card h4{margin:0;font-size:.95rem;font-weight:800;color:#c79b88}
+  .week-card .wk-range{font-size:.72rem;color:var(--muted);margin:2px 0 10px}
+  .week-card .wk-stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .week-card .wk-chip{font-size:.76rem;line-height:1;padding:7px 10px;border-radius:9px;
+    background:var(--panel-soft);border:1px solid var(--line);color:var(--text)}
+  .week-card .wk-chip b{font-weight:800}
+  .week-card .wk-trend{font-size:.82rem;line-height:1.5;color:var(--text);
+    padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05);margin-bottom:10px}
+  .week-card .wk-trend b{font-weight:800}
+  .week-card .wk-msg{font-size:.9rem;line-height:1.55;color:var(--text);margin:0}
+  .week-card .wk-msg b{font-weight:800}
+  .week-card .wk-ok{display:block;width:100%;margin-top:12px;padding:11px;border-radius:11px;cursor:pointer;
+    font-family:inherit;font-size:.86rem;font-weight:700;border:1px solid var(--line);
+    background:var(--panel-soft);color:var(--text)}
 </style>
 </head>
 <body>
@@ -425,9 +445,21 @@
       <li>Alla fine del <b>test tonico</b> compare l'<b>indice di stress del sistema nervoso</b>, con un tachimetro che mostra quanto il tuo sistema sta lavorando oggi.</li>
       <li>Alla fine del <b>test fasico</b> trovi un riassunto di come il tuo sistema ha risposto.</li>
       <li>Nell'allenamento <b>con la fotocamera</b>, la sessione non parte più subito: prima c'è una breve <b>fase di aggancio</b> del battito al dito, e la registrazione comincia da sola quando il segnale è stabile. Così la coerenza non risulta bassa solo perché il dito non era in posizione.</li>
+      <li>All'inizio di ogni settimana nuova trovi in questa schermata il <b>riepilogo della settimana appena chiusa</b>: quante attività hai fatto e come è andata la coerenza rispetto alla settimana prima.</li>
     </ul>
     <p class="nv-calma">Non devi fare nulla: il tuo codice, i tuoi storici e il test del mattino restano esattamente come prima.</p>
     <button type="button" class="nv-ok" id="novitaOk">Ho capito</button>
+  </div>
+  <!-- Riepilogo della settimana: lo riempie il modulo WeekReport, una volta per
+       settimana, e parla SEMPRE della settimana già chiusa (mai di quella in corso,
+       che sarebbe un conteggio a metà). Vuoto e nascosto finché non c'è nulla da dire. -->
+  <div class="week-card" id="weekBox" style="display:none">
+    <h4>📅 La tua settimana</h4>
+    <div class="wk-range" id="weekRange"></div>
+    <div class="wk-stats" id="weekStats"></div>
+    <div class="wk-trend" id="weekTrend" style="display:none"></div>
+    <p class="wk-msg" id="weekMsg"></p>
+    <button type="button" class="wk-ok" id="weekOk">Ho visto</button>
   </div>
   <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
        poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
@@ -1622,6 +1654,239 @@ const CohFeedback = (() => {
   return { record };
 })();
 window.CohFeedback = CohFeedback;
+
+/* ── Riepilogo motivazionale della SETTIMANA ─────────────────────────────────────
+   Perché esiste: il riquadro di fine seduta parla della singola volta, e la singola
+   volta non è dove sta il risultato. Questo guarda l'insieme dei sette giorni e serve
+   a due cose: che il paziente si senta seguito nel tempo, e che gli resti chiaro che
+   l'effetto lo produce la ripetizione di sedute qualunque, non una seduta brillante.
+
+   100% LOCALE. Legge gli storici già sul telefono e non manda niente da nessuna parte.
+   Nessuna lettura clinica: conteggi, andamento della coerenza e una frase. La lettura
+   clinica resta al medico, che la fa sul referto mensile.
+
+   Regole di comportamento decise con Federico:
+   - parla della settimana CHIUSA (lunedì→domenica), mai di quella in corso: un
+     conteggio a metà settimana direbbe sempre "poche sedute" e demoralizzerebbe;
+   - compare una volta per settimana in cima alla Home e si chiude con "Ho visto";
+   - il TREND si mostra solo con almeno 3 sedute di coerenza in ENTRAMBE le settimane:
+     su due o tre punti sarebbe rumore, e un calo letto sul rumore ottiene l'opposto
+     dello scopo;
+   - soglie ASIMMETRICHE (sale a +3, cala solo a −6 punti): sono scelte di
+     COMUNICAZIONE, non criteri clinici, volutamente prudenti nel dichiarare un calo;
+   - la settimana vuota non è un rimprovero ma un invito a rientrare.
+
+   Conteggio delle sedute: si usa lo storico di CohFeedback, che è l'unico a coprire
+   sia la fascia sia la fotocamera ed è l'unico che porta con sé il valore di coerenza
+   necessario al confronto. Resta fuori solo la sessione con fascia troppo breve per
+   calcolare la coerenza (meno di 3 finestre valide), che non è una seduta completata.
+   NON si legge 'PROVA-respiroPacer.hrv.v1': contiene le stesse sedute di coerenza con la
+   fascia (non i test clinici, che in locale non hanno storico) e le conterebbe due volte. */
+const WeekReport = (() => {
+  const SEEN  = 'PROVA-respiroPacer.weekReport.v1';       // ultima settimana già mostrata
+  const LAST  = 'PROVA-respiroPacer.weekReportLast.v1';   // ultima frase usata per scenario
+  const K_COH   = 'PROVA-respiroPacer.cohFeedback.v1';    // sedute di coerenza (fascia + fotocamera)
+  const K_MORN  = 'PROVA-respiroPacer.morning.v1';        // test del mattino
+  const K_ALPHA = 'PROVA-respiroPacer.alpha.v1';          // misure DFA α1
+  const K_RIS   = 'PROVA-respiroPacer.risonanza.v1';      // test di frequenza di risonanza
+  const MIN_SEDUTE = 3;        // sotto questa soglia non si parla di andamento
+  const SU = 3, GIU = -6;      // punti di coerenza: soglie di comunicazione, non cliniche
+  const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+
+  const MSG = {
+    // Prima settimana in assoluto: non c'è nulla con cui confrontarla.
+    avvio: [
+      "Prima settimana registrata: {sedute}, {min} in tutto. Oggi non conta il valore, conta che il percorso sia partito: le prossime settimane si appoggeranno a questa.",
+      "Hai chiuso la tua prima settimana con {sedute}. Da qui il lavoro è semplice e ripetitivo: tornare. È così che il sistema nervoso impara, non con una seduta brillante.",
+      "{sedute} nella settimana d'esordio, {min} di pratica. Hai messo la base: il resto lo costruisce la frequenza, non l'intensità.",
+      "Settimana di avvio completata: {sedute}. Nessun risultato si vede in sette giorni, e nessun risultato arriva senza questi sette giorni.",
+      "Hai iniziato: {sedute}, {min}. Segnati questo punto di partenza: fra un mese avrà un senso che oggi non può ancora avere.",
+      "Prima settimana in archivio, {sedute}. La differenza fra chi ottiene risultati e chi no non si vede alla prima settimana, si vede alla ventesima.",
+      "{min} di pratica nella tua prima settimana. È poco in assoluto ed è molto come inizio: la maggior parte delle persone si ferma prima di arrivare qui.",
+      "Settimana uno: {sedute}. Il percorso funziona per accumulo, e ogni seduta lascia qualcosa anche quando non sembra.",
+      "Hai registrato {sedute} nella prima settimana, {min} in tutto. Da adesso la domanda utile non è quanto sia alto il numero, ma se ci sei tornato.",
+      "{sedute} nella tua prima settimana. Bene: adesso ripetila. È la costanza noiosa che produce i cambiamenti veri."
+    ],
+    // Sedute presenti ma troppo poche (qui o la settimana prima) per un confronto.
+    pochi: [
+      "Settimana con {sedute}: abbastanza per tenere il filo, non abbastanza per leggere un andamento. Da tre sedute in su potrò dirti anche come si muove la coerenza.",
+      "Hai fatto {sedute}, {min}. Meglio poco che niente non è una consolazione: è l'unica cosa che distingue un percorso da un tentativo.",
+      "{sedute} questa settimana. Per confrontare le settimane fra loro servono almeno tre sedute: è l'obiettivo minimo su cui puntare per la prossima.",
+      "Settimana leggera: {sedute}, {min}. Le settimane leggere fanno parte del percorso; quelle assenti no, e questa non lo è stata.",
+      "Hai registrato {sedute}. Non basta per un andamento, basta per non ripartire da zero — ed è già molto più di quanto sembri.",
+      "{sedute} in sette giorni. Se la settimana prossima arrivi a tre, cominciamo a vedere una linea invece di punti isolati.",
+      "Settimana con {sedute}, {min} di pratica. Il valore di una seduta isolata è piccolo; il valore di non aver smesso è grande.",
+      "{sedute} questa settimana: poche per i numeri, sufficienti per l'abitudine. Ed è l'abitudine che poi porta i numeri.",
+      "Hai chiuso con {sedute}. Non serve una settimana perfetta, serve una settimana che ci sia: questa c'è stata.",
+      "{sedute}, {min}. Aggiungere una sola seduta la settimana prossima è un passo piccolo e concreto, del tipo che funziona."
+    ],
+    su: [
+      "Settimana in miglioramento: {sedute} e una coerenza media più alta della settimana prima. Non è un caso, è l'effetto della ripetizione.",
+      "{sedute} questa settimana, con la coerenza in crescita. Il sistema sta rispondendo all'allenamento: continua sulla stessa strada.",
+      "Bel movimento in avanti: {sedute}, {min}, e la media settimanale è salita. Sono progressi costruiti una seduta alla volta.",
+      "La coerenza media è migliorata rispetto alla settimana precedente, con {sedute} all'attivo. Funziona esattamente così: piccole quantità, ripetute.",
+      "{sedute} e un andamento in salita. Vale la pena notarlo, perché i miglioramenti veri sono lenti e passano quasi sempre inosservati.",
+      "Settimana positiva: {min} di pratica e coerenza in aumento. Il merito è anche delle settimane precedenti, non solo di questa.",
+      "In crescita rispetto a sette giorni fa, con {sedute}. Il corpo impara per accumulo: quello che vedi ora l'hai seminato prima.",
+      "{sedute} e coerenza media più alta. Continua con questo ritmo: non serve fare di più, serve non interrompere.",
+      "Andamento in miglioramento, {min} di allenamento in settimana. È il tipo di progresso che regge nel tempo, perché non nasce da uno sforzo eccezionale.",
+      "Settimana in salita con {sedute} completate. Un passo avanti alla settimana, ripetuto, arriva molto più lontano di quanto sembri all'inizio."
+    ],
+    stabile: [
+      "Settimana stabile: {sedute}, coerenza in linea con la precedente. Mantenere non è fermarsi: è la fase in cui il cambiamento si consolida.",
+      "{sedute} e un andamento costante. Non tutte le settimane devono salire: la maggior parte del lavoro utile assomiglia a questa.",
+      "Coerenza in linea con la settimana prima, {min} di pratica. La stabilità ripetuta è la premessa dei miglioramenti, non il loro contrario.",
+      "Settimana regolare: {sedute}. Il sistema nervoso cambia con la costanza, e la costanza per definizione è poco spettacolare.",
+      "{sedute} completate, valori stabili. Sei nella parte del percorso che sembra non muoversi ed è invece quella che lavora.",
+      "Andamento stazionario con {sedute} all'attivo. Va bene così: stai tenendo il ritmo, ed è il ritmo a fare il risultato.",
+      "{min} di pratica e coerenza costante. Nessuna novità nei numeri, e intanto l'abitudine si rinforza: serve anche questo.",
+      "Settimana in linea con la precedente, {sedute}. La tentazione è chiedersi se serva continuare: sì, perché è il ripetersi a produrre l'effetto.",
+      "{sedute} e media stabile. I risultati non arrivano dalle settimane migliori, arrivano dalla somma delle settimane normali come questa.",
+      "Coerenza stazionaria, {sedute} fatte. Continua a presentarti: molti percorsi si interrompono proprio in questa fase, quando sembra che non cambi niente."
+    ],
+    giu: [
+      "Settimana in leggero calo: {sedute}, coerenza un po' sotto la precedente. Succede, e dipende da sonno, carico e periodo. Il percorso si guarda sui mesi.",
+      "{sedute} questa settimana, con la coerenza scesa un po'. Non è un passo indietro: è la normale oscillazione di un sistema vivo.",
+      "Andamento in leggera flessione, {min} di pratica. Le settimane così ci sono in ogni percorso: l'importante è che la prossima ci sia.",
+      "Coerenza un po' più bassa della settimana prima, con {sedute} completate. Il dato che conta è che hai continuato mentre scendeva.",
+      "{sedute}, andamento in leggero calo. Prima di cercare spiegazioni complicate, una domanda semplice: come hai dormito questa settimana?",
+      "Settimana meno brillante: {sedute}, coerenza in flessione. Nessun percorso sale in linea retta; quelli che funzionano scendono e riprendono.",
+      "{min} di pratica con una media più bassa. Si legge così: hai tenuto l'abitudine in una settimana difficile, che è il momento in cui serve di più.",
+      "Leggero calo rispetto a sette giorni fa, {sedute} all'attivo. Un avvallamento non cancella il lavoro fatto prima: quello resta.",
+      "{sedute} questa settimana, con valori un po' sotto. Non cambiare niente per una settimana sola: si valuta su tre o quattro.",
+      "Settimana in flessione con {sedute}. Continuare quando i numeri non premiano è esattamente ciò che costruisce il risultato finale."
+    ],
+    // Settimana chiusa senza nessuna attività, ma con storico prima: invito al rientro.
+    ripresa: [
+      "Nella settimana appena chiusa non ci sono attività registrate. Si riprende da dove si era rimasti, non da zero: una seduta oggi rimette in moto tutto.",
+      "Settimana senza sedute. Capita a tutti e non annulla il lavoro precedente. Il modo più semplice di ricominciare è una sola seduta, adesso.",
+      "Non risultano attività negli ultimi sette giorni. Le pause fanno parte dei percorsi lunghi: quello che le distingue è quanto durano.",
+      "Nessuna seduta nella settimana appena passata. Non serve recuperare nulla né fare di più per compensare: basta riprendere il ritmo normale.",
+      "Settimana vuota. Il fatto che tu abbia aperto l'app dice già che il percorso non è chiuso: ricominciamo da qui.",
+      "Negli ultimi sette giorni non ci sono misure. Riprendere costa meno di quanto sembri: pochi minuti di respirazione e sei di nuovo dentro.",
+      "Nessuna attività registrata la settimana scorsa. Le interruzioni sono la norma e non l'eccezione: quasi nessuno procede senza salti.",
+      "Settimana senza pratica. Nessun giudizio, solo un promemoria: gli effetti si costruiscono con la ripetizione, e la ripetizione ricomincia quando decidi tu.",
+      "Non ci sono sedute nella settimana chiusa. Il percorso riparte con la prossima seduta, non con una settimana perfetta per rimediare.",
+      "Settimana a zero. L'unica cosa che conta ora è la prima seduta della settimana nuova: il resto viene da sé."
+    ]
+  };
+
+  const get = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
+  const read = k => { try{ return JSON.parse(get(k))||[]; }catch(e){ return []; } };
+
+  // Lunedì della settimana che contiene d, a mezzanotte locale.
+  function monday(d){
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay()+6)%7));       // getDay(): 0=domenica → 0=lunedì
+    return x;
+  }
+  function chiave(lun){
+    return 'W' + lun.getFullYear() + '-' + String(lun.getMonth()+1).padStart(2,'0')
+               + '-' + String(lun.getDate()).padStart(2,'0');
+  }
+  function giorno(d){ return d.getDate() + ' ' + MESI[d.getMonth()]; }
+  function daTs(v){ const d = new Date(v); return isFinite(+d) ? d : null; }
+  // 'YYYY-MM-DD' letto a mezzogiorno locale: così il fuso non lo sposta di un giorno.
+  function daGiorno(v){
+    if(typeof v !== 'string' || v.length < 10) return null;
+    const p = v.slice(0,10).split('-');
+    const d = new Date(+p[0], +p[1]-1, +p[2], 12);
+    return isFinite(+d) ? d : null;
+  }
+  function dentro(d, a, b){ return !!d && d >= a && d < b; }
+  function plur(n, uno, molti){ return n + ' ' + (n===1 ? uno : molti); }
+
+  // Conteggi e media di coerenza nell'intervallo [a, b).
+  function conta(a, b){
+    const coh   = read(K_COH).filter(e => dentro(daTs(e.ts), a, b));
+    const morn  = read(K_MORN).filter(e => dentro(daGiorno(e.d) || daTs(e.ts), a, b));
+    const alpha = read(K_ALPHA).filter(e => dentro(daGiorno(e.d) || daTs(e.ts), a, b));
+    const ris   = read(K_RIS).filter(e => dentro(daTs(e.start), a, b));
+    const vals  = coh.map(e => +e.coh).filter(v => isFinite(v));
+    return {
+      coh: coh.length, morn: morn.length, alpha: alpha.length, ris: ris.length,
+      minuti: coh.reduce((s,e) => s + (isFinite(+e.min) ? +e.min : 0), 0),
+      media: vals.length ? vals.reduce((s,v) => s+v, 0) / vals.length : null,
+      totale: coh.length + morn.length + alpha.length + ris.length
+    };
+  }
+
+  function pick(scen){
+    const arr = MSG[scen]; if(!arr || !arr.length) return '';
+    let last = {}; try{ last = JSON.parse(get(LAST))||{}; }catch(e){}
+    let i = Math.floor(Math.random()*arr.length);
+    if(arr.length>1 && i===last[scen]) i = (i+1)%arr.length;   // mai due uguali di fila
+    last[scen] = i; try{ localStorage.setItem(LAST, JSON.stringify(last)); }catch(e){}
+    return arr[i];
+  }
+
+  function init(){
+    const box = document.getElementById('weekBox'); if(!box) return;
+    // Se c'è la nota delle novità, si aspetta il prossimo avvio: due riquadri in cima
+    // alla Home sono troppi, e la nota va letta prima (spiega proprio questo riquadro).
+    const nov = document.getElementById('novitaBox');
+    if(nov && nov.style.display !== 'none') return;
+
+    const lunCorrente = monday(new Date());
+    const inizio = new Date(lunCorrente); inizio.setDate(inizio.getDate()-7);   // settimana chiusa
+    const fine   = lunCorrente;
+    const k = chiave(inizio);
+    if(get(SEEN) === k) return;                       // già mostrata per questa settimana
+
+    const cur = conta(inizio, fine);
+    const storicoPrima = conta(new Date(2000,0,1), inizio).totale;
+    if(!cur.totale && !storicoPrima) return;          // paziente nuovo: niente da riepilogare
+
+    const pInizio = new Date(inizio); pInizio.setDate(pInizio.getDate()-7);
+    const prev = conta(pInizio, inizio);
+
+    let scen, delta = null;
+    if(!cur.totale)          scen = 'ripresa';
+    else if(!storicoPrima)   scen = 'avvio';
+    else if(cur.coh >= MIN_SEDUTE && prev.coh >= MIN_SEDUTE && cur.media != null && prev.media != null){
+      delta = cur.media - prev.media;
+      scen = delta >= SU ? 'su' : (delta <= GIU ? 'giu' : 'stabile');
+    } else scen = 'pochi';
+
+    const ultimo = new Date(fine); ultimo.setDate(ultimo.getDate()-1);
+    const elRange = document.getElementById('weekRange');
+    if(elRange) elRange.textContent = 'settimana dal ' + giorno(inizio) + ' al ' + giorno(ultimo);
+
+    const chips = [];
+    if(cur.coh)    chips.push('🫁 <b>'+cur.coh+'</b> '+(cur.coh===1?'seduta di coerenza':'sedute di coerenza'));
+    if(cur.minuti) chips.push('⏱ <b>'+cur.minuti+'</b> '+(cur.minuti===1?'minuto':'minuti'));
+    if(cur.morn)   chips.push('🌅 <b>'+cur.morn+'</b> '+(cur.morn===1?'test del mattino':'test del mattino'));
+    if(cur.alpha)  chips.push('📉 <b>'+cur.alpha+'</b> '+(cur.alpha===1?'misura α1':'misure α1'));
+    if(cur.ris)    chips.push('🎯 <b>'+cur.ris+'</b> '+(cur.ris===1?'test di risonanza':'test di risonanza'));
+    const elStats = document.getElementById('weekStats');
+    if(elStats) elStats.innerHTML = chips.map(c => '<span class="wk-chip">'+c+'</span>').join('');
+
+    const elTrend = document.getElementById('weekTrend');
+    if(elTrend){
+      if(delta != null){
+        const freccia = scen==='su' ? '▲' : (scen==='giu' ? '▼' : '▬');
+        elTrend.innerHTML = freccia + ' Coerenza media della settimana: <b>' + Math.round(cur.media)
+                          + '</b> · settimana precedente <b>' + Math.round(prev.media) + '</b>';
+        elTrend.style.display = '';
+      } else elTrend.style.display = 'none';
+    }
+
+    const elMsg = document.getElementById('weekMsg');
+    if(elMsg) elMsg.innerHTML = pick(scen)
+      .replace('{sedute}', plur(cur.coh, 'seduta', 'sedute'))
+      .replace('{min}', plur(cur.minuti, 'minuto', 'minuti'));
+
+    box.style.display = '';
+    const ok = document.getElementById('weekOk');
+    if(ok) ok.addEventListener('click', () => {
+      try{ localStorage.setItem(SEEN, k); }catch(e){}
+      box.style.display = 'none';
+    });
+  }
+  return { init };
+})();
+window.WeekReport = WeekReport;
 
 /* ── Tachimetro dello stato di attivazione (Stress Index) a fine test tonico ──
    Porta il metodo già validato nell'app self-coherence: formula di Baevsky
@@ -5218,6 +5483,12 @@ Screens.init();
   box.style.display = '';
   ok.addEventListener('click', ()=>{ segna(); box.style.display = 'none'; });
 })();
+
+/* ---- Riepilogo della settimana (deve girare DOPO la nota delle novità) ----
+   L'ordine non è casuale: WeekReport si tira indietro se la nota è a schermo, e per
+   saperlo la nota deve aver già deciso se mostrarsi. Invertendo le due chiamate il
+   riquadro comparirebbe insieme alla nota al primo avvio dopo l'aggiornamento. */
+WeekReport.init();
 
 /* ---- Guida utente (overlay) ---- */
 (function(){
