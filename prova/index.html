@@ -531,7 +531,20 @@
       <div class="field"><label>Trattenere (polmoni pieni)</label><div class="row"><input type="number" id="holdFull" value="0" min="0" step="0.5"><span class="unit">sec</span></div></div>
       <div class="field"><label>Espirazione</label><div class="row"><input type="number" id="exhale" value="6.5" min="0" step="0.5"><span class="unit">sec</span></div></div>
       <div class="field"><label>Trattenere (polmoni vuoti)</label><div class="row"><input type="number" id="holdEmpty" value="0" min="0" step="0.5"><span class="unit">sec</span></div></div>
+      <label>Durata della sessione</label>
+      <!-- Stessi tasti della sessione con fotocamera: prima si poteva limitare la
+           sessione SOLO in cicli, e per fare 5 minuti a 4,6 atti/min bisognava
+           calcolare 23 cicli a mano. Serve anche a non lasciare la sessione
+           aperta se ci si addormenta con la fascia. -->
+      <div class="cam-durs" id="staticDurs">
+        <button type="button" data-min="3" class="btn ghost">3 min</button>
+        <button type="button" data-min="5" class="btn ghost">5 min</button>
+        <button type="button" data-min="10" class="btn ghost">10 min</button>
+        <button type="button" data-min="0" class="btn ghost cam-sel">Libera</button>
+      </div>
+      <input type="hidden" id="staticMinutes" value="0">
       <div class="field"><label>Numero di cicli (0 = illimitato)</label><div class="row"><input type="number" id="targetCycles" value="0" min="0" step="1"><span class="unit">cicli</span></div></div>
+      <div class="calc" id="staticStopNote">Sessione <b>libera</b>: si ferma quando la fermi tu.</div>
     </div>
     <div id="dynamicSettings" style="display:none">
       <div class="field"><label>Frequenza iniziale</label><div class="row"><input type="number" id="startRate" value="6" min="1" step="0.5"><span class="unit">atti/min</span></div></div>
@@ -1182,6 +1195,8 @@
       <p>Il pacer guida il respiro con una sfera che si espande (inspira) e si restringe (espira), con voce e suono opzionali. Due modalità:</p>
       <h4>Modalità Statica</h4>
       <p>Imposti tu le durate fisse di ogni fase, in secondi: <b>Inspirazione</b>, <b>Pausa piena</b>, <b>Espirazione</b>, <b>Pausa vuota</b>. La somma delle quattro fasi è il <b>ciclo</b>; la frequenza in atti/minuto è mostrata in tempo reale. È la modalità da usare per respirare alla <b>tua frequenza di risonanza</b> (cap. 3).</p>
+      <p><b>Durata della sessione.</b> Con i tasti <b>3 / 5 / 10 min</b> la sessione si ferma da sola allo scadere del tempo; con <b>Libera</b> va avanti finché non la fermi tu. Puoi ancora limitarla anche a <b>numero di cicli</b>: se imposti tutti e due, vince il primo dei due limiti che scade.</p>
+      <div class="tip">Conviene impostare una durata quando ci si allena <b>sdraiati o la sera</b>: se ci si addormenta con la fascia addosso, la sessione libera continua a registrare per decine di minuti e il dato che arriva al medico non è più un allenamento di coerenza.</div>
       <h4>Modalità Dinamica</h4>
       <p>Il ritmo parte da una <b>frequenza iniziale</b> e scende gradualmente verso una <b>frequenza finale (target)</b>, con una <b>variazione per step</b>. Serve per accompagnare progressivamente il sistema verso ritmi più lenti, o per cercare la frequenza di risonanza.</p>
       <h4>Modalità Risonanza</h4>
@@ -2190,6 +2205,11 @@ const App = (() => {
     const p=ph.dur>0?Math.min(elapsed/ph.dur,1):1,full=fullnessFor(seq[seqIdx].name,p);
     render(full,seq[seqIdx],elapsed,now);Audio.update(full,seq[seqIdx].name);
     if((mode==='dynamic'||mode==='resonance')&&now-sessionStart-pausedAccum>=dyn.total*60000){finish();return;}
+    /* Statica a durata fissa: si chiude da sola come Dinamica e Risonanza. Se sono
+       impostati ANCHE i cicli vince il primo dei due limiti che scade (i cicli sono
+       controllati in nextPhase). 0 = libera, comportamento di prima. */
+    if(mode==='static'){const tm=+el('staticMinutes').value;
+      if(tm>0&&now-sessionStart-pausedAccum>=tm*60000){finish();return;}}
     rafId=requestAnimationFrame(tick);
   }
   /* Quanto manca al prossimo cambio di ritmo. Solo Dinamica e Risonanza cambiano
@@ -2221,7 +2241,13 @@ const App = (() => {
     const te=(now-sessionStart-pausedAccum)/1000;el('roElapsed').textContent=fmt(te);
     el('orbCount').textContent=cycleCount||'';
     if(mode==='dynamic'||mode==='resonance'){el('sessionFill').style.width=Math.min(100,(te/(dyn.total*60))*100)+'%';}
-    else{const tc=+el('targetCycles').value;el('sessionFill').style.width=tc>0?Math.min(100,(cycleCount/tc)*100)+'%':'0%';}
+    else{
+      /* Barra di avanzamento: se c'e' una durata la barra segue il TEMPO (piu'
+         leggibile e coerente con le altre modalita'); altrimenti i cicli, come prima. */
+      const tm=+el('staticMinutes').value, tc=+el('targetCycles').value;
+      el('sessionFill').style.width = tm>0 ? Math.min(100,(te/(tm*60))*100)+'%'
+                                   : (tc>0 ? Math.min(100,(cycleCount/tc)*100)+'%' : '0%');
+    }
   }
   const fmt=s=>{s=Math.max(0,Math.floor(s));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 
@@ -2282,7 +2308,7 @@ const App = (() => {
 
   /* ---------- PERSISTENZA IMPOSTAZIONI ---------- */
   const SKEY='respiroPacer.settings.v1';
-  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','resStart','resEnd','resStep','ambientVol','voiceVol'];
+  const valIds=['inhale','holdFull','exhale','holdEmpty','staticMinutes','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','resStart','resEnd','resStep','ambientVol','voiceVol'];
   const chkIds=['ambientOn','voiceOn'];
   function activateTab(m){
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===m));
@@ -2305,10 +2331,31 @@ const App = (() => {
     if(d.mode)activateTab(d.mode);
   }
 
+  /* Evidenzia il tasto durata corrispondente al valore salvato e aggiorna la nota.
+     Se il valore salvato non e' fra i tasti (es. da una versione futura) nessuno
+     resta acceso, ma la durata continua a valere: meglio che accenderne uno sbagliato. */
+  function syncStaticDurs(){
+    const box=el('staticDurs'); if(!box) return;
+    const tm=+el('staticMinutes').value||0;
+    [].forEach.call(box.children,b=>b.classList.toggle('cam-sel',+b.dataset.min===tm));
+    const nota=el('staticStopNote');
+    if(nota)nota.innerHTML = tm>0
+      ? `Si ferma da sola dopo <b>${tm} minuti</b>.`
+      : 'Sessione <b>libera</b>: si ferma quando la fermi tu.';
+  }
+
   function init(){
     loadSettings();                                              // ripristina l'ultima configurazione
+    syncStaticDurs();       // i tasti durata sono legati a un input nascosto: si riallineano
+                            // qui e non dentro loadSettings, che esce subito se non c'e' nulla
+                            // di salvato (prima installazione).
     document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
       if(running)return;activateTab(tab.dataset.mode);updateFreqDisplay();saveSettings();}));
+    el('staticDurs').addEventListener('click',e=>{
+      const b=e.target.closest('button'); if(!b||running) return;   // a sessione avviata non si cambia
+      el('staticMinutes').value=b.dataset.min;
+      syncStaticDurs(); saveSettings();
+    });
     el('btnStart').addEventListener('click',start);el('btnPause').addEventListener('click',pause);el('btnStop').addEventListener('click',()=>stop(false));
     ['inhale','holdFull','exhale','holdEmpty'].forEach(id=>el(id).addEventListener('input',updateFreqDisplay));
     ['startRate','endRate','stepRate'].forEach(id=>el(id).addEventListener('input',()=>{updateDynCalc();updateFreqDisplay();}));
@@ -3816,7 +3863,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v69 · PROVA';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v70 · PROVA';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);

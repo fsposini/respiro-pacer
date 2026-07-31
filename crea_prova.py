@@ -41,6 +41,15 @@ ISOLA = [
     "respiroPacer.morningPosMigr.v1", # stato della migrazione della baseline
     "respiroPacer.alpha.v1",          # storico DFA alpha1
     "respiroPacer.risonanza.v1",      # test di frequenza di risonanza
+    "respiroPacer.cohFeedback.v1",    # storico coerenza per il feedback motivazionale
+    "respiroPacer.cohFeedbackLast.v1",# ultima frase mostrata (per non ripeterla)
+    "respiroPacer.weekReport.v1",     # settimana di cui si e' gia' visto il riepilogo:
+                                      # se NON fosse isolata, provarlo qui lo spegnerebbe
+                                      # per quella settimana anche nell'app vera.
+    "respiroPacer.weekReportLast.v1", # ultima frase settimanale usata per scenario
+    "respiroPacer.seenVer.v1",        # versione di cui si e' gia' vista la nota delle novita':
+                                      # se NON fosse isolata, provare la nota qui la
+                                      # spegnerebbe anche nell'app vera dello stesso telefono.
 ]
 # Chiavi lasciate IN COMUNE di proposito:
 #   license.v1 / deviceId.v1  -> la licenza e' legata a UN dispositivo. Isolarle
@@ -124,6 +133,80 @@ def main():
 """
     html, _ = sostituisci(html, "<body>", "<body>" + banner, attese=1, etichetta="tag body")
     passi.append("aggiunta la fascia di avviso in cima")
+
+    # 6) Banco di prova del riepilogo settimanale ----------------------------
+    # Il riquadro settimanale compare solo al primo avvio di una settimana NUOVA e
+    # parla della settimana CHIUSA. Sulla prova gli storici sono isolati e quindi
+    # vuoti: senza questo pannello non si potrebbe vedere il riquadro se non
+    # aspettando settimane. I tasti riempiono lo storico ISOLATO (mai quello vero)
+    # con una settimana finta e richiamano WeekReport.init().
+    # Sta qui e NON in index.html di proposito: e' impalcatura di collaudo, non deve
+    # esistere nell'app dei pazienti nemmeno nascosta.
+    banco = """
+  <div id="bancoSettimana" style="border:1px dashed #8a2f24;border-radius:12px;padding:11px 12px;margin-bottom:16px">
+    <div style="font:700 .78rem system-ui;color:#e08b7d;margin-bottom:3px">Banco di prova · riepilogo settimanale</div>
+    <div style="font:400 .7rem/1.4 system-ui;color:#8fb0c9;margin-bottom:8px">
+      Riempie lo storico <b>di prova</b> con una settimana finta e mostra il riquadro.
+      Non tocca il tuo storico vero.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px" id="bancoTasti"></div>
+  </div>
+"""
+    ancora = '    <button type="button" class="wk-ok" id="weekOk">Ho visto</button>\n  </div>'
+    html, _ = sostituisci(html, ancora, ancora + banco, attese=1,
+                          etichetta="chiusura del riquadro settimanale")
+
+    script_banco = """
+/* ---- Banco di prova del riepilogo settimanale (SOLO versione di prova) ---- */
+(function(){
+  const tasti = document.getElementById('bancoTasti'); if(!tasti) return;
+  const P = 'PROVA-respiroPacer.';
+  function lun(d){ const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+  const L0=lun(new Date());
+  const L1=new Date(L0); L1.setDate(L1.getDate()-7);    // settimana chiusa (quella del report)
+  const L2=new Date(L0); L2.setDate(L2.getDate()-14);   // quella prima
+  function sedute(lunedi,n,coh){ const o=[]; for(let i=0;i<n;i++){
+    const d=new Date(lunedi); d.setDate(d.getDate()+i); d.setHours(10,0,0,0);
+    o.push({ts:d.toISOString(), coh:coh, min:5}); } return o; }
+  function giorni(lunedi,n){ const o=[]; for(let i=0;i<n;i++){
+    const d=new Date(lunedi); d.setDate(d.getDate()+i);
+    o.push({ d:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
+             ts:d.toISOString(), rmssd:40, alpha:1.05 }); } return o; }
+  const CASI = [
+    ['Prima settimana', ()=>({coh:sedute(L1,4,70),                          morn:giorni(L1,2)})],
+    ['Poche sedute',    ()=>({coh:sedute(L2,4,70).concat(sedute(L1,2,72)),  morn:giorni(L1,1)})],
+    ['Miglioramento',   ()=>({coh:sedute(L2,4,60).concat(sedute(L1,4,72)),  morn:giorni(L1,3), alpha:giorni(L1,1)})],
+    ['Stazionario',     ()=>({coh:sedute(L2,4,60).concat(sedute(L1,4,61)),  morn:giorni(L1,3)})],
+    ['Leggero calo',    ()=>({coh:sedute(L2,4,60).concat(sedute(L1,4,51)),  morn:giorni(L1,2)})],
+    ['Settimana vuota', ()=>({coh:sedute(L2,4,70),                          morn:[]})]
+  ];
+  function applica(fn){
+    const s = fn();
+    try{
+      localStorage.setItem(P+'cohFeedback.v1', JSON.stringify(s.coh||[]));
+      localStorage.setItem(P+'morning.v1',     JSON.stringify(s.morn||[]));
+      localStorage.setItem(P+'alpha.v1',       JSON.stringify(s.alpha||[]));
+      localStorage.setItem(P+'risonanza.v1',   JSON.stringify([]));
+      localStorage.removeItem(P+'weekReport.v1');     // torna "da mostrare"
+    }catch(e){}
+    const box=document.getElementById('weekBox'); if(box) box.style.display='none';
+    if(window.WeekReport) WeekReport.init();
+    if(box) box.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  CASI.forEach(([nome,fn])=>{
+    const b=document.createElement('button');
+    b.type='button'; b.textContent=nome;
+    b.style.cssText='font:600 .72rem system-ui;padding:7px 9px;border-radius:8px;cursor:pointer;'
+      +'border:1px solid #244563;background:#193249;color:#e8f1f8';
+    b.addEventListener('click', ()=>applica(fn));
+    tasti.appendChild(b);
+  });
+})();
+"""
+    html, _ = sostituisci(html, "\n/* ---------- SERVICE WORKER",
+                          script_banco + "\n/* ---------- SERVICE WORKER",
+                          attese=1, etichetta="blocco del service worker")
+    passi.append("aggiunto il banco di prova del riepilogo settimanale (6 casi)")
 
     OUT_DIR.mkdir(exist_ok=True)
     OUT.write_text(html, encoding="utf-8")
