@@ -865,7 +865,7 @@
         <div class="prep-title">Prima di iniziare — esecuzione corretta del fasico</div>
         <ul class="prep-list">
           <li>Respira <b>con il naso</b> (inspira ed espira dal naso), in modo <b>diaframmatico</b>: si gonfia la <b>pancia</b>, il petto resta fermo.</li>
-          <li>Inspira <b>lentamente</b>, riempiendo il polmone a circa il <b>75%</b> della capacità — senza forzare.</li>
+          <li>Inspira <b>lentamente</b>, riempiendo il polmone <b>al massimo al 60-70%</b> della capacità — senza forzare.</li>
           <li><b>Segui la sfera</b>: inspira mentre si espande, espira mentre si restringe (6/min).</li>
           <li>Non muoverti, non parlare, non iperventilare.</li>
         </ul>
@@ -1268,7 +1268,7 @@
         <li>Il <b>codice paziente</b> è quello dell'attivazione (in alto). Imposta <b>sesso, età, categoria</b> (servono per le scale di riferimento).</li>
         <li>Avvia: 30 s di stabilizzazione, poi il <b>tonico</b> — schermo con sola sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
         <li>A fine tonico scegli: <b>Concludi</b> (invii il solo tonico) oppure <b>Aggiungi fase fasica</b>.</li>
-        <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino a circa il <b>75%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
+        <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino <b>al massimo al 60-70%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
         <li>A fine test i dati grezzi vengono inviati/esportati e analizzati nel software HRV (pulizia artefatti + referto).</li>
       </ol>
       <div class="tip">La valutazione è <b>doppia</b>: numerica (SDNN, RMSSD, Total Power, distribuzione VLF/LF/HF, coerenza, Stress Index) <b>e</b> morfologica (forma del tracciato). Per questo il tonico non mostra numeri al paziente: deve restare il più possibile "puro".</div>
@@ -3863,7 +3863,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v70 · PROVA';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v71 · PROVA';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
