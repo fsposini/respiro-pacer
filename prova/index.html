@@ -1943,13 +1943,28 @@ const WeekReport = (() => {
 window.WeekReport = WeekReport;
 
 /* ── Tachimetro dello stato di attivazione (Stress Index) a fine test tonico ──
-   Porta il metodo già validato nell'app self-coherence: formula di Baevsky
-   (SI = AMo/(2·Mo·MxDMn)) stimata da SDNN + FC media, con le stesse soglie
-   (riferimento 150; zone 50/150/500). Tono basso, non allarmistico: le etichette
-   descrivono lo stato DI OGGI, non un giudizio sulla persona; nella fascia alta
-   rimandano sempre al medico. Guardia di qualità sui tracciati troppo disturbati. */
+   Formula di Baevsky (SI = AMo/(2·Mo·MxDMn)) stimata da SDNN + FC media. Tono
+   basso, non allarmistico: le etichette descrivono lo stato DI OGGI, non un
+   giudizio sulla persona; nella fascia alta rimandano sempre al medico. Guardia
+   di qualità sui tracciati troppo disturbati.
+
+   ⚠️ SOGLIE RIANCORATE ALLA FONTE il 01/08/2026 (audit dei numeri clinici).
+   Erano riferimento 150 e zone 50/150/500, ereditate dall'app self-coherence e
+   corrette là il 31/07: NON venivano da nessuna fonte. L'unico normativo della
+   dispensa (cap. 4 p. 43) e' «Kubios 5-15», e Kubios mostra la RADICE QUADRATA
+   del Baevsky. Qui il Baevsky e' calcolato NON sotto radice, quindi il
+   riferimento vero e' 25-225 c.u. (= 5^2 e 15^2).
+   Conseguenza della vecchia taratura: un paziente con SI 200 — Kubios 14,1,
+   DENTRO il riferimento — riceveva un tachimetro arancione «Oggi attivazione
+   alta». L'errore stava tutto nella meta' alta della scala, cioe' proprio dove
+   il messaggio preoccupa.
+   SI_ALTO NON e' un normativo: e' il doppio del limite superiore, scelto per
+   non appiattire il tachimetro. Federico ha confermato le quattro zone il
+   01/08/2026. Non va usato come cut-off da nessuna parte. */
 const StressGauge = (() => {
-  const SI_REF = 150;
+  const SI_MIN  = 25;    // = Kubios 5  (limite inferiore del riferimento)
+  const SI_REF  = 225;   // = Kubios 15 (limite superiore del riferimento)
+  const SI_ALTO = 450;   // scelta di sola visualizzazione — NON un normativo
   function erf(x){
     const s = x<0 ? -1 : 1; x = Math.abs(x);
     const t = 1/(1+0.3275911*x);
@@ -1967,17 +1982,17 @@ const StressGauge = (() => {
   // Verdetto in linguaggio paziente — stato di oggi, mai giudizio sulla persona.
   function verdict(si){
     if(isNaN(si))  return {big:'—', col:'#7a8a90', sub:'Dato non disponibile.'};
-    if(si<50)   return {big:'Oggi molto rilassato', col:'#1b8a5a', sub:'Oggi il sistema nervoso è in forte risparmio energetico. Va letto insieme agli altri indici: non sempre indica solo riposo.'};
-    if(si<=150) return {big:'Oggi in equilibrio', col:'#1b8a5a', sub:'Oggi il tuo sistema nervoso gestisce bene lo stress fisiologico: un buon segnale di equilibrio.'};
-    if(si<=500) return {big:'Oggi attivazione alta', col:'#e8820c', sub:'Oggi il tuo sistema nervoso è piuttosto attivato. Capita, e dipende da tanti fattori del momento: è comunque il segnale che vale la pena curare il recupero.'};
+    if(si<SI_MIN)   return {big:'Oggi molto rilassato', col:'#1b8a5a', sub:'Oggi il sistema nervoso è in forte risparmio energetico. Va letto insieme agli altri indici: non sempre indica solo riposo.'};
+    if(si<=SI_REF)  return {big:'Oggi in equilibrio', col:'#1b8a5a', sub:'Oggi il tuo sistema nervoso gestisce bene lo stress fisiologico: un buon segnale di equilibrio.'};
+    if(si<=SI_ALTO) return {big:'Oggi attivazione alta', col:'#e8820c', sub:'Oggi il tuo sistema nervoso è piuttosto attivato. Capita, e dipende da tanti fattori del momento: è comunque il segnale che vale la pena curare il recupero.'};
     return {big:'Oggi attivazione molto alta', col:'#b3201e', sub:'Oggi il tuo sistema nervoso risulta molto attivato. Da una misura sola non si traggono conclusioni: proprio per questo vale la pena parlarne col tuo medico e dare priorità al recupero.'};
   }
   function frac(si){
     if(isNaN(si)) return 0;
-    if(si<=50)  return (si/50)*0.25;
-    if(si<=150) return 0.25+(si-50)/100*0.25;
-    if(si<=500) return 0.50+(si-150)/350*0.25;
-    return 0.75+Math.min(1,(si-500)/500)*0.25;
+    if(si<=SI_MIN)  return (si/SI_MIN)*0.25;
+    if(si<=SI_REF)  return 0.25+(si-SI_MIN)/(SI_REF-SI_MIN)*0.25;
+    if(si<=SI_ALTO) return 0.50+(si-SI_REF)/(SI_ALTO-SI_REF)*0.25;
+    return 0.75+Math.min(1,(si-SI_ALTO)/SI_ALTO)*0.25;
   }
   function gaugeSVG(si){
     const cx=180, cy=176, R=140, sw=30;
@@ -1989,12 +2004,12 @@ const StressGauge = (() => {
     let s='<svg viewBox="0 0 360 210" role="img" aria-label="Stato di attivazione">';
     zones.forEach(z=>{ s+='<polyline points="'+arc(z[0],z[1])+'" fill="none" stroke="'+z[2]+'" stroke-width="'+sw+'" stroke-linecap="butt"/>'; });
     [135,90,45].forEach(d=>{ const a=pol(R+sw/2,d), b=pol(R-sw/2,d); s+='<line x1="'+a[0].toFixed(1)+'" y1="'+a[1].toFixed(1)+'" x2="'+b[0].toFixed(1)+'" y2="'+b[1].toFixed(1)+'" stroke="#fff" stroke-width="2"/>'; });
-    [[135,'50'],[90,'150'],[45,'500']].forEach(z=>{ const p=pol(R-sw/2-11,z[0]); s+='<text x="'+p[0].toFixed(1)+'" y="'+p[1].toFixed(1)+'" font-size="11.5" font-weight="700" fill="#5a6b72" text-anchor="middle" dominant-baseline="middle">'+z[1]+'</text>'; });
+    [[135,String(SI_MIN)],[90,String(SI_REF)],[45,String(SI_ALTO)]].forEach(z=>{ const p=pol(R-sw/2-11,z[0]); s+='<text x="'+p[0].toFixed(1)+'" y="'+p[1].toFixed(1)+'" font-size="11.5" font-weight="700" fill="#5a6b72" text-anchor="middle" dominant-baseline="middle">'+z[1]+'</text>'; });
     const deg=180-frac(si)*180, tip=pol(R-6,deg), tail=pol(-12,deg);
     s+='<line x1="'+tail[0].toFixed(1)+'" y1="'+tail[1].toFixed(1)+'" x2="'+tip[0].toFixed(1)+'" y2="'+tip[1].toFixed(1)+'" stroke="#1f2d33" stroke-width="5" stroke-linecap="round"/>';
     s+='<circle cx="'+cx+'" cy="'+cy+'" r="10" fill="#1f2d33"/>';
     s+='<text x="'+cx+'" y="'+(cy-34)+'" text-anchor="middle" font-weight="800" fill="#1f2d33"><tspan font-size="44">'+Math.round(si)+'</tspan><tspan font-size="22" font-weight="600" fill="#7a8a90"> / '+SI_REF+'</tspan></text>';
-    s+='<text x="'+cx+'" y="'+(cy-14)+'" text-anchor="middle" font-size="13.5" fill="#7a8a90">Stato di attivazione · rif. ≤'+SI_REF+'</text>';
+    s+='<text x="'+cx+'" y="'+(cy-14)+'" text-anchor="middle" font-size="13.5" fill="#7a8a90">Stato di attivazione · rif. '+SI_MIN+'–'+SI_REF+'</text>';
     s+='</svg>';
     return s;
   }
@@ -2041,9 +2056,20 @@ window.StressGauge = StressGauge;
        diaframmatica: è l'unico criterio dove "aumento" è un segnale negativo)
      · SDNN in espansione (aumenta più dell'RMSSD per influenza respiratoria)
      · RMSSD in aumento (vago reattivo); se PEGGIORA = mancanza di risorse
-     · coerenza normalizzata ≥ 80%
-   Pesi identici a quelli dello strumento medico (19/25/19/37, −25 se l'RMSSD
-   peggiora): la percentuale che vede il paziente è la stessa che legge Federico.
+     · coerenza normalizzata che AUMENTA e supera l'80%
+   Allineato allo strumento medico il 01/08/2026 (audit dei numeri clinici):
+   quello che il paziente vede è lo stesso che legge Federico. Tre correzioni,
+   tutte già applicate e verificate nell'app self-coherence:
+     1. il PUNTEGGIO PESATO (19/25/19/37, −25) è stato tolto. I criteri sono
+        della fonte, i pesi no: erano una nostra scelta, e il numero che ne
+        usciva — con sopra altri due tagli, 66 e 40, per scegliere il verdetto —
+        aveva l'aspetto di una misura senza esserlo. Ora è un CONTEGGIO dei
+        criteri raggiunti, che è un fatto.
+     2. «SDNN almeno TRIPLICATO» = +200%, non +180% (era 180 qui e nell'app
+        medica fino al 31/07).
+     3. la coerenza deve AUMENTARE e superare l'80%, non solo trovarsi sopra
+        l'80%: chiarito da Federico il 31/07. Un paziente già alto nel tonico e
+        piatto nel fasico prendeva il criterio senza aver mostrato riserva.
    L'MHRR NON entra: non compare in nessuna fonte della knowledge base.
    Al paziente: tre livelli attenuati, mai le etichette cliniche (iporeattiva,
    disregolata, vago ipertonico). Caso particolare: una risposta abnorme (SDNN
@@ -2060,24 +2086,33 @@ const PhasicReport = (() => {
     const dSp = t.sdnn ? (f.sdnn-t.sdnn)/t.sdnn*100 : 0;
     const dRp = t.rmssd ? (f.rmssd-t.rmssd)/t.rmssd*100 : 0;
     const dH  = f.hr - t.hr;
-    const coh = (f.coh==null) ? 0 : f.coh;
+    const coh  = (f.coh==null) ? 0 : f.coh;
+    const cohT = (t.coh==null) ? 0 : t.coh;
+    const dC   = coh - cohT;
     const c = { hrStable:Math.abs(dH)<=6, sdnnUp:dSp>=5, rmssdUp:dRp>=5,
-                rmssdWorse:dRp<=-10, cohFull:coh>=80, cohOk:coh>=50,
-                hyper: dSp>=180 && f.rmssd > f.sdnn*0.9 };
-    let res = 0;
-    res += c.hrStable?19:0; res += c.sdnnUp?25:0; res += c.rmssdUp?19:0;
-    res += c.cohFull?37:(c.cohOk?22:0);
-    if(c.rmssdWorse) res -= 25;
-    res = Math.max(0, Math.min(100, res));
-    return { res, c, dSp, dRp, dH, coh };
+                rmssdWorse:dRp<=-10,
+                cohSale: dC > 0,
+                cohFull: (coh>=80 && dC>0),   // AUMENTA *e* supera l'80%
+                cohOk:coh>=50,
+                hyper: dSp>=200 && f.rmssd > f.sdnn*0.9 };
+    // Conteggio, non punteggio pesato. Stessi stati e stessi colori
+    // dell'elenco sotto, così le due letture non possono divergere.
+    const crit = [
+      {lab:'FC',       k:c.hrStable?'ok':'warn'},
+      {lab:'ampiezza', k:c.sdnnUp?'ok':'no'},
+      {lab:'RMSSD',    k:c.rmssdWorse?'no':(c.rmssdUp?'ok':'warn')},
+      {lab:'coerenza', k:c.cohFull?'ok':(c.cohOk?'warn':'no')}
+    ];
+    const nOk = crit.filter(x=>x.k==='ok').length;
+    return { crit, nOk, c, dSp, dRp, dH, dC, coh, cohT };
   }
   function verdict(r){
     // La risposta abnorme non è una promozione: messaggio neutro, rimando al medico.
     if(r.c.hyper) return { big:'Risposta molto ampia', col:'#e8820c',
       sub:'Oggi il tuo sistema ha reagito al respiro guidato in modo molto marcato. Non è un dato da leggere da soli: falla vedere al tuo medico insieme al resto della misura.' };
-    if(r.res>=66) return { big:'Buona capacità di adattamento', col:'#1b8a5a',
+    if(r.nOk>=4) return { big:'Buona capacità di adattamento', col:'#1b8a5a',
       sub:'Il tuo sistema nervoso ha risposto bene al respiro guidato: le risorse per recuperare ci sono, anche se la misura a riposo non fosse brillante.' };
-    if(r.res>=40) return { big:'Adattamento parziale', col:'#e8820c',
+    if(r.nOk>=2) return { big:'Adattamento parziale', col:'#e8820c',
       sub:'Il tuo sistema ha risposto solo in parte. È la situazione in cui l\'allenamento regolare alla respirazione di coerenza dà i risultati più visibili.' };
     return { big:'Adattamento ridotto oggi', col:'#b3201e',
       sub:'Oggi il sistema ha faticato a rispondere al respiro guidato. Da una misura sola non si conclude nulla: proprio per questo vale la pena parlarne col tuo medico.' };
@@ -2089,15 +2124,33 @@ const PhasicReport = (() => {
       : '<li>Frequenza cardiaca <b>in aumento di '+Math.abs(r.dH).toFixed(0)+' battiti</b> — segno che il respiro è stato faticoso</li>');
     li.push('<li>Ampiezza della variabilità <b>'+(r.dSp>=0?'+':'')+r.dSp.toFixed(0)+'%</b> rispetto alla fase a riposo'
       + (r.c.sdnnUp?' — attesa in aumento col respiro lento':' — attesa in aumento, oggi non è cresciuta')+'</li>');
+    // Il criterio della fonte ha DUE metà: la coerenza deve SALIRE e superare
+    // l'80%. Mostrarle separate fa capire subito quale delle due è mancata.
+    li.push('<li>Risposta rapida del battito <b>'+(r.dRp>=0?'+':'')+r.dRp.toFixed(0)+'%</b>'
+      + (r.c.rmssdWorse ? ' — oggi è diminuita invece di crescere'
+         : r.c.rmssdUp ? ' — in aumento, come atteso col respiro lento'
+         : ' — stabile, attesa in aumento')+'</li>');
+    const cohNota = r.c.cohFull ? ' — obiettivo raggiunto: è salita e ha superato l\'80%'
+      : (r.coh>=80 && !r.c.cohSale) ? ' — era già alta a riposo e oggi non è salita'
+      : (!r.c.cohSale) ? ' — oggi non è salita rispetto alla fase a riposo'
+      : ' — è salita, ma resta sotto l\'80%';
     li.push('<li>Coerenza raggiunta: <b>'+(r.coh?r.coh.toFixed(0)+'%':'non calcolabile')+'</b>'
-      + (r.c.cohFull?' — obiettivo dell\'80% raggiunto':' — l\'obiettivo è l\'80%')+'</li>');
+      + (r.coh?cohNota:'')+'</li>');
     return '<div class="stress-lev"><div class="stress-lev-t">Cosa è successo durante il minuto di respiro guidato</div><ul>'
       + li.join('') + '</ul></div>';
   }
-  function gaugeBar(res, col){
-    return '<div class="phas-res"><div class="phas-res-t">Capacità di adattamento</div>'
-      + '<div class="phas-bar"><i style="width:'+res+'%;background:'+col+'"></i></div>'
-      + '<div class="phas-res-n" style="color:'+col+'">'+res+'%</div></div>';
+  /* Quattro blocchi, uno per criterio, al posto della vecchia barra a percentuale.
+     I colori sono gli stessi delle righe dell'elenco qui sotto. */
+  function counterHTML(r){
+    const COL = {ok:'#1b8a5a', warn:'#e8820c', no:'#b3201e'};
+    const seg = r.crit.map(x =>
+      '<div style="flex:1;text-align:center">'
+      + '<div style="height:16px;border-radius:9px;background:'+COL[x.k]+'"></div>'
+      + '<div style="font-size:.62rem;color:#545E62;margin-top:4px">'+x.lab+'</div></div>'
+    ).join('');
+    return '<div class="phas-res"><div class="phas-res-t">Criteri della risposta attesa</div>'
+      + '<div style="display:flex;gap:8px">'+seg+'</div>'
+      + '<div class="phas-res-n" style="margin-top:12px">'+r.nOk+' su 4</div></div>';
   }
   function guardHTML(){
     return '<div class="stress-card">'+TITOLO
@@ -2111,7 +2164,7 @@ const PhasicReport = (() => {
     if(!fas.reliable) return guardHTML();
     const r = reserve(ton, fas), v = verdict(r);
     return '<div class="stress-card">'+TITOLO
-      + gaugeBar(r.res, v.col)
+      + counterHTML(r)
       + '<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
       + '<div class="stress-sub">'+v.sub+'</div>'
       + rows(r) + NOTA + '</div>';
@@ -4632,6 +4685,15 @@ const MorningTest = (() => {
     const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
     return { m, sd, n:vals.length };
   }
+  /* ⚠️ ORIGINE DELLE SOGLIE — dichiarata il 01/08/2026 (audit dei numeri clinici).
+     I confini -0,5 SD e -1,0 SD dalla baseline personale di lnRMSSD sono
+     l'approccio standard della letteratura sull'HRV nello sport (smallest
+     worthwhile change), ma NON sono stati trovati in nessuna fonte della
+     knowledge base di Federico: la dispensa Master HRV SC non tratta la
+     readiness quotidiana. Restano quindi una scelta operativa, non un
+     normativo tracciato. Da tracciare su una fonte reale o da sostituire.
+     Nota: il confronto e' con la SUA baseline, non con una popolazione — e'
+     la ragione per cui questa scelta e' meno rischiosa di una soglia assoluta. */
   function classify(ln, b){
     if(ln >= b.m-0.5*b.sd) return { big:'Allenabile', col:'#1b8a5a', sub:'Il sistema nervoso ha recuperato: oggi puoi sostenere carico e picchi di allenamento.' };
     if(ln >= b.m-1.0*b.sd) return { big:'Alleggerire', col:'#e8820c', sub:'Recupero solo parziale: allenati in leggerezza, evita i picchi di intensità.' };
@@ -4924,7 +4986,21 @@ const AlphaTest = (() => {
   function includeAll(){ Beats.includeAll(beats); drawTaco(); updateStat(); }
 
   /* ---- calcolo, interpretazione, storico ---- */
+  /* ⚠️ ZONE RIANCORATE ALLA FONTE il 01/08/2026 (audit dei numeri clinici).
+     Prima erano 0,9 / 0,75 / 0,5 SENZA alcun limite superiore: tutto cio' che
+     stava sopra 0,9 finiva in verde «Fisiologica», compreso un alfa1 di 1,4.
+     La dispensa (cap. 4 p. 43) dice che «valori superiori a 1,2 ... risultano
+     spesso indicativi di un sistema in compensazione». E' lo stesso difetto
+     corretto nell'app self-coherence il 31/07 (dove il confine era 1,5), qui in
+     forma piu' larga perche' il tetto mancava del tutto.
+     Sopra 2,0 la fonte indica i ritmi di respirazione coerente: a riposo
+     significa quasi sempre che la misura e' stata fatta respirando in modo
+     guidato, e allora il valore non e' interpretabile come alfa1 a riposo.
+     Al paziente il tono resta neutro e rimanda al medico: non e' un allarme,
+     e' un dato da contestualizzare. */
   function zoneA(a){
+    if(a>2.0)   return { txt:'Non interpretabile', col:'#7a8a90', sub:'Valore tipico di chi sta respirando in modo guidato. Questa misura va fatta a respiro spontaneo, senza seguire un ritmo: ripetila lasciando andare il respiro come viene.' };
+    if(a>1.2)   return { txt:'Molto regolare', col:'#e8820c', sub:'Oggi il battito risulta molto regolare a riposo. Non è di per sé un problema, ma è un dato che va letto nel contesto: parlane col tuo medico, che lo vede insieme al resto delle misure.' };
     if(a>=0.9)  return { txt:'Fisiologica', col:'#1b8a5a', sub:'Dinamica del battito ben correlata: organizzazione autonomica tipica del riposo sano.' };
     if(a>=0.75) return { txt:'Ridotta',     col:'#e8820c', sub:'α1 sotto il riposo ottimale: possibile carico residuo, affaticamento o recupero incompleto.' };
     if(a>=0.5)  return { txt:'Bassa',       col:'#d9531e', sub:'Bassa correlazione a riposo (zona soglia aerobica): affaticamento marcato o stress — valuta il contesto.' };
@@ -4951,7 +5027,12 @@ const AlphaTest = (() => {
       +'<div class="alpha-scale-tick" style="left:'+posOf(rec.alpha).toFixed(1)+'%"></div></div>'
       +'<div class="morn-rmssd" style="margin-top:22px">FC media <b>'+rec.hr+'</b> bpm · '+rec.nkept+' battiti · '+rec.nexcl+' esclusi</div>'
       +'<div class="morn-sub">'+z.sub+'</div>'
-      +'<div class="morn-sub" style="margin-top:8px;font-size:.78rem">Riferimenti: riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5. Indice sensibile agli artefatti e con variabilità individuale — leggilo nel contesto clinico, non come valore assoluto.</div>';
+      /* Avviso sotto i 500 IBI: la dispensa (cap. 4) indica dati migliori sopra
+         i 500 intervalli. Il blocco duro resta a 100 (sotto non si calcola
+         nulla di sensato), ma fra 100 e 500 il valore usciva senza alcuna
+         riserva. Stesso avviso aggiunto nell'app self-coherence il 31/07. */
+      +(rec.nkept<500 ? '<div class="morn-sub" style="margin-top:8px">⚠️ Misura calcolata su <b>'+rec.nkept+' battiti</b>: questo indice dà risultati più stabili sopra i 500. Prendila come indicazione di massima e, se ti interessa il valore preciso, ripeti la misura più lunga.</div>' : '')
+      +'<div class="morn-sub" style="margin-top:8px;font-size:.78rem">Riferimenti: riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5 · sopra 1,2 il battito è molto regolare e va contestualizzato. Indice sensibile agli artefatti e con variabilità individuale — leggilo nel contesto clinico, non come valore assoluto.</div>';
     renderTrend(h);
   }
   function renderTrend(h){
