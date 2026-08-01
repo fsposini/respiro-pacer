@@ -1166,11 +1166,11 @@
     <div class="res-verdict" id="resVerdict">Test in corso… i risultati compaiono a ogni cambio di frequenza.</div>
     <div class="res-tablewrap">
       <table class="res-table">
-        <thead><tr><th>#</th><th>sec/lato</th><th>atti/min</th><th>LF (ms²)</th><th>picco LF (Hz)</th><th>HF (ms²)</th><th>LF/HF</th><th>battiti</th></tr></thead>
+        <thead><tr><th>#</th><th>sec/lato</th><th>atti/min</th><th>LF (ms²)</th><th>LF %</th><th>Total Power (ms²)</th><th>picco LF (Hz)</th><th>HF (ms²)</th><th>LF/HF</th><th>battiti</th></tr></thead>
         <tbody id="resTableBody"></tbody>
       </table>
     </div>
-    <div class="hrv-bands-note">La <b>frequenza di risonanza</b> è quella con il <b>picco di LF</b> più alto. VLF/HF sono riportate per completezza; in 3 minuti la VLF è poco affidabile. I dati e la foto dell'onda di ogni frequenza vengono inviati al medico in forma anonima (solo codice paziente).</div>
+    <div class="hrv-bands-note">La fonte (Lez. 7) definisce la risonanza come il ritmo che <b>massimizza la coerenza e il Total Power</b>, con la <b>LF sopra il 90% del totale</b> e un'onda sinusoidale ampia e pulita. Qui la tappa migliore è scelta sul solo <b>picco di LF</b>: è una <b>scelta operativa</b>, non il criterio completo della fonte — per questo <b>LF %</b> e <b>Total Power</b> sono in tabella, così il criterio resta verificabile (LF % ≥ 90 è evidenziata). VLF/HF sono riportate per completezza; in 3 minuti la VLF è poco affidabile. I dati e la foto dell'onda di ogni frequenza vengono inviati al medico in forma anonima (solo codice paziente).</div>
   </div>
 </div>
 
@@ -3966,12 +3966,24 @@ const HRV = (() => {
     p.style.display = '';
     p.scrollIntoView({behavior:'smooth', block:'nearest'});
   }
+  /* Colonne LF % e Total Power aggiunte il 01/08/2026 (audit dei numeri clinici).
+     Perche': la fonte (Lez. 7) definisce la risonanza come il ritmo che
+     «massimizza la coerenza psicofisiologica e il TOTAL POWER dell'HRV — con la
+     componente LF che supera il 90% del totale». La tabella mostrava LF, picco,
+     HF e LF/HF: mancavano proprio i due numeri con cui la fonte riconosce la
+     risonanza, quindi il criterio non era verificabile a occhio.
+     La LF % >= 90 e' evidenziata: e' il segno, secondo la fonte, che la persona
+     era davvero in risonanza a quella tappa. Non cambia la scelta della tappa
+     migliore, che resta sul picco di LF (vedi nota sotto la tabella). */
   function appendResonanceRow(b){
     const tb = el('resTableBody'); if(!tb) return;
     const f = b.freq || {};
     const g = (v,d)=>(v==null||!isFinite(v))?'—':v.toFixed(d==null?0:d);
+    const lfPctCell = (f.lfPct==null || !isFinite(f.lfPct)) ? '—'
+      : (f.lfPct>=90 ? '<b style="color:#1B549B">'+f.lfPct.toFixed(1)+' %</b>' : f.lfPct.toFixed(1)+' %');
     const tr = document.createElement('tr'); tr.dataset.idx = b.idx;
     tr.innerHTML = '<td>'+(b.idx+1)+'</td><td>'+g(b.sec,1)+'</td><td>'+g(b.rate,1)+'</td><td>'+g(f.lf,0)+
+      '</td><td>'+lfPctCell+'</td><td>'+g(f.totalPower,0)+
       '</td><td>'+(f.lfPeakHz?f.lfPeakHz.toFixed(3):'—')+'</td><td>'+g(f.hf,0)+'</td><td>'+g(f.lfhf,2)+'</td><td>'+b.nBeats+'</td>';
     tb.appendChild(tr);
   }
@@ -3979,7 +3991,11 @@ const HRV = (() => {
     const best = st.best;
     if(best){ el('resTableBody').querySelectorAll('tr').forEach(r=>{ r.classList.toggle('best', +r.dataset.idx===best.idx); }); }
     el('resVerdict').innerHTML = best
-      ? 'Frequenza di risonanza stimata: <b>'+best.sec.toFixed(1).replace('.',',')+' s/lato</b> ('+best.rate.toFixed(1)+' atti/min) — picco LF più alto ('+(best.freq?Math.round(best.freq.lf):'?')+' ms²).'
+      ? 'Frequenza di risonanza stimata: <b>'+best.sec.toFixed(1).replace('.',',')+' s/lato</b> ('+best.rate.toFixed(1)+' atti/min) — picco LF più alto ('+(best.freq?Math.round(best.freq.lf):'?')+' ms²)'
+        + ((best.freq && isFinite(best.freq.lfPct))
+            ? ', LF <b>'+best.freq.lfPct.toFixed(1)+'%</b> del totale'
+              + (best.freq.lfPct>=90 ? ' — sopra il 90% indicato dalla fonte.' : ' — <b>sotto il 90%</b> indicato dalla fonte: rivedere l\'esecuzione prima di considerarla una vera risonanza.')
+            : '.')
       : 'Nessun blocco con dati sufficienti per stimare la risonanza (servono ≥30 battiti utili per frequenza).';
   }
   /* ---- Invio al medico (una riga + foto per blocco; verdetto a fine test) ---- */
