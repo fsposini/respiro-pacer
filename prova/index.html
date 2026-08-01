@@ -664,6 +664,30 @@
     .hrv-test-phase{font-weight:700;font-size:1.05rem;margin-top:6px}
     .hrv-test-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:2px 0}
     .hrv-test-instr{font-size:.85rem;color:var(--muted);max-width:340px;margin:0 auto 12px;line-height:1.45}
+    /* Spia del segnale durante il test. Mostra SOLO dati tecnici — battiti raccolti e
+       stato della trasmissione — mai un valore HRV: il tonico deve restare non
+       perturbato, e vedere i propri numeri lo perturberebbe. Senza questa spia una
+       fascia che smette di trasmettere è invisibile, perché countdown e sfera girano
+       su performance.now() e non hanno idea di cosa stia arrivando dalla fascia. */
+    .hrv-test-sig{display:flex;align-items:center;justify-content:center;gap:7px;
+      font-size:.74rem;color:var(--muted);margin:0 0 10px}
+    .hrv-test-sig .sig-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);flex:none}
+    .hrv-test-sig .sig-beats{font-variant-numeric:tabular-nums;opacity:.72}
+    .hrv-test-sig[data-state="warn"] .sig-dot{background:var(--hold)}
+    .hrv-test-sig[data-state="bad"] .sig-dot{background:var(--danger)}
+    .hrv-test-sig[data-state="bad"]{color:var(--danger);font-weight:600}
+    .hrv-test-alarm{background:rgba(224,106,106,.14);border:1px solid var(--danger);border-radius:10px;
+      padding:9px 11px;font-size:.78rem;line-height:1.45;color:var(--danger);
+      max-width:340px;margin:0 auto 12px}
+    .hrv-test-warn{background:rgba(224,106,106,.12);border:1px solid var(--danger);border-radius:12px;
+      padding:11px 13px;margin:0 0 12px;text-align:left}
+    .hrv-test-warn .warn-title{font-weight:700;font-size:.86rem;color:var(--danger);margin-bottom:6px}
+    .hrv-test-warn ul{margin:0 0 8px;padding-left:18px}
+    .hrv-test-warn li{font-size:.78rem;line-height:1.45;margin-bottom:3px}
+    .hrv-test-warn .warn-why{font-size:.76rem;line-height:1.45;color:var(--muted)}
+    /* Nota non grave (registrazione integra ma sotto standard): informa, non allarma. */
+    .hrv-test-warn.soft{background:rgba(201,169,106,.12);border-color:var(--hold)}
+    .hrv-test-warn.soft .warn-title{color:var(--hold)}
     .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
     .prep-card{max-width:380px;margin:0 auto 16px;text-align:left;background:rgba(120,170,255,.08);border:1px solid rgba(120,170,255,.28);border-radius:14px;padding:15px 17px;transition:opacity 3.5s ease}
     .prep-card.fading{opacity:0}
@@ -851,6 +875,12 @@
       <div class="hrv-test-phase" id="hrvTestPhase">—</div>
       <div class="hrv-test-count" id="hrvTestCount">0:30</div>
       <div class="hrv-test-instr" id="hrvTestInstr"></div>
+      <div class="hrv-test-sig" id="hrvTestSig" data-state="ok" hidden>
+        <span class="sig-dot"></span>
+        <span id="hrvTestSigTxt">segnale regolare</span>
+        <span class="sig-beats" id="hrvTestBeats"></span>
+      </div>
+      <div class="hrv-test-alarm" id="hrvTestAlarm" hidden></div>
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="hrvTestChoice" style="display:none">
@@ -875,6 +905,7 @@
     </div>
     <div id="hrvTestDone" style="display:none">
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
+      <div class="hrv-test-warn" id="hrvTestWarn" hidden></div>
       <div id="hrvTestStressDone"></div>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestSend" class="btn ghost">Invia i dati al medico</button>
@@ -3422,9 +3453,60 @@ const HRV = (() => {
     for(const o of rr){ if(o.ph===p && o.rr>300 && o.rr<2000) n++; }
     return n;
   }
+  // Stato del segnale in tempo reale. Serve alla schermata del test clinico, che per
+  // scelta clinica non mostra né numeri né onda: senza questo, una fascia che ha
+  // smesso di trasmettere è del tutto invisibile al paziente (il countdown e la sfera
+  // girano su performance.now(), indipendenti dalla fascia). silentMs = da quanti ms
+  // non arriva un battito.
+  function signalState(){
+    return { connected: connected, rrSeen: rrSeen,
+             silentMs: lastBeatAt ? (performance.now() - lastBeatAt) : Infinity };
+  }
+  // Durata A CRONOMETRO di ogni fase, misurata da TestMode e registrata qui perché
+  // finisca nell'export. Il CSV riportava finora solo la somma degli RR, cioè il tempo
+  // COPERTO DAI BATTITI: con quella sola, una registrazione che perde battiti è
+  // indistinguibile da una fase più corta, e il difetto si scopre solo ragionandoci sopra.
+  let phaseClock = {};
+  function setPhaseClock(ph, ms){ if(ph && ms > 0) phaseClock[ph] = Math.round(ms); }
+  // Soglia professionale: 5 minuti o 300 IBI (dispensa Master HRV cap. 4). Il criterio
+  // vero sono i battiti; sotto questa soglia le frequenze, VLF in testa, non si stimano.
+  const TEST_BEATS_MIN = 300;
+  // Controllo di validità del test appena registrato: elenca i problemi che rendono i
+  // dati inutilizzabili. Lista vuota = test valido. Nato dal test del 01/08/2026, perso
+  // perché la fascia ha smesso di trasmettere a metà tonico senza che nulla lo segnalasse
+  // e il file è partito lo stesso, apparentemente regolare.
+  // Niente virgole nei messaggi: finiscono in una cella del CSV, che non è quotato.
+  //
+  // Due gravità, e la distinzione conta. `grave:true` = qualcosa si è ROTTO durante la
+  // registrazione (buchi nei battiti, fase vuota): l'invio automatico si ferma.
+  // `grave:false` = registrazione integra ma sotto lo standard, che è il caso del
+  // bradicardico arrivato al tetto degli 8 minuti senza raggiungere i 300 battiti:
+  // lì non è andato storto niente e bloccare l'invio ogni volta sarebbe gridare al
+  // lupo — la nota si scrive nel file e sullo schermo, ma il test parte.
+  function testIssues(){
+    const out = [];
+    const conta   = p => rr.filter(o=>o.ph===p).length;
+    const coperti = p => rr.filter(o=>o.ph===p).reduce((a,o)=>a+o.rr, 0);
+    const nTon = conta('tonic'), nFas = conta('phasic');
+    [['tonic','tonica'],['phasic','fasica']].forEach(([p,nome])=>{
+      const clock = phaseClock[p];
+      if(!clock) return;
+      const persi = clock - coperti(p);
+      if(persi > 20000)
+        out.push({ grave:true, t:'Fase '+nome+': '+Math.round(persi/1000)+' s senza battiti su '
+                 +Math.round(clock/1000)+' s di registrazione — la fascia ha smesso di trasmettere durante il test' });
+    });
+    if(phaseClock.phasic && nFas < 40)
+      out.push({ grave:true, t:'Fase fasica: solo '+nFas+' battiti registrati — non è analizzabile' });
+    if(nTon && nTon < TEST_BEATS_MIN)
+      out.push({ grave:false, t:'Fase tonica: '+nTon+' battiti registrati sui '+TEST_BEATS_MIN
+               +' richiesti dallo standard — le frequenze (VLF in testa) vanno lette con prudenza' });
+    return out;
+  }
   function beginTest(code, sex, age, pop){
     testCode = code || ''; testPhase = null; consentMark = '';
     testSex = sex || ''; testAge = (age!=null?String(age):''); testPop = pop || '';
+    phaseClock = {};
     rr = []; tcum = 0; paused = false; capturing = true;
     cohRatio = null; cohPct = null; cohSum = 0; cohPctSum = 0; cohPctMax = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
@@ -3540,7 +3622,13 @@ const HRV = (() => {
       // del tonico è variabile (si adatta alla FC per arrivare a 300 IBI) e SDNN
       // dipende dalla durata, quindi il confronto fra test va fatto sapendolo.
       ['Battiti registrati',    s => s.m.ibi.length ],
+      // Due durate, e vanno lette insieme: "Durata fase" è la somma degli RR, cioè il
+      // tempo COPERTO DAI BATTITI; "Durata a cronometro" è quanto è durata davvero la
+      // fase. Se la seconda è molto più lunga della prima, in mezzo la fascia ha smesso
+      // di trasmettere e la registrazione è incompleta anche se il file sembra regolare.
       ['Durata fase (s)',       s => num(s.m.durS,0) ],
+      ['Durata a cronometro (s)', s => { const k = s.type==='Deep Breathing' ? 'phasic' : 'tonic';
+                                         return phaseClock[k] != null ? Math.round(phaseClock[k]/1000) : ''; } ],
       ['Soglia 300 IBI',        s => s.type==='Deep Breathing' ? 'n/a (fasico)'
                                      : (s.m.ibi.length>=300 ? 'raggiunta' : 'NON raggiunta') ],
       ['Consenso trattamento',  ()=> consentMark ]
@@ -3550,6 +3638,18 @@ const HRV = (() => {
       const row = new Array(ncol).fill('');
       row[0] = label;
       sess.forEach((s,i)=>{ row[1+i*2] = fn(s); });
+      rows.push(row);
+    }
+    // Avvisi in chiaro dentro il file: un problema di registrazione deve vedersi
+    // aprendo il CSV, non solo sullo schermo del paziente al momento del test.
+    // Etichetta non nota al parser dell'HRV test → ignorata all'importazione.
+    {
+      const avvisi = testIssues();
+      const row = new Array(ncol).fill('');
+      row[0] = 'Avvisi';
+      row[1] = avvisi.length
+        ? avvisi.map(a => (a.grave ? 'GRAVE: ' : 'nota: ') + a.t).join(' · ').replace(/,/g, ';')
+        : 'nessuno';
       rows.push(row);
     }
     const hrow = new Array(ncol).fill('');
@@ -3863,7 +3963,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v71 · PROVA';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v72 · PROVA';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3871,7 +3971,8 @@ const HRV = (() => {
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
-           isReady, recentHR, phaseBeats, beginTest, setTestPhase, endTest, exportEmwave,
+           isReady, recentHR, phaseBeats, signalState, setPhaseClock, testIssues,
+           beginTest, setTestPhase, endTest, exportEmwave,
            sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, phaseStats, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
@@ -3941,6 +4042,12 @@ const TestMode = (() => {
     saveProfile({ code, sex, age, pop });   // ricorda i dati per i test successivi
     pending = { code, sex, age, pop };      // la cattura parte solo dopo la stabilizzazione
     document.body.dataset.hrvTesting = '1';
+    // Ripulisco spia e avvisi del test precedente: uno stato vecchio a schermo
+    // sarebbe peggio che nessuno stato.
+    { const w = el('hrvTestWarn'); if(w){ w.hidden = true; w.innerHTML = ''; } }
+    { const a = el('hrvTestAlarm'); if(a) a.hidden = true; }
+    { const b = el('hrvTestSig');   if(b){ b.hidden = true; b.dataset.state = 'ok'; } }
+    sigAt = 0;
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
     try{ Audio.keepAliveOn(); }catch(e){}                      // sblocca l'audio: i suoni ritardati devono poter partire
     try{ WakeLock.acquire(); }catch(e){}
@@ -3999,11 +4106,45 @@ const TestMode = (() => {
     const need = (TONIC_MIN_BEATS + 10) * (elapsed / n);  // ms totali al ritmo osservato
     tonicMs = Math.min(TONIC_MAX_MS, Math.max(tonicMs, Math.ceil(need/10000)*10000));
   }
+  // Spia del segnale: unico riscontro visibile durante il test, e di proposito solo
+  // TECNICO (battiti raccolti + stato della trasmissione), mai un valore HRV.
+  // Aggiornata ~4 volte al secondo, non a ogni frame.
+  const SIG_WARN_MS = 5000, SIG_BAD_MS = 10000;
+  let sigAt = 0;
+  function renderSignal(){
+    const now = performance.now();
+    if(now - sigAt < 250) return;
+    sigAt = now;
+    const box = el('hrvTestSig'); if(!box) return;
+    box.hidden = false;
+    const s = HRV.signalState();
+    const n = (phase==='tonic' || phase==='phasic') ? HRV.phaseBeats(phase) : 0;
+    el('hrvTestBeats').textContent = (phase==='stab') ? '' : ('· '+n+(n===1?' battito':' battiti'));
+    let stato = 'ok', testo = 'segnale regolare';
+    if(!s.connected || s.silentMs >= SIG_BAD_MS){ stato = 'bad'; testo = 'FASCIA NON COLLEGATA'; }
+    else if(!s.rrSeen || s.silentMs >= SIG_WARN_MS){ stato = 'warn'; testo = 'segnale incerto'; }
+    box.dataset.state = stato;
+    el('hrvTestSigTxt').textContent = testo;
+    const al = el('hrvTestAlarm'); if(!al) return;
+    if(stato === 'bad'){
+      al.hidden = false;
+      al.innerHTML = 'La fascia ha smesso di trasmettere: da qui in avanti <b>non si sta registrando nulla</b>. '
+        + 'Controlla che sia indossata con gli elettrodi inumiditi e che <b>nessun\'altra app</b> la stia usando. '
+        + 'Se non riparte entro pochi secondi conviene interrompere e rifare il test.';
+    } else { al.hidden = true; }
+  }
   function loop(){
     const now = performance.now(), elapsed = now - t0;
+    // checkTonicBeats PRIMA di leggere la durata, perché può allungare tonicMs.
+    // Leggendola prima, `dur` restava fermo al valore vecchio: se la pagina rimaneva
+    // indietro e riprendeva a tempo già scaduto, checkTonicBeats portava tonicMs al
+    // tetto e il controllo finale — che chiede tonicMs < TONIC_MAX_MS — non allungava
+    // più niente, chiudendo il tonico alla durata annunciata con molti meno di 300
+    // battiti. La rete di sicurezza si annullava da sola.
+    if(phase==='tonic') checkTonicBeats(elapsed, tonicMs);
     const dur = phase==='stab' ? STAB_MS : (phase==='tonic' ? tonicMs : PHASIC_MS);
     el('hrvTestCount').textContent = fmt(dur - elapsed);
-    if(phase==='tonic') checkTonicBeats(elapsed, dur);
+    renderSignal();
     if(phase==='phasic'){
       const ph = (elapsed % BREATH_MS) / BREATH_MS;          // 0..1
       const full = (1 - Math.cos(2*Math.PI*ph)) / 2;          // 0..1..0
@@ -4020,8 +4161,10 @@ const TestMode = (() => {
           tonicMs = Math.min(TONIC_MAX_MS, tonicMs + 20000);
           raf = requestAnimationFrame(loop); return;
         }
+        HRV.setPhaseClock('tonic', elapsed);   // durata REALE della fase, per l'export
         onTonicEnd(); return;   // NON parte più il fasico da solo: scelta esplicita
       }
+      HRV.setPhaseClock('phasic', elapsed);
       try{ Audio.recEnd(); }catch(e){}
       finish(); return;
     }
@@ -4077,10 +4220,42 @@ const TestMode = (() => {
     try{ Audio.keepAliveOff(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
   }
+  // Controllo di validità PRIMA dell'invio automatico. Un test con la registrazione
+  // bucata non deve partire da solo: il medico riceverebbe un file all'apparenza
+  // regolare e se ne accorgerebbe solo rifacendo i conti a mano sui battiti.
+  // L'invio resta possibile, ma diventa una scelta esplicita.
   function finish(){
     stopCommon(); show('done');
     renderStress('hrvTestStressDone');
-    const status = el('hrvSendStatus');
+    const status = el('hrvSendStatus'), sendBtn = el('hrvTestSend'), warn = el('hrvTestWarn');
+    const issues = (window.HRV && HRV.testIssues) ? HRV.testIssues() : [];
+    const gravi  = issues.filter(a => a.grave);
+    if(warn){
+      warn.hidden = !issues.length;
+      warn.classList.toggle('soft', !gravi.length);
+      warn.innerHTML = issues.length
+        ? '<div class="warn-title">' + (gravi.length
+            ? '⚠ Registrazione incompleta — il test non è valido'
+            : 'Nota sulla registrazione') + '</div>'
+          + '<ul>' + issues.map(a => '<li>'+a.t+'</li>').join('') + '</ul>'
+          + '<div class="warn-why">' + (gravi.length
+            ? 'Quasi sempre è la fascia che ha perso il collegamento. Controlla che sia indossata con gli '
+              + 'elettrodi inumiditi e che <b>nessun\'altra app né il Bluetooth del telefono</b> la stiano '
+              + 'tenendo occupata. Conviene <b>ripetere il test</b>.'
+            : 'La registrazione è integra: il battito lento non ha permesso di arrivare ai 300 battiti '
+              + 'nemmeno negli 8 minuti massimi. Il test è stato inviato lo stesso.') + '</div>'
+        : '';
+    }
+    if(gravi.length){
+      if(sendBtn) sendBtn.textContent = 'Invia lo stesso al medico';
+      if(status){
+        status.style.color = 'var(--hold)';
+        status.innerHTML = 'Invio <b>non</b> automatico: questa registrazione è incompleta. Ripeti il test, oppure invialo lo stesso col tasto qui sotto.';
+      }
+      return;
+    }
+    if(sendBtn) sendBtn.textContent = 'Invia i dati al medico';
+    if(status) status.style.color = '';
     if(SendConsent.given()){
       HRV.setConsent(true);
       if(status) status.textContent = 'Invio dei dati al medico…';
@@ -4113,7 +4288,8 @@ const TestMode = (() => {
       try{ await HRV.sendToDoctor(); } finally { sendBtn.disabled = false; }
     });
     el('hrvTestNew').addEventListener('click', ()=>{
-      const ss = el('hrvSendStatus'); if(ss) ss.textContent = '';
+      const ss = el('hrvSendStatus'); if(ss){ ss.textContent = ''; ss.style.color = ''; }
+      const w  = el('hrvTestWarn');   if(w){ w.hidden = true; w.innerHTML = ''; }
       show('setup');
     });
     // Scelta a fine tonico: concludere (invio del solo tonico) o aggiungere il fasico.
