@@ -2008,13 +2008,25 @@ const StressGauge = (() => {
   // prima del disegno, con più peso visivo del verdetto.
   const TITOLO = '<div class="stress-title">Indice di stress del sistema nervoso</div>'
     + '<div class="stress-titlesub">Quanto il tuo sistema nervoso sta lavorando per tenerti in equilibrio</div>';
-  function cardHTML(si){
+  /* Avviso sotto i 300 IBI. La dispensa (cap. 4) chiede «5 minuti o almeno 300
+     IBI, limite al di sotto del quale vi sono delle perdite di informazioni»;
+     la regola torna anche nel cap. 6 e nella Lez. 6. La scheda qui compare gia'
+     con 150 battiti (soglia `reliable` di tonicStress), quindi fra 150 e 300 il
+     tachimetro usciva senza alcuna riserva. Stesso avviso aggiunto nell'app
+     self-coherence il 01/08/2026. Non blocca: segnala. */
+  function avvisoCorto(kept){
+    if(!kept || kept >= 300) return '';
+    return '<div class="stress-note">⚠️ Misura raccolta su <b>'+kept+' battiti</b>: la lettura di riferimento ne chiede almeno 300. '
+      + 'Il valore resta indicativo, ma prendilo con prudenza e, se puoi, ripeti il test lasciando che la fase di riposo arrivi in fondo.</div>';
+  }
+  function cardHTML(si, kept){
     const v = verdict(si);
     return '<div class="stress-card">'
       +TITOLO
       +'<div class="stress-gauge">'+gaugeSVG(si)+'</div>'
       +'<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
       +'<div class="stress-sub">'+v.sub+'</div>'
+      +avvisoCorto(kept)
       +NOTA+LEVE+'</div>';
   }
   function guardHTML(){
@@ -2028,7 +2040,7 @@ const StressGauge = (() => {
   function cardFor(ts){
     if(!ts) return '';
     if(!ts.reliable) return guardHTML();
-    return cardHTML(stressIndex(ts.sdnn, ts.meanNN));
+    return cardHTML(stressIndex(ts.sdnn, ts.meanNN), ts.kept);
   }
   return { cardFor };
 })();
