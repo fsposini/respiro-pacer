@@ -41,6 +41,10 @@ ISOLA = [
     "respiroPacer.morningPosMigr.v1", # stato della migrazione della baseline
     "respiroPacer.alpha.v1",          # storico DFA alpha1
     "respiroPacer.risonanza.v1",      # test di frequenza di risonanza
+    "respiroPacer.testOutbox.v1",     # test clinico registrato e non ancora inviato:
+                                      # e' un dato clinico vero (gli IBI del tonico), e
+                                      # un test fatto in prova non deve comparire come
+                                      # "da inviare" nell'app vera, ne' viceversa.
     "respiroPacer.cohFeedback.v1",    # storico coerenza per il feedback motivazionale
     "respiroPacer.cohFeedbackLast.v1",# ultima frase mostrata (per non ripeterla)
     "respiroPacer.weekReport.v1",     # settimana di cui si e' gia' visto il riepilogo:

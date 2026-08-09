@@ -446,6 +446,9 @@
       <li>Alla fine del <b>test fasico</b> trovi un riassunto di come il tuo sistema ha risposto.</li>
       <li>Nell'allenamento <b>con la fotocamera</b>, la sessione non parte più subito: prima c'è una breve <b>fase di aggancio</b> del battito al dito, e la registrazione comincia da sola quando il segnale è stabile. Così la coerenza non risulta bassa solo perché il dito non era in posizione.</li>
       <li>All'inizio di ogni settimana nuova trovi in questa schermata il <b>riepilogo della settimana appena chiusa</b>: quante attività hai fatto e come è andata la coerenza rispetto alla settimana prima.</li>
+      <li>Nel pacer puoi scegliere la <b>durata della sessione anche in modalità Statica</b> (3, 5, 10 minuti o libera), come già facevi in Dinamica.</li>
+      <li>Durante una registrazione, se il segnale della fascia peggiora compare una <b>spia</b>: te ne accorgi mentre stai misurando, non a seduta finita.</li>
+      <li>Alcune indicazioni e alcuni valori di riferimento sono stati <b>riallineati ai testi di riferimento</b>: qualche numero o qualche fascia può apparirti diverso da prima. Nel test fasico, per esempio, il respiro va portato al <b>60-70%</b> della capacità, non oltre.</li>
     </ul>
     <p class="nv-calma">Non devi fare nulla: il tuo codice, i tuoi storici e il test del mattino restano esattamente come prima.</p>
     <button type="button" class="nv-ok" id="novitaOk">Ho capito</button>
@@ -689,6 +692,11 @@
     .hrv-test-warn.soft{background:rgba(201,169,106,.12);border-color:var(--hold)}
     .hrv-test-warn.soft .warn-title{color:var(--hold)}
     .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
+    /* Avviso "non ancora inviato" sulla schermata di scelta e nella barra dei test in
+       sospeso: deve pesare visivamente quanto un allarme, perche' e' l'unico segno che
+       distingue un test registrato da un test consegnato. */
+    .hrv-test-nosend{background:rgba(201,169,106,.14);border:1px solid var(--hold);border-radius:12px;
+      padding:10px 12px;margin:12px 0 4px;text-align:left;font-size:.78rem;line-height:1.45}
     .prep-card{max-width:380px;margin:0 auto 16px;text-align:left;background:rgba(120,170,255,.08);border:1px solid rgba(120,170,255,.28);border-radius:14px;padding:15px 17px;transition:opacity 3.5s ease}
     .prep-card.fading{opacity:0}
     .prep-title{font-weight:700;font-size:.92rem;margin-bottom:9px;text-align:center}
@@ -841,6 +849,9 @@
   <div class="hrv-test" data-feat="test">
     <h3>🩺 Test clinico — tonico 5–8′ + fasico 1′</h3>
     <div id="hrvTestSetup">
+      <!-- Test registrato ma mai consegnato: compare all'apertura dell'app finche' non
+           parte o non lo si scarta. E' la rete di sicurezza della cassetta (outboxSave). -->
+      <div class="hrv-test-nosend" id="hrvTestPending" hidden></div>
       <div class="code-badge" id="hrvTestCodeBadge" hidden></div>
       <div class="hrv-test-fields">
         <div>
@@ -884,11 +895,17 @@
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="hrvTestChoice" style="display:none">
-      <div class="hrv-test-doneMsg">✓ Fase tonica completata.</div>
+      <div class="hrv-test-doneMsg">✓ Fase tonica registrata — <b>non ancora inviata</b>.</div>
       <div id="hrvTestStress"></div>
-      <div class="hrv-test-hint">Puoi <b>concludere qui</b>, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
-      <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′)</button>
-      <button id="hrvTestConclude" class="btn ghost">Concludi qui</button>
+      <!-- Il tachimetro qui sopra fa sembrare finito un test che invece non e' ancora
+           partito: l'invio avviene solo dentro finish(), cioe' premendo "Concludi qui e
+           invia al medico" oppure alla fine del fasico. Due test persi il 09/08/2026
+           proprio cosi'. Quindi lo stato "non inviato" va DETTO, e il tasto deve
+           nominare l'invio invece di chiamarsi solo "Concludi qui". -->
+      <div class="hrv-test-nosend">⚠️ Il test <b>non è ancora arrivato al medico</b>. Parte solo quando scegli come chiudere, qui sotto. Se chiudi l'app adesso, la registrazione <b>va persa</b>.</div>
+      <div class="hrv-test-hint">Puoi concludere adesso, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min, e l'invio parte alla fine. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
+      <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′), poi invia</button>
+      <button id="hrvTestConclude" class="btn">Concludi qui e invia al medico</button>
     </div>
     <div id="hrvTestPrep" style="display:none">
       <div id="hrvTestPrepCard" class="prep-card">
@@ -3747,10 +3764,13 @@ const HRV = (() => {
   // Invio diretto al Drive del medico via Apps Script (se configurato). Niente
   // preflight CORS: corpo url-encoded + no-cors. La risposta è opaca, quindi il
   // successo è "la richiesta è partita"; in caso di errore di rete → fallback share.
-  async function uploadToDoctor(csv, fname){
+  // `code` esplicito per il rinvio di un test messo da parte: a quel punto l'app e'
+  // stata riaperta e `testCode` e' vuoto (o gia' sovrascritto dal test del mattino),
+  // e senza codice la riga del registro invii del medico resterebbe anonima.
+  async function uploadToDoctor(csv, fname, code){
     if(!DOCTOR_UPLOAD_URL) return false;
     const body = new URLSearchParams({
-      fname, data: csv, code: testCode || '',
+      fname, data: csv, code: (code || testCode || ''),
       consent: '1', ts: new Date().toISOString()
     });
     await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
@@ -3794,6 +3814,7 @@ const HRV = (() => {
       sendStatus('Invio in corso…');
       try{
         await uploadToDoctor(built.csv, built.fname);
+        outboxClear();                       // consegnato: la copia di riserva non serve piu'
         sendStatus('Dati inviati al medico ✓');
         return true;
       }catch(e){
@@ -3801,7 +3822,7 @@ const HRV = (() => {
       }
     }
     const ok = await shareCSV(built.csv, built.fname);
-    if(ok) sendStatus('Scegli come inviare il file al medico (Drive, AirDrop, ecc.).');
+    if(ok){ outboxClear(); sendStatus('Scegli come inviare il file al medico (Drive, AirDrop, ecc.).'); }
     return ok;
   }
   // Compatibilità: vecchio export = download diretto.
@@ -3811,6 +3832,46 @@ const HRV = (() => {
     dl(built.fname, built.csv, 'text/csv');
     status('File del test esportato: '+built.fname+'.');
     return true;
+  }
+
+  /* ---- Cassetta dei test non inviati -------------------------------------
+     Il test clinico era l'UNICO test dell'app senza storico locale: i battiti
+     vivevano solo nella memoria della pagina, e una chiusura li cancellava senza
+     lasciare traccia. Tre tonici persi cosi' (1 ago, due il 9 ago 2026).
+     Qui il CSV gia' costruito viene messo da parte appena il test finisce, PRIMA
+     di qualsiasi tentativo di invio. Se l'invio non parte — app chiusa, rete
+     assente, avviso di registrazione incompleta lasciato in sospeso — il file
+     resta e si puo' rispedire al giro dopo. Si svuota solo a invio riuscito.
+     Si conserva il CSV, non i battiti: e' esattamente cio' che andrebbe spedito,
+     quindi il rinvio non ricalcola nulla e non puo' divergere dall'originale. */
+  const OUTBOX_KEY = 'PROVA-respiroPacer.testOutbox.v1';
+  function outboxSave(){
+    const built = buildEmwaveCSV();
+    if(!built) return false;
+    try{
+      localStorage.setItem(OUTBOX_KEY, JSON.stringify({
+        ts: Date.now(), fname: built.fname, csv: built.csv, code: testCode || '' }));
+    }catch(e){ return false; }   // quota piena: meglio proseguire che bloccare il test
+    return true;
+  }
+  function outboxGet(){
+    try{
+      const o = JSON.parse(localStorage.getItem(OUTBOX_KEY) || 'null');
+      return (o && o.csv && o.fname) ? o : null;
+    }catch(e){ return null; }
+  }
+  function outboxClear(){ try{ localStorage.removeItem(OUTBOX_KEY); }catch(e){} }
+  // Rinvio di un test messo da parte in una sessione precedente. NON ricostruisce il
+  // CSV dai battiti (che non ci sono piu'): rispedisce il file salvato tale e quale.
+  async function outboxSend(){
+    const o = outboxGet(); if(!o) return false;
+    if(DOCTOR_UPLOAD_URL){
+      try{ await uploadToDoctor(o.csv, o.fname, o.code); outboxClear(); return true; }
+      catch(e){ /* rete assente: si ripiega sulla condivisione */ }
+    }
+    const ok = await shareCSV(o.csv, o.fname);   // false solo se l'utente annulla
+    if(ok) outboxClear();
+    return ok;
   }
 
   /* ======================= Modalità Risonanza ======================= */
@@ -4044,7 +4105,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v72 · PROVA';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v74 · PROVA';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -4054,6 +4115,7 @@ const HRV = (() => {
   return { init, sessionStart, sessionEnd, setPaused,
            isReady, recentHR, phaseBeats, signalState, setPhaseClock, testIssues,
            beginTest, setTestPhase, endTest, exportEmwave,
+           outboxSave, outboxGet, outboxSend, outboxClear,
            sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, phaseStats, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
@@ -4307,6 +4369,9 @@ const TestMode = (() => {
   // L'invio resta possibile, ma diventa una scelta esplicita.
   function finish(){
     stopCommon(); show('done');
+    // Copia di riserva PRIMA di ogni tentativo di invio: da qui in avanti il test
+    // sopravvive alla chiusura dell'app, qualunque cosa succeda all'invio.
+    try{ HRV.outboxSave(); }catch(e){}
     renderStress('hrvTestStressDone');
     const status = el('hrvSendStatus'), sendBtn = el('hrvTestSend'), warn = el('hrvTestWarn');
     const issues = (window.HRV && HRV.testIssues) ? HRV.testIssues() : [];
@@ -4349,6 +4414,41 @@ const TestMode = (() => {
     if(!confirm('Interrompere il test? I dati raccolti finora andranno persi.')) return;
     stopCommon(); show('setup');
   }
+  /* Barra "test in sospeso": un test registrato che non e' mai arrivato al medico.
+     Compare all'apertura dell'app e resta finche' non parte o non lo si scarta.
+     E' l'unico modo per accorgersi di un invio mai avvenuto: la risposta del
+     server e' opaca (no-cors) e l'app non puo' leggerla, quindi il silenzio non
+     distingue "consegnato" da "mai partito". */
+  function renderPending(){
+    const host = el('hrvTestPending'); if(!host) return;
+    const o = (window.HRV && HRV.outboxGet) ? HRV.outboxGet() : null;
+    if(!o){ host.hidden = true; host.innerHTML = ''; return; }
+    const d = new Date(o.ts);
+    const quando = d.toLocaleDateString('it-IT', {day:'numeric', month:'long'})
+                 + ' alle ' + d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+    host.hidden = false;
+    host.innerHTML = '<b>⚠️ Hai un test non ancora inviato</b> — registrato il ' + quando + '.'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">'
+      + '<button type="button" class="btn" id="hrvTestPendingSend" style="margin:0">Invia ora al medico</button>'
+      + '<button type="button" class="btn ghost" id="hrvTestPendingDrop" style="margin:0">Scarta</button></div>';
+    el('hrvTestPendingSend').addEventListener('click', async ev => {
+      const b = ev.currentTarget;
+      if(!SendConsent.given()){
+        ConsentUI && ConsentUI.renderBar();
+        alert('L\'invio dei dati non è attivo. Attivalo dalla barra "Invio dei dati al medico" in cima all\'app.');
+        return;
+      }
+      b.disabled = true; b.textContent = 'Invio in corso…';
+      let ok = false;
+      try{ ok = await HRV.outboxSend(); }catch(e){}
+      if(ok){ host.innerHTML = '<b>Test inviato al medico ✓</b>'; setTimeout(renderPending, 2500); }
+      else { b.disabled = false; b.textContent = 'Invia ora al medico'; }
+    });
+    el('hrvTestPendingDrop').addEventListener('click', ()=>{
+      if(!confirm('Scartare il test del '+quando+'?\n\nNon è mai arrivato al medico e non sarà più recuperabile.')) return;
+      HRV.outboxClear(); renderPending();
+    });
+  }
   function init(){
     if(!el('hrvTestStart')) return;
     loadProfile();   // precarica codice/sesso/età/categoria dai test precedenti
@@ -4371,8 +4471,9 @@ const TestMode = (() => {
     el('hrvTestNew').addEventListener('click', ()=>{
       const ss = el('hrvSendStatus'); if(ss){ ss.textContent = ''; ss.style.color = ''; }
       const w  = el('hrvTestWarn');   if(w){ w.hidden = true; w.innerHTML = ''; }
-      show('setup');
+      renderPending(); show('setup');
     });
+    renderPending();
     // Scelta a fine tonico: concludere (invio del solo tonico) o aggiungere il fasico.
     el('hrvTestConclude') && el('hrvTestConclude').addEventListener('click', finish);
     el('hrvTestAddPhasic') && el('hrvTestAddPhasic').addEventListener('click', startPhasicPrep);
@@ -4701,13 +4802,20 @@ const MorningTest = (() => {
     sendReadiness({rmssd, ln, hr:Math.round(hr), pos:ctx.pos, sleep:ctx.sleep, yest:ctx.yest, pct},
                   {big:v?v.big:'', baseRmssd:b?Math.exp(b.m):null, inBase:!offPos});
   }
-  function baseline(h){
+  /* Le misure che entrano DAVVERO nel riferimento. Estratta da baseline() perche' il
+     contatore a schermo deve poter mostrare lo STESSO insieme: contandone uno piu'
+     largo diceva "8/7" continuando a non dare il verdetto, e calcolava "ancora 0
+     misure" — un traguardo che non poteva essere raggiunto misurando. (9 ago 2026) */
+  function baseVals(h){
     // Solo le misure fatte nella posizione di riferimento: da sdraiato l'RMSSD è più alto
     // e mescolarle farebbe oscillare il verdetto con la postura, non con la readiness.
     const ref=posRef();
-    if(!ref) return null;
+    if(!ref) return { vals:[], ref:'' };
     const cutoff=Date.now()-WINDOW_DAYS*864e5;
-    const vals=h.filter(e=>!e.lowq && e.pos===ref && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
+    return { vals: h.filter(e=>!e.lowq && e.pos===ref && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln), ref };
+  }
+  function baseline(h){
+    const vals=baseVals(h).vals;
     if(vals.length<MIN_READINGS) return null;
     const m=vals.reduce((s,x)=>s+x,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
@@ -4754,10 +4862,23 @@ const MorningTest = (() => {
       renderTrend(h, b); return;
     }
     if(!b){
-      const nValid=h.filter(e=>!e.lowq).length, need=Math.max(0,MIN_READINGS-nValid);
-      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+nValid+'/'+MIN_READINGS+'</div>'
+      // Si conta l'insieme che serve al verdetto, non tutte le misure valide: altrimenti
+      // il contatore supera il traguardo mentre il verdetto continua a non arrivare.
+      const bv=baseVals(h), nBase=bv.vals.length, need=Math.max(1, MIN_READINGS-nBase);
+      const fuori=h.filter(e=>!e.lowq).length-nBase;
+      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+nBase+'/'+MIN_READINGS+'</div>'
         +'<div class="morn-rmssd">RMSSD di oggi: <b>'+today.rmssd.toFixed(0)+'</b> ms</div>'
-        +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>';
+        +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>'
+        // Se ci sono misure valide che restano fuori, va detto PERCHE': senza questa riga
+        // il contatore sembra fermo senza motivo e non si capisce cosa fare.
+        +(fuori>0
+          ? '<div class="morn-sub" style="color:var(--hold)">Hai altre <b>'+fuori+'</b> '
+            +(fuori===1?'misura valida che resta fuori':'misure valide che restano fuori')
+            +' dal riferimento: '+(bv.ref
+                ? 'sono state fatte in una posizione diversa da <b>'+bv.ref+'</b>, oppure hanno più di '+WINDOW_DAYS+' giorni. Contano solo quelle fatte '+bv.ref+'.'
+                : 'non hanno una posizione registrata. La prossima misura fisserà la posizione di riferimento.')
+            +'</div>'
+          : '');
       renderTrend(h, null); return;
     }
     const v=classify(today.ln, b), baseRmssd=Math.exp(b.m);
@@ -5806,7 +5927,7 @@ Screens.init();
    - Non è un modale e non si sovrappone alla finestra del consenso del primo avvio:
      i due casi si escludono a vicenda (o sei nuovo, o hai già usato l'app). */
 (function(){
-  const VER = '69';                                  // ← alzare a ogni versione che ha novità da raccontare
+  const VER = '73';                                  // ← alzare a ogni versione che ha novità da raccontare
   const SEEN = 'PROVA-respiroPacer.seenVer.v1';
   // Tracce di un uso precedente: se c'è anche una sola di queste, il paziente non è nuovo.
   const TRACCE = ['respiroPacer.license.v1','respiroPacer.testProfile.v1','PROVA-respiroPacer.morning.v1',
