@@ -338,6 +338,37 @@
   .home-tile i{display:block;font-style:normal;font-size:.72rem;color:var(--muted);margin-top:3px;line-height:1.4}
   .home-tile:active,.home-hero:active,.home-alt:active{transform:translateY(1px)}
   .home-foot{font-size:.72rem;color:var(--muted);text-align:center;margin-top:20px;line-height:1.5}
+  /* Nota delle novità: compare UNA volta dopo un aggiornamento, solo a chi usava già l'app.
+     Sta in cima alla Home e non è un modale: non deve mai coprire né interrompere nulla. */
+  .novita{border:1px solid var(--accent);border-radius:14px;padding:14px 15px;margin-bottom:16px;
+    background:linear-gradient(180deg,var(--panel),var(--bg2));box-shadow:var(--shadow)}
+  .novita h4{margin:0 0 7px;font-size:.95rem;font-weight:800;color:var(--accent)}
+  .novita ul{margin:0;padding-left:18px}
+  .novita li{font-size:.82rem;line-height:1.5;margin-bottom:5px}
+  .novita .nv-calma{font-size:.75rem;color:var(--muted);line-height:1.45;margin:9px 0 0}
+  .novita .nv-ok{display:block;width:100%;margin-top:12px;padding:11px;border-radius:11px;cursor:pointer;
+    font-family:inherit;font-size:.86rem;font-weight:700;border:0;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06222a}
+  /* Riepilogo della settimana: compare in cima alla Home al primo avvio di una
+     settimana nuova e racconta quella appena chiusa. Bordo rame come il riquadro
+     motivazionale di fine seduta: al paziente devono sembrare la stessa voce. */
+  .week-card{border:1px solid var(--line);border-left:4px solid #9F7A6C;border-radius:14px;
+    padding:14px 15px;margin-bottom:16px;background:linear-gradient(180deg,var(--panel),var(--bg2));
+    box-shadow:var(--shadow)}
+  .week-card h4{margin:0;font-size:.95rem;font-weight:800;color:#c79b88}
+  .week-card .wk-range{font-size:.72rem;color:var(--muted);margin:2px 0 10px}
+  .week-card .wk-stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .week-card .wk-chip{font-size:.76rem;line-height:1;padding:7px 10px;border-radius:9px;
+    background:var(--panel-soft);border:1px solid var(--line);color:var(--text)}
+  .week-card .wk-chip b{font-weight:800}
+  .week-card .wk-trend{font-size:.82rem;line-height:1.5;color:var(--text);
+    padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05);margin-bottom:10px}
+  .week-card .wk-trend b{font-weight:800}
+  .week-card .wk-msg{font-size:.9rem;line-height:1.55;color:var(--text);margin:0}
+  .week-card .wk-msg b{font-weight:800}
+  .week-card .wk-ok{display:block;width:100%;margin-top:12px;padding:11px;border-radius:11px;cursor:pointer;
+    font-family:inherit;font-size:.86rem;font-weight:700;border:1px solid var(--line);
+    background:var(--panel-soft);color:var(--text)}
 </style>
 </head>
 <body>
@@ -397,6 +428,34 @@
 <!-- HOME: prima cosa che vede il paziente. In alto la cosa da fare per prima
      (agganciare la fascia), poi l'alternativa senza fascia, poi il menu delle attività. -->
 <div id="homeScreen">
+  <!-- Nota delle novità: la mostra il modulo Novita, una volta sola dopo l'aggiornamento
+       e SOLO a chi usava già l'app (a chi installa adesso non direbbe nulla). -->
+  <div class="novita" id="novitaBox" style="display:none">
+    <h4>✨ Cosa c'è di nuovo</h4>
+    <ul>
+      <li>Alla fine della <b>respirazione di coerenza</b> trovi un riquadro che confronta la seduta di oggi con la precedente.</li>
+      <li>Alla fine del <b>test tonico</b> compare l'<b>indice di stress del sistema nervoso</b>, con un tachimetro che mostra quanto il tuo sistema sta lavorando oggi.</li>
+      <li>Alla fine del <b>test fasico</b> trovi un riassunto di come il tuo sistema ha risposto.</li>
+      <li>Nell'allenamento <b>con la fotocamera</b>, la sessione non parte più subito: prima c'è una breve <b>fase di aggancio</b> del battito al dito, e la registrazione comincia da sola quando il segnale è stabile. Così la coerenza non risulta bassa solo perché il dito non era in posizione.</li>
+      <li>All'inizio di ogni settimana nuova trovi in questa schermata il <b>riepilogo della settimana appena chiusa</b>: quante attività hai fatto e come è andata la coerenza rispetto alla settimana prima.</li>
+      <li>Nel pacer puoi scegliere la <b>durata della sessione anche in modalità Statica</b> (3, 5, 10 minuti o libera), come già facevi in Dinamica.</li>
+      <li>Durante una registrazione, se il segnale della fascia peggiora compare una <b>spia</b>: te ne accorgi mentre stai misurando, non a seduta finita.</li>
+      <li>Alcune indicazioni e alcuni valori di riferimento sono stati <b>riallineati ai testi di riferimento</b>: qualche numero o qualche fascia può apparirti diverso da prima. Nel test fasico, per esempio, il respiro va portato al <b>60-70%</b> della capacità, non oltre.</li>
+    </ul>
+    <p class="nv-calma">Non devi fare nulla: il tuo codice, i tuoi storici e il test del mattino restano esattamente come prima.</p>
+    <button type="button" class="nv-ok" id="novitaOk">Ho capito</button>
+  </div>
+  <!-- Riepilogo della settimana: lo riempie il modulo WeekReport, una volta per
+       settimana, e parla SEMPRE della settimana già chiusa (mai di quella in corso,
+       che sarebbe un conteggio a metà). Vuoto e nascosto finché non c'è nulla da dire. -->
+  <div class="week-card" id="weekBox" style="display:none">
+    <h4>📅 La tua settimana</h4>
+    <div class="wk-range" id="weekRange"></div>
+    <div class="wk-stats" id="weekStats"></div>
+    <div class="wk-trend" id="weekTrend" style="display:none"></div>
+    <p class="wk-msg" id="weekMsg"></p>
+    <button type="button" class="wk-ok" id="weekOk">Ho visto</button>
+  </div>
   <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
        poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
        quindi si può far partire la connessione direttamente da questo tasto. -->
@@ -459,7 +518,20 @@
       <div class="field"><label>Trattenere (polmoni pieni)</label><div class="row"><input type="number" id="holdFull" value="0" min="0" step="0.5"><span class="unit">sec</span></div></div>
       <div class="field"><label>Espirazione</label><div class="row"><input type="number" id="exhale" value="6.5" min="0" step="0.5"><span class="unit">sec</span></div></div>
       <div class="field"><label>Trattenere (polmoni vuoti)</label><div class="row"><input type="number" id="holdEmpty" value="0" min="0" step="0.5"><span class="unit">sec</span></div></div>
+      <label>Durata della sessione</label>
+      <!-- Stessi tasti della sessione con fotocamera: prima si poteva limitare la
+           sessione SOLO in cicli, e per fare 5 minuti a 4,6 atti/min bisognava
+           calcolare 23 cicli a mano. Serve anche a non lasciare la sessione
+           aperta se ci si addormenta con la fascia. -->
+      <div class="cam-durs" id="staticDurs">
+        <button type="button" data-min="3" class="btn ghost">3 min</button>
+        <button type="button" data-min="5" class="btn ghost">5 min</button>
+        <button type="button" data-min="10" class="btn ghost">10 min</button>
+        <button type="button" data-min="0" class="btn ghost cam-sel">Libera</button>
+      </div>
+      <input type="hidden" id="staticMinutes" value="0">
       <div class="field"><label>Numero di cicli (0 = illimitato)</label><div class="row"><input type="number" id="targetCycles" value="0" min="0" step="1"><span class="unit">cicli</span></div></div>
+      <div class="calc" id="staticStopNote">Sessione <b>libera</b>: si ferma quando la fermi tu.</div>
     </div>
     <div id="dynamicSettings" style="display:none">
       <div class="field"><label>Frequenza iniziale</label><div class="row"><input type="number" id="startRate" value="6" min="1" step="0.5"><span class="unit">atti/min</span></div></div>
@@ -579,7 +651,36 @@
     .hrv-test-phase{font-weight:700;font-size:1.05rem;margin-top:6px}
     .hrv-test-count{font-variant-numeric:tabular-nums;font-size:2.6rem;font-weight:700;letter-spacing:1px;margin:2px 0}
     .hrv-test-instr{font-size:.85rem;color:var(--muted);max-width:340px;margin:0 auto 12px;line-height:1.45}
+    /* Spia del segnale durante il test. Mostra SOLO dati tecnici — battiti raccolti e
+       stato della trasmissione — mai un valore HRV: il tonico deve restare non
+       perturbato, e vedere i propri numeri lo perturberebbe. Senza questa spia una
+       fascia che smette di trasmettere è invisibile, perché countdown e sfera girano
+       su performance.now() e non hanno idea di cosa stia arrivando dalla fascia. */
+    .hrv-test-sig{display:flex;align-items:center;justify-content:center;gap:7px;
+      font-size:.74rem;color:var(--muted);margin:0 0 10px}
+    .hrv-test-sig .sig-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);flex:none}
+    .hrv-test-sig .sig-beats{font-variant-numeric:tabular-nums;opacity:.72}
+    .hrv-test-sig[data-state="warn"] .sig-dot{background:var(--hold)}
+    .hrv-test-sig[data-state="bad"] .sig-dot{background:var(--danger)}
+    .hrv-test-sig[data-state="bad"]{color:var(--danger);font-weight:600}
+    .hrv-test-alarm{background:rgba(224,106,106,.14);border:1px solid var(--danger);border-radius:10px;
+      padding:9px 11px;font-size:.78rem;line-height:1.45;color:var(--danger);
+      max-width:340px;margin:0 auto 12px}
+    .hrv-test-warn{background:rgba(224,106,106,.12);border:1px solid var(--danger);border-radius:12px;
+      padding:11px 13px;margin:0 0 12px;text-align:left}
+    .hrv-test-warn .warn-title{font-weight:700;font-size:.86rem;color:var(--danger);margin-bottom:6px}
+    .hrv-test-warn ul{margin:0 0 8px;padding-left:18px}
+    .hrv-test-warn li{font-size:.78rem;line-height:1.45;margin-bottom:3px}
+    .hrv-test-warn .warn-why{font-size:.76rem;line-height:1.45;color:var(--muted)}
+    /* Nota non grave (registrazione integra ma sotto standard): informa, non allarma. */
+    .hrv-test-warn.soft{background:rgba(201,169,106,.12);border-color:var(--hold)}
+    .hrv-test-warn.soft .warn-title{color:var(--hold)}
     .hrv-test-doneMsg{font-size:1rem;font-weight:600;margin-bottom:12px}
+    /* Avviso "non ancora inviato" sulla schermata di scelta e nella barra dei test in
+       sospeso: deve pesare visivamente quanto un allarme, perche' e' l'unico segno che
+       distingue un test registrato da un test consegnato. */
+    .hrv-test-nosend{background:rgba(201,169,106,.14);border:1px solid var(--hold);border-radius:12px;
+      padding:10px 12px;margin:12px 0 4px;text-align:left;font-size:.78rem;line-height:1.45}
     .prep-card{max-width:380px;margin:0 auto 16px;text-align:left;background:rgba(120,170,255,.08);border:1px solid rgba(120,170,255,.28);border-radius:14px;padding:15px 17px;transition:opacity 3.5s ease}
     .prep-card.fading{opacity:0}
     .prep-title{font-weight:700;font-size:.92rem;margin-bottom:9px;text-align:center}
@@ -671,10 +772,40 @@
     .cam-live b{color:var(--text,#e8eef0)}
     .cam-zone{display:inline-block;padding:1px 10px;border-radius:16px;font-size:.72rem;font-weight:700;color:#fff;margin-left:4px}
     .cam-count{font-variant-numeric:tabular-nums;font-size:1.6rem;font-weight:700;margin:2px 0}
+    /* Fase di aggancio del battito: la sessione non parte finché il segnale non è stabile */
+    .cam-stab-t{font-weight:700;font-size:1rem;margin:2px 0 4px}
+    .cam-stab-hint{font-size:.82rem;color:var(--muted);max-width:340px;margin:0 auto 6px;line-height:1.45}
+    .cam-stab-track{height:12px;border-radius:8px;background:rgba(255,255,255,.10);max-width:340px;margin:10px auto 0;overflow:hidden}
+    .cam-stab-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#e8820c,#1fd17a);transition:width .2s linear}
+    .cam-stab-msg{font-size:.9rem;font-weight:600;margin:8px 0 2px;min-height:1.2em}
+    .cam-stab-warn{font-size:.8rem;color:#ffb46b;max-width:340px;margin:8px auto 0;line-height:1.45;text-align:left}
+    .cam-stab-warn ul{margin:4px 0 0;padding-left:18px}
     .cam-sum-chip{display:inline-block;font-weight:800;font-size:18px;padding:7px 18px;border-radius:24px;color:#fff}
     .cam-sum-row{font-size:1rem;margin:12px 0 4px}
     .cam-sum-row b{font-size:1.35rem}
     .cam-sum-sub{font-size:.85rem;color:var(--muted);max-width:360px;margin:6px auto 0;line-height:1.5}
+    /* Feedback motivazionale locale sull'allenamento di coerenza (mai clinico) */
+    .coh-soft{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-left:4px solid #9F7A6C;border-radius:12px;padding:14px 16px;margin:14px auto 6px;max-width:420px;font-size:1rem;line-height:1.55;color:var(--text,#e8eef0);text-align:left}
+    .coh-soft b{font-weight:800}
+    /* Tachimetro dello stato di attivazione (Stress Index) a fine test tonico */
+    .stress-card{background:#F4FBF8;border:1px solid rgba(27,84,155,.18);border-radius:14px;padding:16px;margin:14px auto 6px;max-width:420px;text-align:center;color:#2b3a44}
+    .stress-title{font-weight:800;color:#1B549B;font-size:1.22rem;line-height:1.25;letter-spacing:-.01em;margin:2px auto 4px;max-width:380px}
+    .stress-titlesub{font-size:.88rem;line-height:1.45;color:#545E62;max-width:340px;margin:0 auto 10px}
+    .stress-gauge svg{max-width:300px;width:100%;height:auto;margin:0 auto;display:block}
+    .stress-chip{display:inline-block;font-weight:800;font-size:1.05rem;padding:6px 16px;border-radius:22px;color:#fff;margin:6px 0 4px}
+    .stress-sub{font-size:.92rem;line-height:1.5;color:#3a4a52;margin:4px auto 0;max-width:360px}
+    .stress-note{font-size:.85rem;line-height:1.5;color:#545E62;background:rgba(27,84,155,.06);border-radius:10px;padding:10px 12px;margin:12px auto 0;max-width:380px;text-align:left}
+    .stress-lev{margin:12px auto 0;max-width:380px;text-align:left}
+    .stress-lev-t{font-weight:800;color:#1B549B;font-size:.9rem;margin-bottom:6px}
+    .stress-lev ul{margin:0;padding-left:18px}
+    .stress-lev li{font-size:.85rem;line-height:1.5;color:#3a4a52;margin-bottom:4px}
+    .stress-guard-t{font-weight:800;color:#b3201e;font-size:1rem;margin-bottom:6px}
+    /* Barra della capacità di adattamento (report del test fasico) */
+    .phas-res{margin:10px auto 4px;max-width:340px}
+    .phas-res-t{font-size:.85rem;color:#545E62;margin-bottom:6px}
+    .phas-bar{height:16px;border-radius:9px;background:rgba(27,84,155,.12);overflow:hidden}
+    .phas-bar i{display:block;height:100%;border-radius:9px;transition:width .6s ease}
+    .phas-res-n{font-weight:800;font-size:1.6rem;margin-top:6px;letter-spacing:-.02em}
     /* ---- Guida utente ---- */
     .guide-btn{margin-left:auto;align-self:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:inherit;font-size:.85rem;padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap}
     .guide-overlay{position:fixed;inset:0;z-index:1000;background:rgba(8,16,24,.98);overflow-y:auto;display:none}
@@ -702,6 +833,9 @@
   <div class="hrv-test" data-feat="test">
     <h3>🩺 Test clinico — tonico 5–8′ + fasico 1′</h3>
     <div id="hrvTestSetup">
+      <!-- Test registrato ma mai consegnato: compare all'apertura dell'app finche' non
+           parte o non lo si scarta. E' la rete di sicurezza della cassetta (outboxSave). -->
+      <div class="hrv-test-nosend" id="hrvTestPending" hidden></div>
       <div class="code-badge" id="hrvTestCodeBadge" hidden></div>
       <div class="hrv-test-fields">
         <div>
@@ -736,20 +870,33 @@
       <div class="hrv-test-phase" id="hrvTestPhase">—</div>
       <div class="hrv-test-count" id="hrvTestCount">0:30</div>
       <div class="hrv-test-instr" id="hrvTestInstr"></div>
+      <div class="hrv-test-sig" id="hrvTestSig" data-state="ok" hidden>
+        <span class="sig-dot"></span>
+        <span id="hrvTestSigTxt">segnale regolare</span>
+        <span class="sig-beats" id="hrvTestBeats"></span>
+      </div>
+      <div class="hrv-test-alarm" id="hrvTestAlarm" hidden></div>
       <button id="hrvTestAbort" class="btn ghost">Interrompi</button>
     </div>
     <div id="hrvTestChoice" style="display:none">
-      <div class="hrv-test-doneMsg">✓ Fase tonica completata.</div>
-      <div class="hrv-test-hint">Puoi <b>concludere qui</b>, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
-      <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′)</button>
-      <button id="hrvTestConclude" class="btn ghost">Concludi qui</button>
+      <div class="hrv-test-doneMsg">✓ Fase tonica registrata — <b>non ancora inviata</b>.</div>
+      <div id="hrvTestStress"></div>
+      <!-- Il tachimetro qui sopra fa sembrare finito un test che invece non e' ancora
+           partito: l'invio avviene solo dentro finish(), cioe' premendo "Concludi qui e
+           invia al medico" oppure alla fine del fasico. Due test persi il 09/08/2026
+           proprio cosi'. Quindi lo stato "non inviato" va DETTO, e il tasto deve
+           nominare l'invio invece di chiamarsi solo "Concludi qui". -->
+      <div class="hrv-test-nosend">⚠️ Il test <b>non è ancora arrivato al medico</b>. Parte solo quando scegli come chiudere, qui sotto. Se chiudi l'app adesso, la registrazione <b>va persa</b>.</div>
+      <div class="hrv-test-hint">Puoi concludere adesso, oppure aggiungere la <b>fase fasica</b> — 1 minuto di respiro guidato a 6/min, e l'invio parte alla fine. Se le fai entrambe, falle in sequenza (a pochi secondi di distanza).</div>
+      <button id="hrvTestAddPhasic" class="btn">Aggiungi fase fasica (1′), poi invia</button>
+      <button id="hrvTestConclude" class="btn">Concludi qui e invia al medico</button>
     </div>
     <div id="hrvTestPrep" style="display:none">
       <div id="hrvTestPrepCard" class="prep-card">
         <div class="prep-title">Prima di iniziare — esecuzione corretta del fasico</div>
         <ul class="prep-list">
           <li>Respira <b>con il naso</b> (inspira ed espira dal naso), in modo <b>diaframmatico</b>: si gonfia la <b>pancia</b>, il petto resta fermo.</li>
-          <li>Inspira <b>lentamente</b>, riempiendo il polmone a circa il <b>75%</b> della capacità — senza forzare.</li>
+          <li>Inspira <b>lentamente</b>, riempiendo il polmone <b>al massimo al 60-70%</b> della capacità — senza forzare.</li>
           <li><b>Segui la sfera</b>: inspira mentre si espande, espira mentre si restringe (6/min).</li>
           <li>Non muoverti, non parlare, non iperventilare.</li>
         </ul>
@@ -759,6 +906,8 @@
     </div>
     <div id="hrvTestDone" style="display:none">
       <div class="hrv-test-doneMsg">✓ Test completato.</div>
+      <div class="hrv-test-warn" id="hrvTestWarn" hidden></div>
+      <div id="hrvTestStressDone"></div>
       <div class="hrv-send-status" id="hrvSendStatus" aria-live="polite"></div>
       <button id="hrvTestSend" class="btn ghost">Invia i dati al medico</button>
       <button id="hrvTestNew" class="btn ghost">Nuovo test</button>
@@ -875,7 +1024,7 @@
   <div class="hrv-cam" data-feat="cam">
     <h3>📷 Allenamento coerenza — fotocamera</h3>
     <div id="camSetup">
-      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer</b> (schermata <b>Respirazione di coerenza</b>). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
+      <div class="hrv-test-hint">Allena la respirazione di coerenza <b>ovunque, senza fascia</b>: appoggia delicatamente il polpastrello sulla fotocamera posteriore (copri anche il flash). La sfera segue la <b>frequenza di risonanza impostata nel pacer</b> (schermata <b>Respirazione di coerenza</b>). Va benissimo per l'allenamento; per la <b>misura precisa</b> usa la fascia.<br>Dopo l'avvio c'è una <b>fase di aggancio</b>: la sessione parte da sola quando il battito al dito è stabile, così la coerenza non viene falsata dai primi secondi di ricerca della posizione.<br><b>📱 iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia — il segnale diventa molto più forte. <b>Android:</b> il flash si accende da solo.</div>
       <label>Durata</label>
       <div class="cam-durs" id="camDurs">
         <button type="button" data-min="3" class="btn ghost">3 min</button>
@@ -900,23 +1049,48 @@
         <span class="cam-dot" id="camDot"></span>
       </div>
       <div class="cam-sig" id="camSig">Avvicina il dito alla fotocamera…</div>
-      <div class="cam-orb-wrap"><div id="camOrb"></div></div>
-      <div class="cam-phase" id="camPhase">—</div>
-      <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
-      <div class="cam-graph">
-        <div class="cam-graph-lbl">Polso — battito al dito</div>
-        <canvas id="camWavePulse" class="cam-canvas" height="62"></canvas>
+
+      <!-- FASE DI AGGANCIO: la registrazione non parte finché il battito non è stabile.
+           Serve a non falsare la coerenza con i primi secondi di segnale sporco. -->
+      <div id="camStabBox" style="display:none">
+        <div class="cam-stab-t">Aggancio del battito</div>
+        <div class="cam-stab-hint">Appoggia il <b>polpastrello</b> sulla fotocamera posteriore coprendo anche il flash. Pressione <b>leggera e costante</b>, mano appoggiata. La sessione parte <b>da sola</b> quando il battito è agganciato.</div>
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Polso — battito al dito</div>
+          <canvas id="camStabWave" class="cam-canvas" height="62"></canvas>
+        </div>
+        <div class="cam-stab-track"><div class="cam-stab-fill" id="camStabBar"></div></div>
+        <div class="cam-stab-msg" id="camStabMsg">Appoggia il dito sulla fotocamera…</div>
+        <div class="cam-stab-warn" id="camStabWarn" style="display:none">Il battito non si aggancia. Prova così:
+          <ul>
+            <li>accendi la <b>torcia</b> (iPhone: Centro di Controllo)</li>
+            <li>alleggerisci la pressione: schiacciando troppo il polso sparisce</li>
+            <li>copri <b>tutto</b> l'obiettivo, senza lasciare spiragli di luce</li>
+            <li>appoggia la mano su un tavolo e resta immobile</li>
+          </ul>
+        </div>
+        <button id="camStabForce" class="btn ghost" style="display:none">Avvia comunque</button>
       </div>
-      <!-- Coerenza sopra l'onda, come nella schermata con la fascia: barra e sinusoide
-           insieme, così il feedback è immediato mentre si respira. -->
-      <div class="cam-graph">
-        <div class="cam-graph-lbl">Coerenza adesso</div>
-        <div class="hrv-coh-track"><div class="hrv-coh-fill" id="camCohBar"></div></div>
-        <div class="cam-graph-lbl" style="margin-top:10px">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
-        <canvas id="camWaveHrv" class="cam-canvas" height="88"></canvas>
-        <div class="cam-graph-note">La barra sale quando l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro: sale in inspirazione, scende in espirazione.</div>
+
+      <div id="camSessionBox" style="display:none">
+        <div class="cam-orb-wrap"><div id="camOrb"></div></div>
+        <div class="cam-phase" id="camPhase">—</div>
+        <div class="cam-live">FC <b id="camHR">—</b> · Coerenza <b id="camCoh">—</b> <span id="camZone" class="cam-zone"></span></div>
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Polso — battito al dito</div>
+          <canvas id="camWavePulse" class="cam-canvas" height="62"></canvas>
+        </div>
+        <!-- Coerenza sopra l'onda, come nella schermata con la fascia: barra e sinusoide
+             insieme, così il feedback è immediato mentre si respira. -->
+        <div class="cam-graph">
+          <div class="cam-graph-lbl">Coerenza adesso</div>
+          <div class="hrv-coh-track"><div class="hrv-coh-fill" id="camCohBar"></div></div>
+          <div class="cam-graph-lbl" style="margin-top:10px">Frequenza cardiaca <span id="camHrvRange" class="cam-graph-rng"></span></div>
+          <canvas id="camWaveHrv" class="cam-canvas" height="88"></canvas>
+          <div class="cam-graph-note">La barra sale quando l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro: sale in inspirazione, scende in espirazione.</div>
+        </div>
+        <div class="cam-count" id="camCount"></div>
       </div>
-      <div class="cam-count" id="camCount"></div>
       <button id="camStop" class="cam-stopbtn">Termina sessione</button>
     </div>
     <div id="camDone" style="display:none">
@@ -937,6 +1111,8 @@
     <div class="hrv-wave-note" id="hrvWaveNote">Connetti la fascia: l'onda della frequenza cardiaca apparirà qui. In coerenza, sale in inspirazione e scende in espirazione, in sincrono col respiro.</div>
     <div class="hrv-coh-hint">La <b>coerenza</b> qui sopra è il picco spettrale nella banda 0.04–0.26 Hz su finestra di ~64 s. Sale con la respirazione di risonanza (~6 atti/min). I due numeri sono la stessa misura: ratio = pct/(100−pct).</div>
   </div>
+
+  <div class="coh-soft" id="cohSoftBox" data-feat="coherence" style="display:none"></div>
 
   <div class="hrv-results" id="hrvResults" data-feat="coherence">
     <h3>Time domain</h3>
@@ -991,11 +1167,11 @@
     <div class="res-verdict" id="resVerdict">Test in corso… i risultati compaiono a ogni cambio di frequenza.</div>
     <div class="res-tablewrap">
       <table class="res-table">
-        <thead><tr><th>#</th><th>sec/lato</th><th>atti/min</th><th>LF (ms²)</th><th>picco LF (Hz)</th><th>HF (ms²)</th><th>LF/HF</th><th>battiti</th></tr></thead>
+        <thead><tr><th>#</th><th>sec/lato</th><th>atti/min</th><th>LF (ms²)</th><th>LF %</th><th>Total Power (ms²)</th><th>picco LF (Hz)</th><th>HF (ms²)</th><th>LF/HF</th><th>battiti</th></tr></thead>
         <tbody id="resTableBody"></tbody>
       </table>
     </div>
-    <div class="hrv-bands-note">La <b>frequenza di risonanza</b> è quella con il <b>picco di LF</b> più alto. VLF/HF sono riportate per completezza; in 3 minuti la VLF è poco affidabile. I dati e la foto dell'onda di ogni frequenza vengono inviati al medico in forma anonima (solo codice paziente).</div>
+    <div class="hrv-bands-note">La fonte (Lez. 7) definisce la risonanza come il ritmo che <b>massimizza la coerenza e il Total Power</b>, con la <b>LF sopra il 90% del totale</b> e un'onda sinusoidale ampia e pulita. Qui la tappa migliore è scelta sul solo <b>picco di LF</b>: è una <b>scelta operativa</b>, non il criterio completo della fonte — per questo <b>LF %</b> e <b>Total Power</b> sono in tabella, così il criterio resta verificabile (LF % ≥ 90 è evidenziata). VLF/HF sono riportate per completezza; in 3 minuti la VLF è poco affidabile. I dati e la foto dell'onda di ogni frequenza vengono inviati al medico in forma anonima (solo codice paziente).</div>
   </div>
 </div>
 
@@ -1051,6 +1227,8 @@
       <p>Il pacer guida il respiro con una sfera che si espande (inspira) e si restringe (espira), con voce e suono opzionali. Due modalità:</p>
       <h4>Modalità Statica</h4>
       <p>Imposti tu le durate fisse di ogni fase, in secondi: <b>Inspirazione</b>, <b>Pausa piena</b>, <b>Espirazione</b>, <b>Pausa vuota</b>. La somma delle quattro fasi è il <b>ciclo</b>; la frequenza in atti/minuto è mostrata in tempo reale. È la modalità da usare per respirare alla <b>tua frequenza di risonanza</b> (cap. 3).</p>
+      <p><b>Durata della sessione.</b> Con i tasti <b>3 / 5 / 10 min</b> la sessione si ferma da sola allo scadere del tempo; con <b>Libera</b> va avanti finché non la fermi tu. Puoi ancora limitarla anche a <b>numero di cicli</b>: se imposti tutti e due, vince il primo dei due limiti che scade.</p>
+      <div class="tip">Conviene impostare una durata quando ci si allena <b>sdraiati o la sera</b>: se ci si addormenta con la fascia addosso, la sessione libera continua a registrare per decine di minuti e il dato che arriva al medico non è più un allenamento di coerenza.</div>
       <h4>Modalità Dinamica</h4>
       <p>Il ritmo parte da una <b>frequenza iniziale</b> e scende gradualmente verso una <b>frequenza finale (target)</b>, con una <b>variazione per step</b>. Serve per accompagnare progressivamente il sistema verso ritmi più lenti, o per cercare la frequenza di risonanza.</p>
       <h4>Modalità Risonanza</h4>
@@ -1122,7 +1300,7 @@
         <li>Il <b>codice paziente</b> è quello dell'attivazione (in alto). Imposta <b>sesso, età, categoria</b> (servono per le scale di riferimento).</li>
         <li>Avvia: 30 s di stabilizzazione, poi il <b>tonico</b> — schermo con sola sfera neutra, <b>senza numeri</b> (vedere i propri valori altera il risultato).</li>
         <li>A fine tonico scegli: <b>Concludi</b> (invii il solo tonico) oppure <b>Aggiungi fase fasica</b>.</li>
-        <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino a circa il <b>75%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
+        <li>Se aggiungi il fasico, prima parte un <b>countdown di 15 secondi</b> con le raccomandazioni per eseguirlo bene: respiro <b>nasale e diaframmatico</b> (pancia, non petto), inspirazione lenta fino <b>al massimo al 60-70%</b> della capacità senza forzare, <b>segui la sfera</b> a 6/min, non muoverti e non iperventilare.</li>
         <li>A fine test i dati grezzi vengono inviati/esportati e analizzati nel software HRV (pulizia artefatti + referto).</li>
       </ol>
       <div class="tip">La valutazione è <b>doppia</b>: numerica (SDNN, RMSSD, Total Power, distribuzione VLF/LF/HF, coerenza, Stress Index) <b>e</b> morfologica (forma del tracciato). Per questo il tonico non mostra numeri al paziente: deve restare il più possibile "puro".</div>
@@ -1190,7 +1368,9 @@
         <li><b>iPhone:</b> accendi prima la <b>torcia</b> dal Centro di Controllo, poi avvia (il segnale diventa molto più forte). <b>Android:</b> il flash si accende da solo.</li>
         <li>Scegli la <b>durata</b> (3/5/10 minuti o libera).</li>
         <li>Appoggia il <b>polpastrello</b> sulla fotocamera posteriore coprendo anche il flash; tieni il dito <b>fermo e premi leggero</b>.</li>
-        <li>Quando il pallino diventa <b>verde</b> (FC plausibile e stabile), respira seguendo la sfera, che pulsa alla <b>tua frequenza di risonanza</b> impostata nel pacer.</li>
+        <li>Parte la <b>fase di aggancio</b>: vedi l'onda del polso e una barra che si riempie mentre il battito si stabilizza. <b>La sessione non registra ancora</b>: comincia da sola dopo qualche secondo di battito stabile (a quel punto il telefono vibra e compare la sfera del respiro).</li>
+        <li>Se dopo mezzo minuto l'aggancio non arriva, compaiono i suggerimenti (torcia, meno pressione, obiettivo coperto del tutto) e il tasto <b>Avvia comunque</b>.</li>
+        <li>Respira seguendo la sfera, che pulsa alla <b>tua frequenza di risonanza</b> impostata nel pacer. Se durante la sessione il dito si sposta, compare l'avviso «battito perso»: quel tratto <b>non viene conteggiato</b> nella coerenza.</li>
       </ol>
       <p>Durante la sessione il feedback è lo stesso della fascia: la <b>barra della coerenza</b> sopra l'<b>onda della frequenza cardiaca</b>. La barra si riempie via via che l'onda diventa una sinusoide ampia e regolare, in sincrono col respiro. La coerenza compare dopo circa <b>20 secondi</b> di battito stabile.</p>
       <p>A fine sessione vedi la <b>coerenza media</b> e la <b>percentuale di tempo in coerenza</b>. L'obiettivo, con la costanza, è far salire quella percentuale.</p>
@@ -1449,6 +1629,563 @@ const WakeLock = (() => {
   return{acquire,release};
 })();
 
+/* ── Feedback motivazionale locale sull'allenamento di coerenza ──────────────
+   Confronta la coerenza media (0–100) della seduta con quella precedente e
+   restituisce un messaggio di incoraggiamento, MAI clinico. Tutto in locale:
+   lo storico qui sotto tiene solo due numeri per seduta (coerenza media e
+   minuti) — nessun dato clinico, nessuna rete, nessun modello. Le frasi sono
+   validate dal medico; se ne pesca una a caso evitando di ripetere l'ultima. */
+const CohFeedback = (() => {
+  const KEY   = 'respiroPacer.cohFeedback.v1';      // storico: [{ts, coh, min}]
+  const LAST  = 'respiroPacer.cohFeedbackLast.v1';  // ultimo indice usato per scenario
+  const BANDA = 3;                                   // ±punti entro cui è "stabile"
+  const MSG = {
+    prima: [
+      "Hai completato <b>{min} minuti</b> di respirazione di coerenza. È la tua prima seduta registrata: da qui parte il percorso. Il valore di oggi è il tuo punto di partenza — conta tornarci con costanza.",
+      "Prima seduta fatta: <b>{min} minuti</b> di coerenza. Oggi metti la prima pietra. Da adesso ogni sessione costruisce sulla precedente.",
+      "<b>{min} minuti</b>, e il tuo percorso inizia qui. Questa prima misura è il tuo riferimento: sarà bello vederla evolvere seduta dopo seduta.",
+      "Ottimo, hai registrato la tua prima sessione: <b>{min} minuti</b>. Non serve un numero alto oggi — serve iniziare, e l'hai fatto.",
+      "Prima volta fatta: <b>{min} minuti</b> di respiro coerente. Segna questo momento: è la base da cui misureremo i tuoi progressi.",
+      "<b>{min} minuti</b> nella tua prima seduta. Il primo passo è sempre il più importante. Ci vediamo alla prossima.",
+      "Hai chiuso la tua prima sessione di coerenza (<b>{min} minuti</b>). Da qui in poi conta una cosa sola: la costanza. Un passo alla volta.",
+      "Bene: <b>{min} minuti</b>, prima registrazione completata. Oggi hai aperto il percorso — il resto lo costruisce la ripetizione."
+    ],
+    su: [
+      "Hai completato <b>{min} minuti</b>. La tua coerenza è <b>in crescita</b> rispetto all'ultima seduta: l'allenamento sta funzionando. Continua così.",
+      "<b>{min} minuti</b>, e oggi la coerenza è salita rispetto alla volta scorsa. Segno che il corpo sta imparando. Ottimo lavoro.",
+      "Bel passo avanti: <b>{min} minuti</b> con una coerenza migliore dell'ultima volta. La strada è quella giusta.",
+      "Hai fatto <b>{min} minuti</b> e la coerenza è in miglioramento. Questi progressi nascono proprio dalla costanza che stai mettendo.",
+      "<b>{min} minuti</b> completati, coerenza in aumento sulla seduta precedente. Il sistema nervoso risponde: continua a coltivarlo.",
+      "Oggi meglio dell'ultima volta: <b>{min} minuti</b> e coerenza in crescita. Piccoli miglioramenti ripetuti fanno la differenza vera.",
+      "Sessione da <b>{min} minuti</b>, coerenza in salita. Stai allenando la calma come si allena un muscolo. Bravo.",
+      "<b>{min} minuti</b>, e il trend è in miglioramento. Non è un caso: è l'effetto della pratica regolare. Avanti così."
+    ],
+    stabile: [
+      "Hai completato <b>{min} minuti</b>. La coerenza è in linea con l'ultima seduta. La costanza è già un risultato: è la ripetizione che allena il sistema.",
+      "<b>{min} minuti</b>, coerenza stabile rispetto alla volta scorsa. Mantenere è tutt'altro che poco: è la base su cui si costruisce.",
+      "Sessione da <b>{min} minuti</b>, in linea con le precedenti. Il corpo consolida ciò che impara quando la pratica è regolare.",
+      "<b>{min} minuti</b> fatti, valori stabili. Non ogni seduta deve salire: la regolarità conta più del singolo picco.",
+      "Hai chiuso <b>{min} minuti</b> con una coerenza costante. La continuità è esattamente ciò che rieduca il sistema nervoso nel tempo.",
+      "<b>{min} minuti</b>, andamento stabile. Stai tenendo il ritmo — ed è il ritmo, più del singolo dato, a fare il percorso.",
+      "Coerenza in linea con l'ultima volta, <b>{min} minuti</b> completati. Presenza costante: continua a presentarti all'appuntamento con te stesso.",
+      "<b>{min} minuti</b>, valori stabili. Ogni seduta uguale è un mattone in più. La costanza lavora anche quando i numeri non cambiano."
+    ],
+    giu: [
+      "Hai completato <b>{min} minuti</b>. Oggi la coerenza è un po' più bassa del solito — capita, è normale: dipende da sonno, stress e giornata. Non è un voto, conta la costanza nel tempo.",
+      "<b>{min} minuti</b> fatti. La coerenza oggi è sotto la tua media: succede, e va benissimo così. Una giornata storta non cambia il percorso.",
+      "Sessione da <b>{min} minuti</b>, oggi con valori più bassi. Il corpo ha i suoi alti e bassi — l'importante è che tu ci sia tornato.",
+      "<b>{min} minuti</b> completati. Oggi la coerenza è calata un po': niente di preoccupante, dipende da tanti fattori del momento. Il valore vero è la continuità.",
+      "Hai fatto <b>{min} minuti</b> anche in una giornata meno brillante: questo conta più del numero. Gli alti e bassi fanno parte dell'allenamento.",
+      "<b>{min} minuti</b>, coerenza sotto la tua media abituale. Non leggerlo come un passo indietro — è fisiologico. Domani è un'altra seduta.",
+      "Oggi i numeri sono più bassi, ma hai comunque fatto i tuoi <b>{min} minuti</b>. Presentarsi anche nei giorni no è proprio ciò che allena il sistema.",
+      "<b>{min} minuti</b> completati. La coerenza oggi ha ceduto un po': sonno, stress, stanchezza incidono sempre. Guarda il percorso, non la singola seduta."
+    ]
+  };
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+  function pick(scen){
+    const arr = MSG[scen]; if(!arr || !arr.length) return '';
+    let last = {}; try{ last = JSON.parse(localStorage.getItem(LAST))||{}; }catch(e){}
+    let i = Math.floor(Math.random()*arr.length);
+    if(arr.length>1 && i===last[scen]) i = (i+1)%arr.length;   // mai due uguali di fila
+    last[scen] = i; try{ localStorage.setItem(LAST, JSON.stringify(last)); }catch(e){}
+    return arr[i];
+  }
+  // Registra la seduta e restituisce il messaggio soft (con {min} sostituito).
+  function record(cohMedia, minuti){
+    if(cohMedia==null || !isFinite(cohMedia)) return '';
+    const list = load();
+    const prev = list.length ? list[list.length-1].coh : null;
+    const min = Math.max(0, Math.round(minuti||0));
+    let scen;
+    if(prev==null)                  scen = 'prima';
+    else if(cohMedia >= prev+BANDA) scen = 'su';
+    else if(cohMedia <= prev-BANDA) scen = 'giu';
+    else                            scen = 'stabile';
+    list.push({ ts:new Date().toISOString(), coh:Math.round(cohMedia), min });
+    if(list.length>200) list.splice(0, list.length-200);
+    try{ localStorage.setItem(KEY, JSON.stringify(list)); }catch(e){}
+    return pick(scen).replace('{min}', min);
+  }
+  return { record };
+})();
+window.CohFeedback = CohFeedback;
+
+/* ── Riepilogo motivazionale della SETTIMANA ─────────────────────────────────────
+   Perché esiste: il riquadro di fine seduta parla della singola volta, e la singola
+   volta non è dove sta il risultato. Questo guarda l'insieme dei sette giorni e serve
+   a due cose: che il paziente si senta seguito nel tempo, e che gli resti chiaro che
+   l'effetto lo produce la ripetizione di sedute qualunque, non una seduta brillante.
+
+   100% LOCALE. Legge gli storici già sul telefono e non manda niente da nessuna parte.
+   Nessuna lettura clinica: conteggi, andamento della coerenza e una frase. La lettura
+   clinica resta al medico, che la fa sul referto mensile.
+
+   Regole di comportamento decise con Federico:
+   - parla della settimana CHIUSA (lunedì→domenica), mai di quella in corso: un
+     conteggio a metà settimana direbbe sempre "poche sedute" e demoralizzerebbe;
+   - compare una volta per settimana in cima alla Home e si chiude con "Ho visto";
+   - il TREND si mostra solo con almeno 3 sedute di coerenza in ENTRAMBE le settimane:
+     su due o tre punti sarebbe rumore, e un calo letto sul rumore ottiene l'opposto
+     dello scopo;
+   - soglie ASIMMETRICHE (sale a +3, cala solo a −6 punti): sono scelte di
+     COMUNICAZIONE, non criteri clinici, volutamente prudenti nel dichiarare un calo;
+   - la settimana vuota non è un rimprovero ma un invito a rientrare.
+
+   Conteggio delle sedute: si usa lo storico di CohFeedback, che è l'unico a coprire
+   sia la fascia sia la fotocamera ed è l'unico che porta con sé il valore di coerenza
+   necessario al confronto. Resta fuori solo la sessione con fascia troppo breve per
+   calcolare la coerenza (meno di 3 finestre valide), che non è una seduta completata.
+   NON si legge 'respiroPacer.hrv.v1': contiene le stesse sedute di coerenza con la
+   fascia (non i test clinici, che in locale non hanno storico) e le conterebbe due volte. */
+const WeekReport = (() => {
+  const SEEN  = 'respiroPacer.weekReport.v1';       // ultima settimana già mostrata
+  const LAST  = 'respiroPacer.weekReportLast.v1';   // ultima frase usata per scenario
+  const K_COH   = 'respiroPacer.cohFeedback.v1';    // sedute di coerenza (fascia + fotocamera)
+  const K_MORN  = 'respiroPacer.morning.v1';        // test del mattino
+  const K_ALPHA = 'respiroPacer.alpha.v1';          // misure DFA α1
+  const K_RIS   = 'respiroPacer.risonanza.v1';      // test di frequenza di risonanza
+  const MIN_SEDUTE = 3;        // sotto questa soglia non si parla di andamento
+  const SU = 3, GIU = -6;      // punti di coerenza: soglie di comunicazione, non cliniche
+  const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+
+  const MSG = {
+    // Prima settimana in assoluto: non c'è nulla con cui confrontarla.
+    avvio: [
+      "Prima settimana registrata: {sedute}, {min} in tutto. Oggi non conta il valore, conta che il percorso sia partito: le prossime settimane si appoggeranno a questa.",
+      "Hai chiuso la tua prima settimana con {sedute}. Da qui il lavoro è semplice e ripetitivo: tornare. È così che il sistema nervoso impara, non con una seduta brillante.",
+      "{sedute} nella settimana d'esordio, {min} di pratica. Hai messo la base: il resto lo costruisce la frequenza, non l'intensità.",
+      "Settimana di avvio completata: {sedute}. Nessun risultato si vede in sette giorni, e nessun risultato arriva senza questi sette giorni.",
+      "Hai iniziato: {sedute}, {min}. Segnati questo punto di partenza: fra un mese avrà un senso che oggi non può ancora avere.",
+      "Prima settimana in archivio, {sedute}. La differenza fra chi ottiene risultati e chi no non si vede alla prima settimana, si vede alla ventesima.",
+      "{min} di pratica nella tua prima settimana. È poco in assoluto ed è molto come inizio: la maggior parte delle persone si ferma prima di arrivare qui.",
+      "Settimana uno: {sedute}. Il percorso funziona per accumulo, e ogni seduta lascia qualcosa anche quando non sembra.",
+      "Hai registrato {sedute} nella prima settimana, {min} in tutto. Da adesso la domanda utile non è quanto sia alto il numero, ma se ci sei tornato.",
+      "{sedute} nella tua prima settimana. Bene: adesso ripetila. È la costanza noiosa che produce i cambiamenti veri."
+    ],
+    // Sedute presenti ma troppo poche (qui o la settimana prima) per un confronto.
+    pochi: [
+      "Settimana con {sedute}: abbastanza per tenere il filo, non abbastanza per leggere un andamento. Da tre sedute in su potrò dirti anche come si muove la coerenza.",
+      "Hai fatto {sedute}, {min}. Meglio poco che niente non è una consolazione: è l'unica cosa che distingue un percorso da un tentativo.",
+      "{sedute} questa settimana. Per confrontare le settimane fra loro servono almeno tre sedute: è l'obiettivo minimo su cui puntare per la prossima.",
+      "Settimana leggera: {sedute}, {min}. Le settimane leggere fanno parte del percorso; quelle assenti no, e questa non lo è stata.",
+      "Hai registrato {sedute}. Non basta per un andamento, basta per non ripartire da zero — ed è già molto più di quanto sembri.",
+      "{sedute} in sette giorni. Se la settimana prossima arrivi a tre, cominciamo a vedere una linea invece di punti isolati.",
+      "Settimana con {sedute}, {min} di pratica. Il valore di una seduta isolata è piccolo; il valore di non aver smesso è grande.",
+      "{sedute} questa settimana: poche per i numeri, sufficienti per l'abitudine. Ed è l'abitudine che poi porta i numeri.",
+      "Hai chiuso con {sedute}. Non serve una settimana perfetta, serve una settimana che ci sia: questa c'è stata.",
+      "{sedute}, {min}. Aggiungere una sola seduta la settimana prossima è un passo piccolo e concreto, del tipo che funziona."
+    ],
+    su: [
+      "Settimana in miglioramento: {sedute} e una coerenza media più alta della settimana prima. Non è un caso, è l'effetto della ripetizione.",
+      "{sedute} questa settimana, con la coerenza in crescita. Il sistema sta rispondendo all'allenamento: continua sulla stessa strada.",
+      "Bel movimento in avanti: {sedute}, {min}, e la media settimanale è salita. Sono progressi costruiti una seduta alla volta.",
+      "La coerenza media è migliorata rispetto alla settimana precedente, con {sedute} all'attivo. Funziona esattamente così: piccole quantità, ripetute.",
+      "{sedute} e un andamento in salita. Vale la pena notarlo, perché i miglioramenti veri sono lenti e passano quasi sempre inosservati.",
+      "Settimana positiva: {min} di pratica e coerenza in aumento. Il merito è anche delle settimane precedenti, non solo di questa.",
+      "In crescita rispetto a sette giorni fa, con {sedute}. Il corpo impara per accumulo: quello che vedi ora l'hai seminato prima.",
+      "{sedute} e coerenza media più alta. Continua con questo ritmo: non serve fare di più, serve non interrompere.",
+      "Andamento in miglioramento, {min} di allenamento in settimana. È il tipo di progresso che regge nel tempo, perché non nasce da uno sforzo eccezionale.",
+      "Settimana in salita con {sedute} completate. Un passo avanti alla settimana, ripetuto, arriva molto più lontano di quanto sembri all'inizio."
+    ],
+    stabile: [
+      "Settimana stabile: {sedute}, coerenza in linea con la precedente. Mantenere non è fermarsi: è la fase in cui il cambiamento si consolida.",
+      "{sedute} e un andamento costante. Non tutte le settimane devono salire: la maggior parte del lavoro utile assomiglia a questa.",
+      "Coerenza in linea con la settimana prima, {min} di pratica. La stabilità ripetuta è la premessa dei miglioramenti, non il loro contrario.",
+      "Settimana regolare: {sedute}. Il sistema nervoso cambia con la costanza, e la costanza per definizione è poco spettacolare.",
+      "{sedute} completate, valori stabili. Sei nella parte del percorso che sembra non muoversi ed è invece quella che lavora.",
+      "Andamento stazionario con {sedute} all'attivo. Va bene così: stai tenendo il ritmo, ed è il ritmo a fare il risultato.",
+      "{min} di pratica e coerenza costante. Nessuna novità nei numeri, e intanto l'abitudine si rinforza: serve anche questo.",
+      "Settimana in linea con la precedente, {sedute}. La tentazione è chiedersi se serva continuare: sì, perché è il ripetersi a produrre l'effetto.",
+      "{sedute} e media stabile. I risultati non arrivano dalle settimane migliori, arrivano dalla somma delle settimane normali come questa.",
+      "Coerenza stazionaria, {sedute} fatte. Continua a presentarti: molti percorsi si interrompono proprio in questa fase, quando sembra che non cambi niente."
+    ],
+    giu: [
+      "Settimana in leggero calo: {sedute}, coerenza un po' sotto la precedente. Succede, e dipende da sonno, carico e periodo. Il percorso si guarda sui mesi.",
+      "{sedute} questa settimana, con la coerenza scesa un po'. Non è un passo indietro: è la normale oscillazione di un sistema vivo.",
+      "Andamento in leggera flessione, {min} di pratica. Le settimane così ci sono in ogni percorso: l'importante è che la prossima ci sia.",
+      "Coerenza un po' più bassa della settimana prima, con {sedute} completate. Il dato che conta è che hai continuato mentre scendeva.",
+      "{sedute}, andamento in leggero calo. Prima di cercare spiegazioni complicate, una domanda semplice: come hai dormito questa settimana?",
+      "Settimana meno brillante: {sedute}, coerenza in flessione. Nessun percorso sale in linea retta; quelli che funzionano scendono e riprendono.",
+      "{min} di pratica con una media più bassa. Si legge così: hai tenuto l'abitudine in una settimana difficile, che è il momento in cui serve di più.",
+      "Leggero calo rispetto a sette giorni fa, {sedute} all'attivo. Un avvallamento non cancella il lavoro fatto prima: quello resta.",
+      "{sedute} questa settimana, con valori un po' sotto. Non cambiare niente per una settimana sola: si valuta su tre o quattro.",
+      "Settimana in flessione con {sedute}. Continuare quando i numeri non premiano è esattamente ciò che costruisce il risultato finale."
+    ],
+    // Settimana chiusa senza nessuna attività, ma con storico prima: invito al rientro.
+    ripresa: [
+      "Nella settimana appena chiusa non ci sono attività registrate. Si riprende da dove si era rimasti, non da zero: una seduta oggi rimette in moto tutto.",
+      "Settimana senza sedute. Capita a tutti e non annulla il lavoro precedente. Il modo più semplice di ricominciare è una sola seduta, adesso.",
+      "Non risultano attività negli ultimi sette giorni. Le pause fanno parte dei percorsi lunghi: quello che le distingue è quanto durano.",
+      "Nessuna seduta nella settimana appena passata. Non serve recuperare nulla né fare di più per compensare: basta riprendere il ritmo normale.",
+      "Settimana vuota. Il fatto che tu abbia aperto l'app dice già che il percorso non è chiuso: ricominciamo da qui.",
+      "Negli ultimi sette giorni non ci sono misure. Riprendere costa meno di quanto sembri: pochi minuti di respirazione e sei di nuovo dentro.",
+      "Nessuna attività registrata la settimana scorsa. Le interruzioni sono la norma e non l'eccezione: quasi nessuno procede senza salti.",
+      "Settimana senza pratica. Nessun giudizio, solo un promemoria: gli effetti si costruiscono con la ripetizione, e la ripetizione ricomincia quando decidi tu.",
+      "Non ci sono sedute nella settimana chiusa. Il percorso riparte con la prossima seduta, non con una settimana perfetta per rimediare.",
+      "Settimana a zero. L'unica cosa che conta ora è la prima seduta della settimana nuova: il resto viene da sé."
+    ]
+  };
+
+  const get = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
+  const read = k => { try{ return JSON.parse(get(k))||[]; }catch(e){ return []; } };
+
+  // Lunedì della settimana che contiene d, a mezzanotte locale.
+  function monday(d){
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay()+6)%7));       // getDay(): 0=domenica → 0=lunedì
+    return x;
+  }
+  function chiave(lun){
+    return 'W' + lun.getFullYear() + '-' + String(lun.getMonth()+1).padStart(2,'0')
+               + '-' + String(lun.getDate()).padStart(2,'0');
+  }
+  function giorno(d){ return d.getDate() + ' ' + MESI[d.getMonth()]; }
+  function daTs(v){ const d = new Date(v); return isFinite(+d) ? d : null; }
+  // 'YYYY-MM-DD' letto a mezzogiorno locale: così il fuso non lo sposta di un giorno.
+  function daGiorno(v){
+    if(typeof v !== 'string' || v.length < 10) return null;
+    const p = v.slice(0,10).split('-');
+    const d = new Date(+p[0], +p[1]-1, +p[2], 12);
+    return isFinite(+d) ? d : null;
+  }
+  function dentro(d, a, b){ return !!d && d >= a && d < b; }
+  function plur(n, uno, molti){ return n + ' ' + (n===1 ? uno : molti); }
+
+  // Conteggi e media di coerenza nell'intervallo [a, b).
+  function conta(a, b){
+    const coh   = read(K_COH).filter(e => dentro(daTs(e.ts), a, b));
+    const morn  = read(K_MORN).filter(e => dentro(daGiorno(e.d) || daTs(e.ts), a, b));
+    const alpha = read(K_ALPHA).filter(e => dentro(daGiorno(e.d) || daTs(e.ts), a, b));
+    const ris   = read(K_RIS).filter(e => dentro(daTs(e.start), a, b));
+    const vals  = coh.map(e => +e.coh).filter(v => isFinite(v));
+    return {
+      coh: coh.length, morn: morn.length, alpha: alpha.length, ris: ris.length,
+      minuti: coh.reduce((s,e) => s + (isFinite(+e.min) ? +e.min : 0), 0),
+      media: vals.length ? vals.reduce((s,v) => s+v, 0) / vals.length : null,
+      totale: coh.length + morn.length + alpha.length + ris.length
+    };
+  }
+
+  function pick(scen){
+    const arr = MSG[scen]; if(!arr || !arr.length) return '';
+    let last = {}; try{ last = JSON.parse(get(LAST))||{}; }catch(e){}
+    let i = Math.floor(Math.random()*arr.length);
+    if(arr.length>1 && i===last[scen]) i = (i+1)%arr.length;   // mai due uguali di fila
+    last[scen] = i; try{ localStorage.setItem(LAST, JSON.stringify(last)); }catch(e){}
+    return arr[i];
+  }
+
+  function init(){
+    const box = document.getElementById('weekBox'); if(!box) return;
+    // Se c'è la nota delle novità, si aspetta il prossimo avvio: due riquadri in cima
+    // alla Home sono troppi, e la nota va letta prima (spiega proprio questo riquadro).
+    const nov = document.getElementById('novitaBox');
+    if(nov && nov.style.display !== 'none') return;
+
+    const lunCorrente = monday(new Date());
+    const inizio = new Date(lunCorrente); inizio.setDate(inizio.getDate()-7);   // settimana chiusa
+    const fine   = lunCorrente;
+    const k = chiave(inizio);
+    if(get(SEEN) === k) return;                       // già mostrata per questa settimana
+
+    const cur = conta(inizio, fine);
+    const storicoPrima = conta(new Date(2000,0,1), inizio).totale;
+    if(!cur.totale && !storicoPrima) return;          // paziente nuovo: niente da riepilogare
+
+    const pInizio = new Date(inizio); pInizio.setDate(pInizio.getDate()-7);
+    const prev = conta(pInizio, inizio);
+
+    let scen, delta = null;
+    if(!cur.totale)          scen = 'ripresa';
+    else if(!storicoPrima)   scen = 'avvio';
+    else if(cur.coh >= MIN_SEDUTE && prev.coh >= MIN_SEDUTE && cur.media != null && prev.media != null){
+      delta = cur.media - prev.media;
+      scen = delta >= SU ? 'su' : (delta <= GIU ? 'giu' : 'stabile');
+    } else scen = 'pochi';
+
+    const ultimo = new Date(fine); ultimo.setDate(ultimo.getDate()-1);
+    const elRange = document.getElementById('weekRange');
+    if(elRange) elRange.textContent = 'settimana dal ' + giorno(inizio) + ' al ' + giorno(ultimo);
+
+    const chips = [];
+    if(cur.coh)    chips.push('🫁 <b>'+cur.coh+'</b> '+(cur.coh===1?'seduta di coerenza':'sedute di coerenza'));
+    if(cur.minuti) chips.push('⏱ <b>'+cur.minuti+'</b> '+(cur.minuti===1?'minuto':'minuti'));
+    if(cur.morn)   chips.push('🌅 <b>'+cur.morn+'</b> '+(cur.morn===1?'test del mattino':'test del mattino'));
+    if(cur.alpha)  chips.push('📉 <b>'+cur.alpha+'</b> '+(cur.alpha===1?'misura α1':'misure α1'));
+    if(cur.ris)    chips.push('🎯 <b>'+cur.ris+'</b> '+(cur.ris===1?'test di risonanza':'test di risonanza'));
+    const elStats = document.getElementById('weekStats');
+    if(elStats) elStats.innerHTML = chips.map(c => '<span class="wk-chip">'+c+'</span>').join('');
+
+    const elTrend = document.getElementById('weekTrend');
+    if(elTrend){
+      if(delta != null){
+        const freccia = scen==='su' ? '▲' : (scen==='giu' ? '▼' : '▬');
+        elTrend.innerHTML = freccia + ' Coerenza media della settimana: <b>' + Math.round(cur.media)
+                          + '</b> · settimana precedente <b>' + Math.round(prev.media) + '</b>';
+        elTrend.style.display = '';
+      } else elTrend.style.display = 'none';
+    }
+
+    const elMsg = document.getElementById('weekMsg');
+    if(elMsg) elMsg.innerHTML = pick(scen)
+      .replace('{sedute}', plur(cur.coh, 'seduta', 'sedute'))
+      .replace('{min}', plur(cur.minuti, 'minuto', 'minuti'));
+
+    box.style.display = '';
+    const ok = document.getElementById('weekOk');
+    if(ok) ok.addEventListener('click', () => {
+      try{ localStorage.setItem(SEEN, k); }catch(e){}
+      box.style.display = 'none';
+    });
+  }
+  return { init };
+})();
+window.WeekReport = WeekReport;
+
+/* ── Tachimetro dello stato di attivazione (Stress Index) a fine test tonico ──
+   Formula di Baevsky (SI = AMo/(2·Mo·MxDMn)) stimata da SDNN + FC media. Tono
+   basso, non allarmistico: le etichette descrivono lo stato DI OGGI, non un
+   giudizio sulla persona; nella fascia alta rimandano sempre al medico. Guardia
+   di qualità sui tracciati troppo disturbati.
+
+   ⚠️ SOGLIE RIANCORATE ALLA FONTE il 01/08/2026 (audit dei numeri clinici).
+   Erano riferimento 150 e zone 50/150/500, ereditate dall'app self-coherence e
+   corrette là il 31/07: NON venivano da nessuna fonte. L'unico normativo della
+   dispensa (cap. 4 p. 43) e' «Kubios 5-15», e Kubios mostra la RADICE QUADRATA
+   del Baevsky. Qui il Baevsky e' calcolato NON sotto radice, quindi il
+   riferimento vero e' 25-225 c.u. (= 5^2 e 15^2).
+   Conseguenza della vecchia taratura: un paziente con SI 200 — Kubios 14,1,
+   DENTRO il riferimento — riceveva un tachimetro arancione «Oggi attivazione
+   alta». L'errore stava tutto nella meta' alta della scala, cioe' proprio dove
+   il messaggio preoccupa.
+   SI_ALTO NON e' un normativo: e' il doppio del limite superiore, scelto per
+   non appiattire il tachimetro. Federico ha confermato le quattro zone il
+   01/08/2026. Non va usato come cut-off da nessuna parte. */
+const StressGauge = (() => {
+  const SI_MIN  = 25;    // = Kubios 5  (limite inferiore del riferimento)
+  const SI_REF  = 225;   // = Kubios 15 (limite superiore del riferimento)
+  const SI_ALTO = 450;   // scelta di sola visualizzazione — NON un normativo
+  function erf(x){
+    const s = x<0 ? -1 : 1; x = Math.abs(x);
+    const t = 1/(1+0.3275911*x);
+    const y = 1-(((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t)*Math.exp(-x*x);
+    return s*y;
+  }
+  // SI stimato da statistiche di sintesi (gaussiana, bin 50 ms, MxDMn≈5,5·SDNN).
+  function stressIndex(sdnn, meanRRms){
+    if(meanRRms<=0 || sdnn<=0) return 0;
+    const Mo = meanRRms/1000;
+    const AMo = 100*erf(25/(sdnn*Math.SQRT2));
+    const MxDMn = 5.5*sdnn/1000;
+    return AMo/(2*Mo*MxDMn);
+  }
+  // Verdetto in linguaggio paziente — stato di oggi, mai giudizio sulla persona.
+  function verdict(si){
+    if(isNaN(si))  return {big:'—', col:'#7a8a90', sub:'Dato non disponibile.'};
+    if(si<SI_MIN)   return {big:'Oggi molto rilassato', col:'#1b8a5a', sub:'Oggi il sistema nervoso è in forte risparmio energetico. Va letto insieme agli altri indici: non sempre indica solo riposo.'};
+    if(si<=SI_REF)  return {big:'Oggi in equilibrio', col:'#1b8a5a', sub:'Oggi il tuo sistema nervoso gestisce bene lo stress fisiologico: un buon segnale di equilibrio.'};
+    if(si<=SI_ALTO) return {big:'Oggi attivazione alta', col:'#e8820c', sub:'Oggi il tuo sistema nervoso è piuttosto attivato. Capita, e dipende da tanti fattori del momento: è comunque il segnale che vale la pena curare il recupero.'};
+    return {big:'Oggi attivazione molto alta', col:'#b3201e', sub:'Oggi il tuo sistema nervoso risulta molto attivato. Da una misura sola non si traggono conclusioni: proprio per questo vale la pena parlarne col tuo medico e dare priorità al recupero.'};
+  }
+  function frac(si){
+    if(isNaN(si)) return 0;
+    if(si<=SI_MIN)  return (si/SI_MIN)*0.25;
+    if(si<=SI_REF)  return 0.25+(si-SI_MIN)/(SI_REF-SI_MIN)*0.25;
+    if(si<=SI_ALTO) return 0.50+(si-SI_REF)/(SI_ALTO-SI_REF)*0.25;
+    return 0.75+Math.min(1,(si-SI_ALTO)/SI_ALTO)*0.25;
+  }
+  function gaugeSVG(si){
+    const cx=180, cy=176, R=140, sw=30;
+    const pol=(r,deg)=>{ const a=deg*Math.PI/180; return [cx+r*Math.cos(a), cy-r*Math.sin(a)]; };
+    const arc=(d0,d1)=>{ const n=Math.max(2,Math.ceil(Math.abs(d0-d1)/4)), p=[];
+      for(let i=0;i<=n;i++){ const d=d0+(d1-d0)*i/n, xy=pol(R,d); p.push(xy[0].toFixed(1)+','+xy[1].toFixed(1)); }
+      return p.join(' '); };
+    const zones=[[180,135,'#1b8a5a'],[135,90,'#7cb342'],[90,45,'#f4a82c'],[45,0,'#b3201e']];
+    let s='<svg viewBox="0 0 360 210" role="img" aria-label="Stato di attivazione">';
+    zones.forEach(z=>{ s+='<polyline points="'+arc(z[0],z[1])+'" fill="none" stroke="'+z[2]+'" stroke-width="'+sw+'" stroke-linecap="butt"/>'; });
+    [135,90,45].forEach(d=>{ const a=pol(R+sw/2,d), b=pol(R-sw/2,d); s+='<line x1="'+a[0].toFixed(1)+'" y1="'+a[1].toFixed(1)+'" x2="'+b[0].toFixed(1)+'" y2="'+b[1].toFixed(1)+'" stroke="#fff" stroke-width="2"/>'; });
+    [[135,String(SI_MIN)],[90,String(SI_REF)],[45,String(SI_ALTO)]].forEach(z=>{ const p=pol(R-sw/2-11,z[0]); s+='<text x="'+p[0].toFixed(1)+'" y="'+p[1].toFixed(1)+'" font-size="11.5" font-weight="700" fill="#5a6b72" text-anchor="middle" dominant-baseline="middle">'+z[1]+'</text>'; });
+    const deg=180-frac(si)*180, tip=pol(R-6,deg), tail=pol(-12,deg);
+    s+='<line x1="'+tail[0].toFixed(1)+'" y1="'+tail[1].toFixed(1)+'" x2="'+tip[0].toFixed(1)+'" y2="'+tip[1].toFixed(1)+'" stroke="#1f2d33" stroke-width="5" stroke-linecap="round"/>';
+    s+='<circle cx="'+cx+'" cy="'+cy+'" r="10" fill="#1f2d33"/>';
+    s+='<text x="'+cx+'" y="'+(cy-34)+'" text-anchor="middle" font-weight="800" fill="#1f2d33"><tspan font-size="44">'+Math.round(si)+'</tspan><tspan font-size="22" font-weight="600" fill="#7a8a90"> / '+SI_REF+'</tspan></text>';
+    s+='<text x="'+cx+'" y="'+(cy-14)+'" text-anchor="middle" font-size="13.5" fill="#7a8a90">Stato di attivazione · rif. '+SI_MIN+'–'+SI_REF+'</text>';
+    s+='</svg>';
+    return s;
+  }
+  const LEVE = '<div class="stress-lev"><div class="stress-lev-t">Su cosa puoi agire ogni giorno</div><ul>'
+    +'<li><b>Sonno</b> — regolare e sufficiente: è il primo motore del recupero.</li>'
+    +'<li><b>Movimento</b> — attività fisica costante, senza strafare nei periodi di carico.</li>'
+    +'<li><b>Alimentazione</b> — pasti equilibrati, senza eccessi che tengono alto il "motore".</li>'
+    +'<li><b>Respirazione di coerenza</b> — pochi minuti al giorno allenano direttamente il sistema nervoso.</li>'
+    +'</ul></div>';
+  const NOTA = '<div class="stress-note">📸 Questa è una <b>fotografia del tuo stato di attivazione di oggi</b>, non una diagnosi. Un singolo valore oscilla con il sonno, i pasti e la giornata: quello che conta è <b>l\'andamento nel tempo</b>, che valuterai insieme al tuo medico.</div>';
+  // Titolo esplicito: il tachimetro da solo non dice COSA misura. Deve leggersi
+  // prima del disegno, con più peso visivo del verdetto.
+  const TITOLO = '<div class="stress-title">Indice di stress del sistema nervoso</div>'
+    + '<div class="stress-titlesub">Quanto il tuo sistema nervoso sta lavorando per tenerti in equilibrio</div>';
+  /* Avviso sotto i 300 IBI. La dispensa (cap. 4) chiede «5 minuti o almeno 300
+     IBI, limite al di sotto del quale vi sono delle perdite di informazioni»;
+     la regola torna anche nel cap. 6 e nella Lez. 6. La scheda qui compare gia'
+     con 150 battiti (soglia `reliable` di tonicStress), quindi fra 150 e 300 il
+     tachimetro usciva senza alcuna riserva. Stesso avviso aggiunto nell'app
+     self-coherence il 01/08/2026. Non blocca: segnala. */
+  function avvisoCorto(kept){
+    if(!kept || kept >= 300) return '';
+    return '<div class="stress-note">⚠️ Misura raccolta su <b>'+kept+' battiti</b>: la lettura di riferimento ne chiede almeno 300. '
+      + 'Il valore resta indicativo, ma prendilo con prudenza e, se puoi, ripeti il test lasciando che la fase di riposo arrivi in fondo.</div>';
+  }
+  function cardHTML(si, kept){
+    const v = verdict(si);
+    return '<div class="stress-card">'
+      +TITOLO
+      +'<div class="stress-gauge">'+gaugeSVG(si)+'</div>'
+      +'<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
+      +'<div class="stress-sub">'+v.sub+'</div>'
+      +avvisoCorto(kept)
+      +NOTA+LEVE+'</div>';
+  }
+  function guardHTML(){
+    return '<div class="stress-card">'
+      +TITOLO
+      +'<div class="stress-guard-t">⚠️ Misura troppo disturbata</div>'
+      +'<div class="stress-sub">Il tracciato di oggi ha troppi battiti irregolari o troppo movimento per una lettura affidabile dello stato. Ripeti da fermo, in silenzio, con la fascia ben aderente. I dati sono comunque stati inviati al tuo medico.</div>'
+      +'</div>';
+  }
+  // ts = {sdnn, meanNN, reliable} da HRV.tonicStress(); '' se non c'è tonico valido.
+  function cardFor(ts){
+    if(!ts) return '';
+    if(!ts.reliable) return guardHTML();
+    return cardHTML(stressIndex(ts.sdnn, ts.meanNN), ts.kept);
+  }
+  return { cardFor };
+})();
+window.StressGauge = StressGauge;
+
+/* ── Report del test fasico (respiro guidato a 6/min) ───────────────────────
+   Criteri della dispensa Master HRV SC, lezione 4 — test respiratorio Harmat:
+     · FC senza variazioni significative (se SALE = sforzo o disfunzione
+       diaframmatica: è l'unico criterio dove "aumento" è un segnale negativo)
+     · SDNN in espansione (aumenta più dell'RMSSD per influenza respiratoria)
+     · RMSSD in aumento (vago reattivo); se PEGGIORA = mancanza di risorse
+     · coerenza normalizzata che AUMENTA e supera l'80%
+   Allineato allo strumento medico il 01/08/2026 (audit dei numeri clinici):
+   quello che il paziente vede è lo stesso che legge Federico. Tre correzioni,
+   tutte già applicate e verificate nell'app self-coherence:
+     1. il PUNTEGGIO PESATO (19/25/19/37, −25) è stato tolto. I criteri sono
+        della fonte, i pesi no: erano una nostra scelta, e il numero che ne
+        usciva — con sopra altri due tagli, 66 e 40, per scegliere il verdetto —
+        aveva l'aspetto di una misura senza esserlo. Ora è un CONTEGGIO dei
+        criteri raggiunti, che è un fatto.
+     2. «SDNN almeno TRIPLICATO» = +200%, non +180% (era 180 qui e nell'app
+        medica fino al 31/07).
+     3. la coerenza deve AUMENTARE e superare l'80%, non solo trovarsi sopra
+        l'80%: chiarito da Federico il 31/07. Un paziente già alto nel tonico e
+        piatto nel fasico prendeva il criterio senza aver mostrato riserva.
+   L'MHRR NON entra: non compare in nessuna fonte della knowledge base.
+   Al paziente: tre livelli attenuati, mai le etichette cliniche (iporeattiva,
+   disregolata, vago ipertonico). Caso particolare: una risposta abnorme (SDNN
+   quasi triplicato con RMSSD che raggiunge l'SDNN) prende un punteggio ALTO ma
+   secondo la dispensa può essere un primo segno di overtraining → non va mai
+   restituita al paziente come una buona notizia. */
+const PhasicReport = (() => {
+  const TITOLO = '<div class="stress-title">Risposta al respiro guidato</div>'
+    + '<div class="stress-titlesub">Quanta capacità di adattamento ha mostrato il tuo sistema nervoso</div>';
+  const NOTA = '<div class="stress-note">📸 Anche questa è una <b>fotografia di oggi</b>, non una diagnosi. '
+    + 'Il valore va letto insieme al resto della misura: se ne parla col tuo medico, che riceve i dati completi.</div>';
+
+  function reserve(t, f){
+    const dSp = t.sdnn ? (f.sdnn-t.sdnn)/t.sdnn*100 : 0;
+    const dRp = t.rmssd ? (f.rmssd-t.rmssd)/t.rmssd*100 : 0;
+    const dH  = f.hr - t.hr;
+    const coh  = (f.coh==null) ? 0 : f.coh;
+    const cohT = (t.coh==null) ? 0 : t.coh;
+    const dC   = coh - cohT;
+    const c = { hrStable:Math.abs(dH)<=6, sdnnUp:dSp>=5, rmssdUp:dRp>=5,
+                rmssdWorse:dRp<=-10,
+                cohSale: dC > 0,
+                cohFull: (coh>=80 && dC>0),   // AUMENTA *e* supera l'80%
+                cohOk:coh>=50,
+                hyper: dSp>=200 && f.rmssd > f.sdnn*0.9 };
+    // Conteggio, non punteggio pesato. Stessi stati e stessi colori
+    // dell'elenco sotto, così le due letture non possono divergere.
+    const crit = [
+      {lab:'FC',       k:c.hrStable?'ok':'warn'},
+      {lab:'ampiezza', k:c.sdnnUp?'ok':'no'},
+      {lab:'RMSSD',    k:c.rmssdWorse?'no':(c.rmssdUp?'ok':'warn')},
+      {lab:'coerenza', k:c.cohFull?'ok':(c.cohOk?'warn':'no')}
+    ];
+    const nOk = crit.filter(x=>x.k==='ok').length;
+    return { crit, nOk, c, dSp, dRp, dH, dC, coh, cohT };
+  }
+  function verdict(r){
+    // La risposta abnorme non è una promozione: messaggio neutro, rimando al medico.
+    if(r.c.hyper) return { big:'Risposta molto ampia', col:'#e8820c',
+      sub:'Oggi il tuo sistema ha reagito al respiro guidato in modo molto marcato. Non è un dato da leggere da soli: falla vedere al tuo medico insieme al resto della misura.' };
+    if(r.nOk>=4) return { big:'Buona capacità di adattamento', col:'#1b8a5a',
+      sub:'Il tuo sistema nervoso ha risposto bene al respiro guidato: le risorse per recuperare ci sono, anche se la misura a riposo non fosse brillante.' };
+    if(r.nOk>=2) return { big:'Adattamento parziale', col:'#e8820c',
+      sub:'Il tuo sistema ha risposto solo in parte. È la situazione in cui l\'allenamento regolare alla respirazione di coerenza dà i risultati più visibili.' };
+    return { big:'Adattamento ridotto oggi', col:'#b3201e',
+      sub:'Oggi il sistema ha faticato a rispondere al respiro guidato. Da una misura sola non si conclude nulla: proprio per questo vale la pena parlarne col tuo medico.' };
+  }
+  function rows(r){
+    const li = [];
+    li.push(r.c.hrStable
+      ? '<li>Frequenza cardiaca <b>stabile</b> durante il respiro guidato — nessuno sforzo respiratorio</li>'
+      : '<li>Frequenza cardiaca <b>in aumento di '+Math.abs(r.dH).toFixed(0)+' battiti</b> — segno che il respiro è stato faticoso</li>');
+    li.push('<li>Ampiezza della variabilità <b>'+(r.dSp>=0?'+':'')+r.dSp.toFixed(0)+'%</b> rispetto alla fase a riposo'
+      + (r.c.sdnnUp?' — attesa in aumento col respiro lento':' — attesa in aumento, oggi non è cresciuta')+'</li>');
+    // Il criterio della fonte ha DUE metà: la coerenza deve SALIRE e superare
+    // l'80%. Mostrarle separate fa capire subito quale delle due è mancata.
+    li.push('<li>Risposta rapida del battito <b>'+(r.dRp>=0?'+':'')+r.dRp.toFixed(0)+'%</b>'
+      + (r.c.rmssdWorse ? ' — oggi è diminuita invece di crescere'
+         : r.c.rmssdUp ? ' — in aumento, come atteso col respiro lento'
+         : ' — stabile, attesa in aumento')+'</li>');
+    const cohNota = r.c.cohFull ? ' — obiettivo raggiunto: è salita e ha superato l\'80%'
+      : (r.coh>=80 && !r.c.cohSale) ? ' — era già alta a riposo e oggi non è salita'
+      : (!r.c.cohSale) ? ' — oggi non è salita rispetto alla fase a riposo'
+      : ' — è salita, ma resta sotto l\'80%';
+    li.push('<li>Coerenza raggiunta: <b>'+(r.coh?r.coh.toFixed(0)+'%':'non calcolabile')+'</b>'
+      + (r.coh?cohNota:'')+'</li>');
+    return '<div class="stress-lev"><div class="stress-lev-t">Cosa è successo durante il minuto di respiro guidato</div><ul>'
+      + li.join('') + '</ul></div>';
+  }
+  /* Quattro blocchi, uno per criterio, al posto della vecchia barra a percentuale.
+     I colori sono gli stessi delle righe dell'elenco qui sotto. */
+  function counterHTML(r){
+    const COL = {ok:'#1b8a5a', warn:'#e8820c', no:'#b3201e'};
+    const seg = r.crit.map(x =>
+      '<div style="flex:1;text-align:center">'
+      + '<div style="height:16px;border-radius:9px;background:'+COL[x.k]+'"></div>'
+      + '<div style="font-size:.62rem;color:#545E62;margin-top:4px">'+x.lab+'</div></div>'
+    ).join('');
+    return '<div class="phas-res"><div class="phas-res-t">Criteri della risposta attesa</div>'
+      + '<div style="display:flex;gap:8px">'+seg+'</div>'
+      + '<div class="phas-res-n" style="margin-top:12px">'+r.nOk+' su 4</div></div>';
+  }
+  function guardHTML(){
+    return '<div class="stress-card">'+TITOLO
+      +'<div class="stress-guard-t">⚠️ Misura troppo disturbata</div>'
+      +'<div class="stress-sub">Il minuto di respiro guidato ha troppi battiti irregolari per una lettura affidabile. I dati sono comunque stati inviati al tuo medico.</div>'
+      +'</div>';
+  }
+  // ton/fas = HRV.phaseStats('tonic'/'phasic'); '' se manca il confronto.
+  function cardFor(ton, fas){
+    if(!ton || !fas) return '';
+    if(!fas.reliable) return guardHTML();
+    const r = reserve(ton, fas), v = verdict(r);
+    return '<div class="stress-card">'+TITOLO
+      + counterHTML(r)
+      + '<div class="stress-chip" style="background:'+v.col+'">'+v.big+'</div>'
+      + '<div class="stress-sub">'+v.sub+'</div>'
+      + rows(r) + NOTA + '</div>';
+  }
+  return { cardFor, reserve };
+})();
+window.PhasicReport = PhasicReport;
+
 /* ---------- MOTORE RESPIRAZIONE ---------- */
 const App = (() => {
   let mode='static',running=false,paused=false,rafId=null;
@@ -1565,6 +2302,11 @@ const App = (() => {
     const p=ph.dur>0?Math.min(elapsed/ph.dur,1):1,full=fullnessFor(seq[seqIdx].name,p);
     render(full,seq[seqIdx],elapsed,now);Audio.update(full,seq[seqIdx].name);
     if((mode==='dynamic'||mode==='resonance')&&now-sessionStart-pausedAccum>=dyn.total*60000){finish();return;}
+    /* Statica a durata fissa: si chiude da sola come Dinamica e Risonanza. Se sono
+       impostati ANCHE i cicli vince il primo dei due limiti che scade (i cicli sono
+       controllati in nextPhase). 0 = libera, comportamento di prima. */
+    if(mode==='static'){const tm=+el('staticMinutes').value;
+      if(tm>0&&now-sessionStart-pausedAccum>=tm*60000){finish();return;}}
     rafId=requestAnimationFrame(tick);
   }
   /* Quanto manca al prossimo cambio di ritmo. Solo Dinamica e Risonanza cambiano
@@ -1596,7 +2338,13 @@ const App = (() => {
     const te=(now-sessionStart-pausedAccum)/1000;el('roElapsed').textContent=fmt(te);
     el('orbCount').textContent=cycleCount||'';
     if(mode==='dynamic'||mode==='resonance'){el('sessionFill').style.width=Math.min(100,(te/(dyn.total*60))*100)+'%';}
-    else{const tc=+el('targetCycles').value;el('sessionFill').style.width=tc>0?Math.min(100,(cycleCount/tc)*100)+'%':'0%';}
+    else{
+      /* Barra di avanzamento: se c'e' una durata la barra segue il TEMPO (piu'
+         leggibile e coerente con le altre modalita'); altrimenti i cicli, come prima. */
+      const tm=+el('staticMinutes').value, tc=+el('targetCycles').value;
+      el('sessionFill').style.width = tm>0 ? Math.min(100,(te/(tm*60))*100)+'%'
+                                   : (tc>0 ? Math.min(100,(cycleCount/tc)*100)+'%' : '0%');
+    }
   }
   const fmt=s=>{s=Math.max(0,Math.floor(s));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 
@@ -1657,7 +2405,7 @@ const App = (() => {
 
   /* ---------- PERSISTENZA IMPOSTAZIONI ---------- */
   const SKEY='respiroPacer.settings.v1';
-  const valIds=['inhale','holdFull','exhale','holdEmpty','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','resStart','resEnd','resStep','ambientVol','voiceVol'];
+  const valIds=['inhale','holdFull','exhale','holdEmpty','staticMinutes','targetCycles','startRate','endRate','stepRate','stepInterval','totalDuration','resStart','resEnd','resStep','ambientVol','voiceVol'];
   const chkIds=['ambientOn','voiceOn'];
   function activateTab(m){
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.mode===m));
@@ -1680,10 +2428,31 @@ const App = (() => {
     if(d.mode)activateTab(d.mode);
   }
 
+  /* Evidenzia il tasto durata corrispondente al valore salvato e aggiorna la nota.
+     Se il valore salvato non e' fra i tasti (es. da una versione futura) nessuno
+     resta acceso, ma la durata continua a valere: meglio che accenderne uno sbagliato. */
+  function syncStaticDurs(){
+    const box=el('staticDurs'); if(!box) return;
+    const tm=+el('staticMinutes').value||0;
+    [].forEach.call(box.children,b=>b.classList.toggle('cam-sel',+b.dataset.min===tm));
+    const nota=el('staticStopNote');
+    if(nota)nota.innerHTML = tm>0
+      ? `Si ferma da sola dopo <b>${tm} minuti</b>.`
+      : 'Sessione <b>libera</b>: si ferma quando la fermi tu.';
+  }
+
   function init(){
     loadSettings();                                              // ripristina l'ultima configurazione
+    syncStaticDurs();       // i tasti durata sono legati a un input nascosto: si riallineano
+                            // qui e non dentro loadSettings, che esce subito se non c'e' nulla
+                            // di salvato (prima installazione).
     document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
       if(running)return;activateTab(tab.dataset.mode);updateFreqDisplay();saveSettings();}));
+    el('staticDurs').addEventListener('click',e=>{
+      const b=e.target.closest('button'); if(!b||running) return;   // a sessione avviata non si cambia
+      el('staticMinutes').value=b.dataset.min;
+      syncStaticDurs(); saveSettings();
+    });
     el('btnStart').addEventListener('click',start);el('btnPause').addEventListener('click',pause);el('btnStop').addEventListener('click',()=>stop(false));
     ['inhale','holdFull','exhale','holdEmpty'].forEach(id=>el(id).addEventListener('input',updateFreqDisplay));
     ['startRate','endRate','stepRate'].forEach(id=>el(id).addEventListener('input',()=>{updateDynCalc();updateFreqDisplay();}));
@@ -2169,6 +2938,7 @@ const HRV = (() => {
     updateCoherenceUI();
     sessionMeta = { start: new Date().toISOString(), breathRate: breathRate || 0 };
     el('hrvResults').classList.remove('show');
+    { const b = el('cohSoftBox'); if(b){ b.style.display='none'; b.innerHTML=''; } }
     if(!connected) status('⚠️ Fascia non connessa: la sessione di respirazione parte ma l\'HRV non verrà registrato.', true);
     else status('Registrazione HRV in corso…');
   }
@@ -2186,6 +2956,14 @@ const HRV = (() => {
     saveSession(report);
     status('Sessione completata: '+report.quality.kept+' battiti validi su '+report.quality.total+'. Risultati salvati.');
     sendCoherenceSession(report);   // invio automatico al medico (se codice + consenso)
+    // Feedback motivazionale locale (mai clinico): confronta con la seduta prima.
+    if(cohN >= 3 && window.CohFeedback){
+      const box = el('cohSoftBox');
+      if(box){
+        const msg = CohFeedback.record(cohPctSum/cohN, report.durationS/60);
+        if(msg){ box.innerHTML = msg; box.style.display = ''; }
+      }
+    }
   }
   // Invio automatico del riepilogo della seduta di coerenza fatta con la FASCIA.
   // Silenzioso e non bloccante: parte solo con codice paziente + consenso espresso.
@@ -2741,9 +3519,60 @@ const HRV = (() => {
     for(const o of rr){ if(o.ph===p && o.rr>300 && o.rr<2000) n++; }
     return n;
   }
+  // Stato del segnale in tempo reale. Serve alla schermata del test clinico, che per
+  // scelta clinica non mostra né numeri né onda: senza questo, una fascia che ha
+  // smesso di trasmettere è del tutto invisibile al paziente (il countdown e la sfera
+  // girano su performance.now(), indipendenti dalla fascia). silentMs = da quanti ms
+  // non arriva un battito.
+  function signalState(){
+    return { connected: connected, rrSeen: rrSeen,
+             silentMs: lastBeatAt ? (performance.now() - lastBeatAt) : Infinity };
+  }
+  // Durata A CRONOMETRO di ogni fase, misurata da TestMode e registrata qui perché
+  // finisca nell'export. Il CSV riportava finora solo la somma degli RR, cioè il tempo
+  // COPERTO DAI BATTITI: con quella sola, una registrazione che perde battiti è
+  // indistinguibile da una fase più corta, e il difetto si scopre solo ragionandoci sopra.
+  let phaseClock = {};
+  function setPhaseClock(ph, ms){ if(ph && ms > 0) phaseClock[ph] = Math.round(ms); }
+  // Soglia professionale: 5 minuti o 300 IBI (dispensa Master HRV cap. 4). Il criterio
+  // vero sono i battiti; sotto questa soglia le frequenze, VLF in testa, non si stimano.
+  const TEST_BEATS_MIN = 300;
+  // Controllo di validità del test appena registrato: elenca i problemi che rendono i
+  // dati inutilizzabili. Lista vuota = test valido. Nato dal test del 01/08/2026, perso
+  // perché la fascia ha smesso di trasmettere a metà tonico senza che nulla lo segnalasse
+  // e il file è partito lo stesso, apparentemente regolare.
+  // Niente virgole nei messaggi: finiscono in una cella del CSV, che non è quotato.
+  //
+  // Due gravità, e la distinzione conta. `grave:true` = qualcosa si è ROTTO durante la
+  // registrazione (buchi nei battiti, fase vuota): l'invio automatico si ferma.
+  // `grave:false` = registrazione integra ma sotto lo standard, che è il caso del
+  // bradicardico arrivato al tetto degli 8 minuti senza raggiungere i 300 battiti:
+  // lì non è andato storto niente e bloccare l'invio ogni volta sarebbe gridare al
+  // lupo — la nota si scrive nel file e sullo schermo, ma il test parte.
+  function testIssues(){
+    const out = [];
+    const conta   = p => rr.filter(o=>o.ph===p).length;
+    const coperti = p => rr.filter(o=>o.ph===p).reduce((a,o)=>a+o.rr, 0);
+    const nTon = conta('tonic'), nFas = conta('phasic');
+    [['tonic','tonica'],['phasic','fasica']].forEach(([p,nome])=>{
+      const clock = phaseClock[p];
+      if(!clock) return;
+      const persi = clock - coperti(p);
+      if(persi > 20000)
+        out.push({ grave:true, t:'Fase '+nome+': '+Math.round(persi/1000)+' s senza battiti su '
+                 +Math.round(clock/1000)+' s di registrazione — la fascia ha smesso di trasmettere durante il test' });
+    });
+    if(phaseClock.phasic && nFas < 40)
+      out.push({ grave:true, t:'Fase fasica: solo '+nFas+' battiti registrati — non è analizzabile' });
+    if(nTon && nTon < TEST_BEATS_MIN)
+      out.push({ grave:false, t:'Fase tonica: '+nTon+' battiti registrati sui '+TEST_BEATS_MIN
+               +' richiesti dallo standard — le frequenze (VLF in testa) vanno lette con prudenza' });
+    return out;
+  }
   function beginTest(code, sex, age, pop){
     testCode = code || ''; testPhase = null; consentMark = '';
     testSex = sex || ''; testAge = (age!=null?String(age):''); testPop = pop || '';
+    phaseClock = {};
     rr = []; tcum = 0; paused = false; capturing = true;
     cohRatio = null; cohPct = null; cohSum = 0; cohPctSum = 0; cohPctMax = 0; cohN = 0; cohCoherentN = 0; lastCohAt = 0;
     updateCoherenceUI();
@@ -2756,6 +3585,51 @@ const HRV = (() => {
     rr = []; tcum = 0; paused = false; capturing = true;
   }
   function endMorning(){ capturing = false; testPhase = null; return rr.map(o=>o.rr); }
+  // Stato di attivazione (Stress Index) del solo tratto tonico — per il feedback
+  // motivazionale al paziente a fine test. Stesso filtro artefatti del resto dell'app.
+  function tonicStress(){
+    const series = rr.filter(o => o.ph === 'tonic');
+    if(series.length < 60) return null;
+    const b = analyzeBlock(series);
+    if(!b || !b.time || !(b.time.sdnn > 0) || !(b.time.meanNN > 0)) return null;
+    return { sdnn: b.time.sdnn, meanNN: b.time.meanNN,
+             keptPct: b.quality.keptPct, kept: b.quality.kept,
+             reliable: b.quality.keptPct >= 90 && b.quality.kept >= 150 };
+  }
+  // Coerenza media di un tratto con la STESSA metodica dell'HRV Self Coherence:
+  // finestra scorrevole di 64 s a passo 5 s mediata; finestra unica se il tratto è
+  // più corto (il fasico dura 1'). Il grezzo va calibrato su scala emWave col fattore
+  // 1,25 ricavato dai 49 test appaiati: la soglia dell'80% della dispensa è su QUELLA
+  // scala, non sulla nostra — senza calibrazione il criterio sarebbe applicato male.
+  const COH_CAL_EMWAVE = 1.25;
+  function cohMeanPct(series){
+    const kept = filterSeries(series).filter(o=>o.kept);
+    if(kept.length < 16) return null;
+    const t0 = kept[0].tcum, tEnd = kept[kept.length-1].tcum;
+    const out = [];
+    if(tEnd - t0 <= COH_WIN_MS){
+      const c = coherenceCore(kept.map(o=>o.rr)); if(c) out.push(c.pct);
+    } else {
+      for(let s=t0; s+COH_WIN_MS<=tEnd; s+=5000){
+        const seg = kept.filter(o=>o.tcum>=s && o.tcum<=s+COH_WIN_MS).map(o=>o.rr);
+        const c = seg.length>=16 ? coherenceCore(seg) : null;
+        if(c) out.push(c.pct);
+      }
+    }
+    if(!out.length) return null;
+    return Math.min(100, (out.reduce((a,b)=>a+b,0)/out.length) * COH_CAL_EMWAVE);
+  }
+  // Metriche di una fase per il confronto tonico→fasico (test respiratorio Harmat).
+  function phaseStats(ph){
+    const series = rr.filter(o => o.ph === ph);
+    if(series.length < 40) return null;
+    const b = analyzeBlock(series);
+    if(!b || !b.time || !(b.time.sdnn > 0) || !(b.time.rmssd > 0)) return null;
+    return { sdnn: b.time.sdnn, rmssd: b.time.rmssd, hr: b.time.meanHR,
+             coh: cohMeanPct(series),
+             keptPct: b.quality.keptPct, kept: b.quality.kept,
+             reliable: b.quality.keptPct >= 90 && b.quality.kept >= 45 };
+  }
   // Metriche + colonne IBI/attributo per una fase (emWave-compatibile).
   function phaseMeta(beats){
     const filt = filterSeries(beats);              // {tcum,rr,kept}
@@ -2814,7 +3688,13 @@ const HRV = (() => {
       // del tonico è variabile (si adatta alla FC per arrivare a 300 IBI) e SDNN
       // dipende dalla durata, quindi il confronto fra test va fatto sapendolo.
       ['Battiti registrati',    s => s.m.ibi.length ],
+      // Due durate, e vanno lette insieme: "Durata fase" è la somma degli RR, cioè il
+      // tempo COPERTO DAI BATTITI; "Durata a cronometro" è quanto è durata davvero la
+      // fase. Se la seconda è molto più lunga della prima, in mezzo la fascia ha smesso
+      // di trasmettere e la registrazione è incompleta anche se il file sembra regolare.
       ['Durata fase (s)',       s => num(s.m.durS,0) ],
+      ['Durata a cronometro (s)', s => { const k = s.type==='Deep Breathing' ? 'phasic' : 'tonic';
+                                         return phaseClock[k] != null ? Math.round(phaseClock[k]/1000) : ''; } ],
       ['Soglia 300 IBI',        s => s.type==='Deep Breathing' ? 'n/a (fasico)'
                                      : (s.m.ibi.length>=300 ? 'raggiunta' : 'NON raggiunta') ],
       ['Consenso trattamento',  ()=> consentMark ]
@@ -2824,6 +3704,18 @@ const HRV = (() => {
       const row = new Array(ncol).fill('');
       row[0] = label;
       sess.forEach((s,i)=>{ row[1+i*2] = fn(s); });
+      rows.push(row);
+    }
+    // Avvisi in chiaro dentro il file: un problema di registrazione deve vedersi
+    // aprendo il CSV, non solo sullo schermo del paziente al momento del test.
+    // Etichetta non nota al parser dell'HRV test → ignorata all'importazione.
+    {
+      const avvisi = testIssues();
+      const row = new Array(ncol).fill('');
+      row[0] = 'Avvisi';
+      row[1] = avvisi.length
+        ? avvisi.map(a => (a.grave ? 'GRAVE: ' : 'nota: ') + a.t).join(' · ').replace(/,/g, ';')
+        : 'nessuno';
       rows.push(row);
     }
     const hrow = new Array(ncol).fill('');
@@ -2856,10 +3748,13 @@ const HRV = (() => {
   // Invio diretto al Drive del medico via Apps Script (se configurato). Niente
   // preflight CORS: corpo url-encoded + no-cors. La risposta è opaca, quindi il
   // successo è "la richiesta è partita"; in caso di errore di rete → fallback share.
-  async function uploadToDoctor(csv, fname){
+  // `code` esplicito per il rinvio di un test messo da parte: a quel punto l'app e'
+  // stata riaperta e `testCode` e' vuoto (o gia' sovrascritto dal test del mattino),
+  // e senza codice la riga del registro invii del medico resterebbe anonima.
+  async function uploadToDoctor(csv, fname, code){
     if(!DOCTOR_UPLOAD_URL) return false;
     const body = new URLSearchParams({
-      fname, data: csv, code: testCode || '',
+      fname, data: csv, code: (code || testCode || ''),
       consent: '1', ts: new Date().toISOString()
     });
     await fetch(DOCTOR_UPLOAD_URL, { method:'POST', mode:'no-cors', body });
@@ -2903,6 +3798,7 @@ const HRV = (() => {
       sendStatus('Invio in corso…');
       try{
         await uploadToDoctor(built.csv, built.fname);
+        outboxClear();                       // consegnato: la copia di riserva non serve piu'
         sendStatus('Dati inviati al medico ✓');
         return true;
       }catch(e){
@@ -2910,7 +3806,7 @@ const HRV = (() => {
       }
     }
     const ok = await shareCSV(built.csv, built.fname);
-    if(ok) sendStatus('Scegli come inviare il file al medico (Drive, AirDrop, ecc.).');
+    if(ok){ outboxClear(); sendStatus('Scegli come inviare il file al medico (Drive, AirDrop, ecc.).'); }
     return ok;
   }
   // Compatibilità: vecchio export = download diretto.
@@ -2920,6 +3816,46 @@ const HRV = (() => {
     dl(built.fname, built.csv, 'text/csv');
     status('File del test esportato: '+built.fname+'.');
     return true;
+  }
+
+  /* ---- Cassetta dei test non inviati -------------------------------------
+     Il test clinico era l'UNICO test dell'app senza storico locale: i battiti
+     vivevano solo nella memoria della pagina, e una chiusura li cancellava senza
+     lasciare traccia. Tre tonici persi cosi' (1 ago, due il 9 ago 2026).
+     Qui il CSV gia' costruito viene messo da parte appena il test finisce, PRIMA
+     di qualsiasi tentativo di invio. Se l'invio non parte — app chiusa, rete
+     assente, avviso di registrazione incompleta lasciato in sospeso — il file
+     resta e si puo' rispedire al giro dopo. Si svuota solo a invio riuscito.
+     Si conserva il CSV, non i battiti: e' esattamente cio' che andrebbe spedito,
+     quindi il rinvio non ricalcola nulla e non puo' divergere dall'originale. */
+  const OUTBOX_KEY = 'respiroPacer.testOutbox.v1';
+  function outboxSave(){
+    const built = buildEmwaveCSV();
+    if(!built) return false;
+    try{
+      localStorage.setItem(OUTBOX_KEY, JSON.stringify({
+        ts: Date.now(), fname: built.fname, csv: built.csv, code: testCode || '' }));
+    }catch(e){ return false; }   // quota piena: meglio proseguire che bloccare il test
+    return true;
+  }
+  function outboxGet(){
+    try{
+      const o = JSON.parse(localStorage.getItem(OUTBOX_KEY) || 'null');
+      return (o && o.csv && o.fname) ? o : null;
+    }catch(e){ return null; }
+  }
+  function outboxClear(){ try{ localStorage.removeItem(OUTBOX_KEY); }catch(e){} }
+  // Rinvio di un test messo da parte in una sessione precedente. NON ricostruisce il
+  // CSV dai battiti (che non ci sono piu'): rispedisce il file salvato tale e quale.
+  async function outboxSend(){
+    const o = outboxGet(); if(!o) return false;
+    if(DOCTOR_UPLOAD_URL){
+      try{ await uploadToDoctor(o.csv, o.fname, o.code); outboxClear(); return true; }
+      catch(e){ /* rete assente: si ripiega sulla condivisione */ }
+    }
+    const ok = await shareCSV(o.csv, o.fname);   // false solo se l'utente annulla
+    if(ok) outboxClear();
+    return ok;
   }
 
   /* ======================= Modalità Risonanza ======================= */
@@ -3075,12 +4011,24 @@ const HRV = (() => {
     p.style.display = '';
     p.scrollIntoView({behavior:'smooth', block:'nearest'});
   }
+  /* Colonne LF % e Total Power aggiunte il 01/08/2026 (audit dei numeri clinici).
+     Perche': la fonte (Lez. 7) definisce la risonanza come il ritmo che
+     «massimizza la coerenza psicofisiologica e il TOTAL POWER dell'HRV — con la
+     componente LF che supera il 90% del totale». La tabella mostrava LF, picco,
+     HF e LF/HF: mancavano proprio i due numeri con cui la fonte riconosce la
+     risonanza, quindi il criterio non era verificabile a occhio.
+     La LF % >= 90 e' evidenziata: e' il segno, secondo la fonte, che la persona
+     era davvero in risonanza a quella tappa. Non cambia la scelta della tappa
+     migliore, che resta sul picco di LF (vedi nota sotto la tabella). */
   function appendResonanceRow(b){
     const tb = el('resTableBody'); if(!tb) return;
     const f = b.freq || {};
     const g = (v,d)=>(v==null||!isFinite(v))?'—':v.toFixed(d==null?0:d);
+    const lfPctCell = (f.lfPct==null || !isFinite(f.lfPct)) ? '—'
+      : (f.lfPct>=90 ? '<b style="color:#1B549B">'+f.lfPct.toFixed(1)+' %</b>' : f.lfPct.toFixed(1)+' %');
     const tr = document.createElement('tr'); tr.dataset.idx = b.idx;
     tr.innerHTML = '<td>'+(b.idx+1)+'</td><td>'+g(b.sec,1)+'</td><td>'+g(b.rate,1)+'</td><td>'+g(f.lf,0)+
+      '</td><td>'+lfPctCell+'</td><td>'+g(f.totalPower,0)+
       '</td><td>'+(f.lfPeakHz?f.lfPeakHz.toFixed(3):'—')+'</td><td>'+g(f.hf,0)+'</td><td>'+g(f.lfhf,2)+'</td><td>'+b.nBeats+'</td>';
     tb.appendChild(tr);
   }
@@ -3088,7 +4036,11 @@ const HRV = (() => {
     const best = st.best;
     if(best){ el('resTableBody').querySelectorAll('tr').forEach(r=>{ r.classList.toggle('best', +r.dataset.idx===best.idx); }); }
     el('resVerdict').innerHTML = best
-      ? 'Frequenza di risonanza stimata: <b>'+best.sec.toFixed(1).replace('.',',')+' s/lato</b> ('+best.rate.toFixed(1)+' atti/min) — picco LF più alto ('+(best.freq?Math.round(best.freq.lf):'?')+' ms²).'
+      ? 'Frequenza di risonanza stimata: <b>'+best.sec.toFixed(1).replace('.',',')+' s/lato</b> ('+best.rate.toFixed(1)+' atti/min) — picco LF più alto ('+(best.freq?Math.round(best.freq.lf):'?')+' ms²)'
+        + ((best.freq && isFinite(best.freq.lfPct))
+            ? ', LF <b>'+best.freq.lfPct.toFixed(1)+'%</b> del totale'
+              + (best.freq.lfPct>=90 ? ' — sopra il 90% indicato dalla fonte.' : ' — <b>sotto il 90%</b> indicato dalla fonte: rivedere l\'esecuzione prima di considerarla una vera risonanza.')
+            : '.')
       : 'Nessun blocco con dati sufficienti per stimare la risonanza (servono ≥30 battiti utili per frequenza).';
   }
   /* ---- Invio al medico (una riga + foto per blocco; verdetto a fine test) ---- */
@@ -3137,7 +4089,7 @@ const HRV = (() => {
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v68';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v74';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
@@ -3145,8 +4097,10 @@ const HRV = (() => {
     updateConnUI();
   }
   return { init, sessionStart, sessionEnd, setPaused,
-           isReady, recentHR, phaseBeats, beginTest, setTestPhase, endTest, exportEmwave,
-           sendToDoctor, setConsent, beginMorning, endMorning, cohOf: coherenceCore,
+           isReady, recentHR, phaseBeats, signalState, setPhaseClock, testIssues,
+           beginTest, setTestPhase, endTest, exportEmwave,
+           outboxSave, outboxGet, outboxSend, outboxClear,
+           sendToDoctor, setConsent, beginMorning, endMorning, tonicStress, phaseStats, cohOf: coherenceCore,
            uploadCoherence, uploadAlpha, uploadReadiness, hasUploadUrl, shareOrDl,
            resonanceStart, resonanceStepBlock, resonanceEnd,
            liveRR: ()=> rr.map(o=>o.rr) };
@@ -3215,6 +4169,12 @@ const TestMode = (() => {
     saveProfile({ code, sex, age, pop });   // ricorda i dati per i test successivi
     pending = { code, sex, age, pop };      // la cattura parte solo dopo la stabilizzazione
     document.body.dataset.hrvTesting = '1';
+    // Ripulisco spia e avvisi del test precedente: uno stato vecchio a schermo
+    // sarebbe peggio che nessuno stato.
+    { const w = el('hrvTestWarn'); if(w){ w.hidden = true; w.innerHTML = ''; } }
+    { const a = el('hrvTestAlarm'); if(a) a.hidden = true; }
+    { const b = el('hrvTestSig');   if(b){ b.hidden = true; b.dataset.state = 'ok'; } }
+    sigAt = 0;
     try{ Voice.setEnabled(true); Voice.unlock(); }catch(e){}   // sblocco voce nel gesto del tap
     try{ Audio.keepAliveOn(); }catch(e){}                      // sblocca l'audio: i suoni ritardati devono poter partire
     try{ WakeLock.acquire(); }catch(e){}
@@ -3273,11 +4233,45 @@ const TestMode = (() => {
     const need = (TONIC_MIN_BEATS + 10) * (elapsed / n);  // ms totali al ritmo osservato
     tonicMs = Math.min(TONIC_MAX_MS, Math.max(tonicMs, Math.ceil(need/10000)*10000));
   }
+  // Spia del segnale: unico riscontro visibile durante il test, e di proposito solo
+  // TECNICO (battiti raccolti + stato della trasmissione), mai un valore HRV.
+  // Aggiornata ~4 volte al secondo, non a ogni frame.
+  const SIG_WARN_MS = 5000, SIG_BAD_MS = 10000;
+  let sigAt = 0;
+  function renderSignal(){
+    const now = performance.now();
+    if(now - sigAt < 250) return;
+    sigAt = now;
+    const box = el('hrvTestSig'); if(!box) return;
+    box.hidden = false;
+    const s = HRV.signalState();
+    const n = (phase==='tonic' || phase==='phasic') ? HRV.phaseBeats(phase) : 0;
+    el('hrvTestBeats').textContent = (phase==='stab') ? '' : ('· '+n+(n===1?' battito':' battiti'));
+    let stato = 'ok', testo = 'segnale regolare';
+    if(!s.connected || s.silentMs >= SIG_BAD_MS){ stato = 'bad'; testo = 'FASCIA NON COLLEGATA'; }
+    else if(!s.rrSeen || s.silentMs >= SIG_WARN_MS){ stato = 'warn'; testo = 'segnale incerto'; }
+    box.dataset.state = stato;
+    el('hrvTestSigTxt').textContent = testo;
+    const al = el('hrvTestAlarm'); if(!al) return;
+    if(stato === 'bad'){
+      al.hidden = false;
+      al.innerHTML = 'La fascia ha smesso di trasmettere: da qui in avanti <b>non si sta registrando nulla</b>. '
+        + 'Controlla che sia indossata con gli elettrodi inumiditi e che <b>nessun\'altra app</b> la stia usando. '
+        + 'Se non riparte entro pochi secondi conviene interrompere e rifare il test.';
+    } else { al.hidden = true; }
+  }
   function loop(){
     const now = performance.now(), elapsed = now - t0;
+    // checkTonicBeats PRIMA di leggere la durata, perché può allungare tonicMs.
+    // Leggendola prima, `dur` restava fermo al valore vecchio: se la pagina rimaneva
+    // indietro e riprendeva a tempo già scaduto, checkTonicBeats portava tonicMs al
+    // tetto e il controllo finale — che chiede tonicMs < TONIC_MAX_MS — non allungava
+    // più niente, chiudendo il tonico alla durata annunciata con molti meno di 300
+    // battiti. La rete di sicurezza si annullava da sola.
+    if(phase==='tonic') checkTonicBeats(elapsed, tonicMs);
     const dur = phase==='stab' ? STAB_MS : (phase==='tonic' ? tonicMs : PHASIC_MS);
     el('hrvTestCount').textContent = fmt(dur - elapsed);
-    if(phase==='tonic') checkTonicBeats(elapsed, dur);
+    renderSignal();
     if(phase==='phasic'){
       const ph = (elapsed % BREATH_MS) / BREATH_MS;          // 0..1
       const full = (1 - Math.cos(2*Math.PI*ph)) / 2;          // 0..1..0
@@ -3294,8 +4288,10 @@ const TestMode = (() => {
           tonicMs = Math.min(TONIC_MAX_MS, tonicMs + 20000);
           raf = requestAnimationFrame(loop); return;
         }
+        HRV.setPhaseClock('tonic', elapsed);   // durata REALE della fase, per l'export
         onTonicEnd(); return;   // NON parte più il fasico da solo: scelta esplicita
       }
+      HRV.setPhaseClock('phasic', elapsed);
       try{ Audio.recEnd(); }catch(e){}
       finish(); return;
     }
@@ -3303,11 +4299,25 @@ const TestMode = (() => {
   }
   // Fine del tonico: fermo il loop, chiudo il tag di fase (i battiti della pausa/countdown
   // restano fuori dall'export) e mostro la scelta "Concludi" / "Aggiungi fasico".
+  // Tachimetro dello stato di attivazione (Stress Index) del tonico, a fine test.
+  function renderStress(id){
+    const host = el(id); if(!host) return;
+    const ts = (window.HRV && HRV.tonicStress) ? HRV.tonicStress() : null;
+    let html = window.StressGauge ? StressGauge.cardFor(ts) : '';
+    // Report del fasico: solo se la fase è stata davvero eseguita (serve il confronto
+    // col tonico). Chi conclude dopo il solo tonico non vede nulla in più.
+    if(window.PhasicReport && window.HRV && HRV.phaseStats){
+      const fas = HRV.phaseStats('phasic');
+      if(fas) html += PhasicReport.cardFor(HRV.phaseStats('tonic'), fas);
+    }
+    host.innerHTML = html;
+  }
   function onTonicEnd(){
     if(raf){ cancelAnimationFrame(raf); raf=null; }
     HRV.setTestPhase(null);
     try{ Audio.recEnd(); }catch(e){}
     show('choice');
+    renderStress('hrvTestStress');
   }
   // Countdown di preparazione al fasico (15 s) con le raccomandazioni a schermo;
   // negli ultimi ~4 s il pannello si dissolve, poi parte la registrazione fasica.
@@ -3337,9 +4347,45 @@ const TestMode = (() => {
     try{ Audio.keepAliveOff(); }catch(e){}
     try{ speechSynthesis.cancel(); }catch(e){}
   }
+  // Controllo di validità PRIMA dell'invio automatico. Un test con la registrazione
+  // bucata non deve partire da solo: il medico riceverebbe un file all'apparenza
+  // regolare e se ne accorgerebbe solo rifacendo i conti a mano sui battiti.
+  // L'invio resta possibile, ma diventa una scelta esplicita.
   function finish(){
     stopCommon(); show('done');
-    const status = el('hrvSendStatus');
+    // Copia di riserva PRIMA di ogni tentativo di invio: da qui in avanti il test
+    // sopravvive alla chiusura dell'app, qualunque cosa succeda all'invio.
+    try{ HRV.outboxSave(); }catch(e){}
+    renderStress('hrvTestStressDone');
+    const status = el('hrvSendStatus'), sendBtn = el('hrvTestSend'), warn = el('hrvTestWarn');
+    const issues = (window.HRV && HRV.testIssues) ? HRV.testIssues() : [];
+    const gravi  = issues.filter(a => a.grave);
+    if(warn){
+      warn.hidden = !issues.length;
+      warn.classList.toggle('soft', !gravi.length);
+      warn.innerHTML = issues.length
+        ? '<div class="warn-title">' + (gravi.length
+            ? '⚠ Registrazione incompleta — il test non è valido'
+            : 'Nota sulla registrazione') + '</div>'
+          + '<ul>' + issues.map(a => '<li>'+a.t+'</li>').join('') + '</ul>'
+          + '<div class="warn-why">' + (gravi.length
+            ? 'Quasi sempre è la fascia che ha perso il collegamento. Controlla che sia indossata con gli '
+              + 'elettrodi inumiditi e che <b>nessun\'altra app né il Bluetooth del telefono</b> la stiano '
+              + 'tenendo occupata. Conviene <b>ripetere il test</b>.'
+            : 'La registrazione è integra: il battito lento non ha permesso di arrivare ai 300 battiti '
+              + 'nemmeno negli 8 minuti massimi. Il test è stato inviato lo stesso.') + '</div>'
+        : '';
+    }
+    if(gravi.length){
+      if(sendBtn) sendBtn.textContent = 'Invia lo stesso al medico';
+      if(status){
+        status.style.color = 'var(--hold)';
+        status.innerHTML = 'Invio <b>non</b> automatico: questa registrazione è incompleta. Ripeti il test, oppure invialo lo stesso col tasto qui sotto.';
+      }
+      return;
+    }
+    if(sendBtn) sendBtn.textContent = 'Invia i dati al medico';
+    if(status) status.style.color = '';
     if(SendConsent.given()){
       HRV.setConsent(true);
       if(status) status.textContent = 'Invio dei dati al medico…';
@@ -3351,6 +4397,41 @@ const TestMode = (() => {
   function abort(){
     if(!confirm('Interrompere il test? I dati raccolti finora andranno persi.')) return;
     stopCommon(); show('setup');
+  }
+  /* Barra "test in sospeso": un test registrato che non e' mai arrivato al medico.
+     Compare all'apertura dell'app e resta finche' non parte o non lo si scarta.
+     E' l'unico modo per accorgersi di un invio mai avvenuto: la risposta del
+     server e' opaca (no-cors) e l'app non puo' leggerla, quindi il silenzio non
+     distingue "consegnato" da "mai partito". */
+  function renderPending(){
+    const host = el('hrvTestPending'); if(!host) return;
+    const o = (window.HRV && HRV.outboxGet) ? HRV.outboxGet() : null;
+    if(!o){ host.hidden = true; host.innerHTML = ''; return; }
+    const d = new Date(o.ts);
+    const quando = d.toLocaleDateString('it-IT', {day:'numeric', month:'long'})
+                 + ' alle ' + d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+    host.hidden = false;
+    host.innerHTML = '<b>⚠️ Hai un test non ancora inviato</b> — registrato il ' + quando + '.'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">'
+      + '<button type="button" class="btn" id="hrvTestPendingSend" style="margin:0">Invia ora al medico</button>'
+      + '<button type="button" class="btn ghost" id="hrvTestPendingDrop" style="margin:0">Scarta</button></div>';
+    el('hrvTestPendingSend').addEventListener('click', async ev => {
+      const b = ev.currentTarget;
+      if(!SendConsent.given()){
+        ConsentUI && ConsentUI.renderBar();
+        alert('L\'invio dei dati non è attivo. Attivalo dalla barra "Invio dei dati al medico" in cima all\'app.');
+        return;
+      }
+      b.disabled = true; b.textContent = 'Invio in corso…';
+      let ok = false;
+      try{ ok = await HRV.outboxSend(); }catch(e){}
+      if(ok){ host.innerHTML = '<b>Test inviato al medico ✓</b>'; setTimeout(renderPending, 2500); }
+      else { b.disabled = false; b.textContent = 'Invia ora al medico'; }
+    });
+    el('hrvTestPendingDrop').addEventListener('click', ()=>{
+      if(!confirm('Scartare il test del '+quando+'?\n\nNon è mai arrivato al medico e non sarà più recuperabile.')) return;
+      HRV.outboxClear(); renderPending();
+    });
   }
   function init(){
     if(!el('hrvTestStart')) return;
@@ -3372,9 +4453,11 @@ const TestMode = (() => {
       try{ await HRV.sendToDoctor(); } finally { sendBtn.disabled = false; }
     });
     el('hrvTestNew').addEventListener('click', ()=>{
-      const ss = el('hrvSendStatus'); if(ss) ss.textContent = '';
-      show('setup');
+      const ss = el('hrvSendStatus'); if(ss){ ss.textContent = ''; ss.style.color = ''; }
+      const w  = el('hrvTestWarn');   if(w){ w.hidden = true; w.innerHTML = ''; }
+      renderPending(); show('setup');
     });
+    renderPending();
     // Scelta a fine tonico: concludere (invio del solo tonico) o aggiungere il fasico.
     el('hrvTestConclude') && el('hrvTestConclude').addEventListener('click', finish);
     el('hrvTestAddPhasic') && el('hrvTestAddPhasic').addEventListener('click', startPhasicPrep);
@@ -3703,18 +4786,34 @@ const MorningTest = (() => {
     sendReadiness({rmssd, ln, hr:Math.round(hr), pos:ctx.pos, sleep:ctx.sleep, yest:ctx.yest, pct},
                   {big:v?v.big:'', baseRmssd:b?Math.exp(b.m):null, inBase:!offPos});
   }
-  function baseline(h){
+  /* Le misure che entrano DAVVERO nel riferimento. Estratta da baseline() perche' il
+     contatore a schermo deve poter mostrare lo STESSO insieme: contandone uno piu'
+     largo diceva "8/7" continuando a non dare il verdetto, e calcolava "ancora 0
+     misure" — un traguardo che non poteva essere raggiunto misurando. (9 ago 2026) */
+  function baseVals(h){
     // Solo le misure fatte nella posizione di riferimento: da sdraiato l'RMSSD è più alto
     // e mescolarle farebbe oscillare il verdetto con la postura, non con la readiness.
     const ref=posRef();
-    if(!ref) return null;
+    if(!ref) return { vals:[], ref:'' };
     const cutoff=Date.now()-WINDOW_DAYS*864e5;
-    const vals=h.filter(e=>!e.lowq && e.pos===ref && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln);
+    return { vals: h.filter(e=>!e.lowq && e.pos===ref && new Date(e.d+'T00:00').getTime()>=cutoff).map(e=>e.ln), ref };
+  }
+  function baseline(h){
+    const vals=baseVals(h).vals;
     if(vals.length<MIN_READINGS) return null;
     const m=vals.reduce((s,x)=>s+x,0)/vals.length;
     const sd=Math.sqrt(vals.reduce((s,x)=>s+(x-m)*(x-m),0)/(vals.length-1));
     return { m, sd, n:vals.length };
   }
+  /* ⚠️ ORIGINE DELLE SOGLIE — dichiarata il 01/08/2026 (audit dei numeri clinici).
+     I confini -0,5 SD e -1,0 SD dalla baseline personale di lnRMSSD sono
+     l'approccio standard della letteratura sull'HRV nello sport (smallest
+     worthwhile change), ma NON sono stati trovati in nessuna fonte della
+     knowledge base di Federico: la dispensa Master HRV SC non tratta la
+     readiness quotidiana. Restano quindi una scelta operativa, non un
+     normativo tracciato. Da tracciare su una fonte reale o da sostituire.
+     Nota: il confronto e' con la SUA baseline, non con una popolazione — e'
+     la ragione per cui questa scelta e' meno rischiosa di una soglia assoluta. */
   function classify(ln, b){
     if(ln >= b.m-0.5*b.sd) return { big:'Allenabile', col:'#1b8a5a', sub:'Il sistema nervoso ha recuperato: oggi puoi sostenere carico e picchi di allenamento.' };
     if(ln >= b.m-1.0*b.sd) return { big:'Alleggerire', col:'#e8820c', sub:'Recupero solo parziale: allenati in leggerezza, evita i picchi di intensità.' };
@@ -3747,10 +4846,23 @@ const MorningTest = (() => {
       renderTrend(h, b); return;
     }
     if(!b){
-      const nValid=h.filter(e=>!e.lowq).length, need=Math.max(0,MIN_READINGS-nValid);
-      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+nValid+'/'+MIN_READINGS+'</div>'
+      // Si conta l'insieme che serve al verdetto, non tutte le misure valide: altrimenti
+      // il contatore supera il traguardo mentre il verdetto continua a non arrivare.
+      const bv=baseVals(h), nBase=bv.vals.length, need=Math.max(1, MIN_READINGS-nBase);
+      const fuori=h.filter(e=>!e.lowq).length-nBase;
+      host.innerHTML='<div class="morn-collect">📈 Raccolta dati: '+nBase+'/'+MIN_READINGS+'</div>'
         +'<div class="morn-rmssd">RMSSD di oggi: <b>'+today.rmssd.toFixed(0)+'</b> ms</div>'
-        +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>';
+        +'<div class="morn-sub">Ancora '+need+' '+(need===1?'misura':'misure')+' e l\'app inizierà a dirti se sei in allenabilità, alleggerimento o recupero. Misura ogni mattina alla stessa ora.</div>'
+        // Se ci sono misure valide che restano fuori, va detto PERCHE': senza questa riga
+        // il contatore sembra fermo senza motivo e non si capisce cosa fare.
+        +(fuori>0
+          ? '<div class="morn-sub" style="color:var(--hold)">Hai altre <b>'+fuori+'</b> '
+            +(fuori===1?'misura valida che resta fuori':'misure valide che restano fuori')
+            +' dal riferimento: '+(bv.ref
+                ? 'sono state fatte in una posizione diversa da <b>'+bv.ref+'</b>, oppure hanno più di '+WINDOW_DAYS+' giorni. Contano solo quelle fatte '+bv.ref+'.'
+                : 'non hanno una posizione registrata. La prossima misura fisserà la posizione di riferimento.')
+            +'</div>'
+          : '');
       renderTrend(h, null); return;
     }
     const v=classify(today.ln, b), baseRmssd=Math.exp(b.m);
@@ -4007,7 +5119,21 @@ const AlphaTest = (() => {
   function includeAll(){ Beats.includeAll(beats); drawTaco(); updateStat(); }
 
   /* ---- calcolo, interpretazione, storico ---- */
+  /* ⚠️ ZONE RIANCORATE ALLA FONTE il 01/08/2026 (audit dei numeri clinici).
+     Prima erano 0,9 / 0,75 / 0,5 SENZA alcun limite superiore: tutto cio' che
+     stava sopra 0,9 finiva in verde «Fisiologica», compreso un alfa1 di 1,4.
+     La dispensa (cap. 4 p. 43) dice che «valori superiori a 1,2 ... risultano
+     spesso indicativi di un sistema in compensazione». E' lo stesso difetto
+     corretto nell'app self-coherence il 31/07 (dove il confine era 1,5), qui in
+     forma piu' larga perche' il tetto mancava del tutto.
+     Sopra 2,0 la fonte indica i ritmi di respirazione coerente: a riposo
+     significa quasi sempre che la misura e' stata fatta respirando in modo
+     guidato, e allora il valore non e' interpretabile come alfa1 a riposo.
+     Al paziente il tono resta neutro e rimanda al medico: non e' un allarme,
+     e' un dato da contestualizzare. */
   function zoneA(a){
+    if(a>2.0)   return { txt:'Non interpretabile', col:'#7a8a90', sub:'Valore tipico di chi sta respirando in modo guidato. Questa misura va fatta a respiro spontaneo, senza seguire un ritmo: ripetila lasciando andare il respiro come viene.' };
+    if(a>1.2)   return { txt:'Molto regolare', col:'#e8820c', sub:'Oggi il battito risulta molto regolare a riposo. Non è di per sé un problema, ma è un dato che va letto nel contesto: parlane col tuo medico, che lo vede insieme al resto delle misure.' };
     if(a>=0.9)  return { txt:'Fisiologica', col:'#1b8a5a', sub:'Dinamica del battito ben correlata: organizzazione autonomica tipica del riposo sano.' };
     if(a>=0.75) return { txt:'Ridotta',     col:'#e8820c', sub:'α1 sotto il riposo ottimale: possibile carico residuo, affaticamento o recupero incompleto.' };
     if(a>=0.5)  return { txt:'Bassa',       col:'#d9531e', sub:'Bassa correlazione a riposo (zona soglia aerobica): affaticamento marcato o stress — valuta il contesto.' };
@@ -4034,7 +5160,12 @@ const AlphaTest = (() => {
       +'<div class="alpha-scale-tick" style="left:'+posOf(rec.alpha).toFixed(1)+'%"></div></div>'
       +'<div class="morn-rmssd" style="margin-top:22px">FC media <b>'+rec.hr+'</b> bpm · '+rec.nkept+' battiti · '+rec.nexcl+' esclusi</div>'
       +'<div class="morn-sub">'+z.sub+'</div>'
-      +'<div class="morn-sub" style="margin-top:8px;font-size:.78rem">Riferimenti: riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5. Indice sensibile agli artefatti e con variabilità individuale — leggilo nel contesto clinico, non come valore assoluto.</div>';
+      /* Avviso sotto i 500 IBI: la dispensa (cap. 4) indica dati migliori sopra
+         i 500 intervalli. Il blocco duro resta a 100 (sotto non si calcola
+         nulla di sensato), ma fra 100 e 500 il valore usciva senza alcuna
+         riserva. Stesso avviso aggiunto nell'app self-coherence il 31/07. */
+      +(rec.nkept<500 ? '<div class="morn-sub" style="margin-top:8px">⚠️ Misura calcolata su <b>'+rec.nkept+' battiti</b>: questo indice dà risultati più stabili sopra i 500. Prendila come indicazione di massima e, se ti interessa il valore preciso, ripeti la misura più lunga.</div>' : '')
+      +'<div class="morn-sub" style="margin-top:8px;font-size:.78rem">Riferimenti: riposo ~1,0 · soglia aerobica 0,75 · soglia anaerobica 0,5 · sopra 1,2 il battito è molto regolare e va contestualizzato. Indice sensibile agli artefatti e con variabilità individuale — leggilo nel contesto clinico, non come valore assoluto.</div>';
     renderTrend(h);
   }
   function renderTrend(h){
@@ -4090,6 +5221,15 @@ const CameraCoherence = (() => {
   const BREATH_MS = 10000;          // 6 atti/min = risonanza
   const COH_WIN_MS = 64000, RECALC_MS = 2000;
   const BASELINE_MS = 1200;         // detrend: rimuove deriva/respiro, tiene il polso
+  // ── Fase di aggancio (stabilizzazione) ──
+  // Col dito la posizione giusta si trova per tentativi: nei primi secondi il segnale è
+  // sporco e i battiti letti sono inventati. Se la sessione parte subito, quei campioni
+  // finiscono nella media e la coerenza risulta bassa per un problema di presa, non di
+  // fisiologia. Quindi: si registra SOLO dopo che il battito è agganciato in modo stabile.
+  const LOCK_STR   = 0.45;          // forza minima dell'autocorrelazione (0-1) per dire "battito trovato"
+  const LOCK_SPREAD= 6;             // bpm: escursione massima ammessa fra le stime recenti di FC
+  const HOLD_MS    = 5000;          // per quanto deve restare agganciato prima di partire
+  const HINT_MS    = 25000;         // dopo quanto compaiono i suggerimenti e "Avvia comunque"
   let chosenMin = 5;
   let guideMode = 'campana';                    // guida al respiro: 'campana' | 'voce' | 'muto'
   let stream=null, track=null, video=null, canvas=null, cctx=null;
@@ -4100,6 +5240,10 @@ const CameraCoherence = (() => {
   let recentIbis=[];                // ultimi IBI accettati (per scarto outlier)
   let fingerPresent=false, lastPeakT=0;
   let hrAuto=0, hrStrength=0, lastHrCalc=0;   // FC da AUTOCORRELAZIONE (robusta ai falsi picchi) + qualità 0-1
+  let hrHist=[];                    // ultime stime di FC valide (per giudicare la stabilità dell'aggancio)
+  let phase='stab';                 // 'stab' = aggancio in corso · 'run' = sessione che registra
+  let stabT0=0, lockSince=0;        // inizio della fase di aggancio · da quando il battito è agganciato senza interruzioni
+  let qOk=0, qTot=0;                // campioni con segnale buono / campioni totali (qualità della sessione)
   let cohSum=0, cohN=0, cohInZone=0, peakCoh=0, lastBeatAt=0;
   let lastDraw=0;                              // throttle del disegno dei grafici
   let hrSum=0, hrN=0;                          // FC media della sessione (per il report)
@@ -4139,7 +5283,7 @@ const CameraCoherence = (() => {
     try{ const caps=track.getCapabilities&&track.getCapabilities(); if(caps&&caps.torch){ await track.applyConstraints({advanced:[{torch:true}]}); } }catch(e){}
     video = el('camVideo'); video.srcObject=stream; try{ await video.play(); }catch(e){}
     canvas = document.createElement('canvas'); canvas.width=64; canvas.height=48; cctx=canvas.getContext('2d',{willReadFrequently:true});
-    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
+    raw=[]; bpArr=[]; rr=[]; recentIbis=[]; fingerPresent=false; lastPeakT=0; hrAuto=0; hrStrength=0; lastHrCalc=0; hrHist=[]; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; qOk=qTot=0; lastRecalc=0; lastHalf=null; lastBeatAt=0; lastDraw=0;
     sessionWallStart=Date.now();
     const dot=el('camDot'); if(dot) dot.className='cam-dot';
     try{ Voice.unlock(); }catch(e){}   // ridesta il motore (già sbloccato a inizio gesto)
@@ -4147,8 +5291,51 @@ const CameraCoherence = (() => {
     el('camSig').textContent='Avvicina il dito alla fotocamera (copri l\'obiettivo)…';
     el('camHR').textContent='—'; el('camCoh').textContent='—'; el('camZone').textContent='';
     { const bar=el('camCohBar'); if(bar) bar.style.width='0%'; }
+    // Si entra in fase di AGGANCIO: niente timer, niente respiro guidato, niente coerenza.
+    phase='stab'; stabT0=performance.now(); lockSince=0;
+    { const b=el('camStabBox'); if(b) b.style.display='';
+      const s=el('camSessionBox'); if(s) s.style.display='none';
+      const w=el('camStabWarn'); if(w) w.style.display='none';
+      const f=el('camStabForce'); if(f) f.style.display='none';
+      const bar=el('camStabBar'); if(bar) bar.style.width='0%';
+      const m=el('camStabMsg'); if(m) m.textContent='Appoggia il dito sulla fotocamera…';
+      const st=el('camStop'); if(st) st.textContent='Annulla'; }
     show('Run'); t0=performance.now();
     sampleLoop(); orbLoop();
+  }
+
+  /* ---- passaggio da aggancio a sessione vera ---- */
+  // Da qui in poi si registra: azzera tutto ciò che è stato raccolto durante l'aggancio,
+  // così nella coerenza non entra nemmeno un battito della fase di ricerca della posizione.
+  function beginSession(){
+    if(phase==='run') return;
+    phase='run';
+    rr=[]; recentIbis=[]; cohSum=cohN=cohInZone=peakCoh=0; hrSum=hrN=0; qOk=qTot=0;
+    lastRecalc=0; lastHalf=null; lastBeatAt=0;
+    t0=performance.now(); sessionWallStart=Date.now();
+    const b=el('camStabBox'); if(b) b.style.display='none';
+    const s=el('camSessionBox'); if(s) s.style.display='';
+    const st=el('camStop'); if(st) st.textContent='Termina sessione';
+    const bar=el('camCohBar'); if(bar) bar.style.width='0%';
+    el('camCoh').textContent='—'; el('camZone').textContent='';
+    try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
+  }
+
+  /* ---- il battito è agganciato? ---- */
+  // Tre condizioni insieme: dito presente, periodicità forte (autocorrelazione) e FC
+  // STABILE negli ultimi secondi. La stabilità è la parte che conta: un segnale sporco
+  // può dare una periodicità forte per un istante, ma la FC salta di continuo.
+  // strict=true (per PARTIRE): criterio severo, meglio aspettare un secondo in più.
+  // strict=false (per RESTARE agganciati durante la sessione): criterio più permissivo,
+  // altrimenti una micro-oscillazione butterebbe via battiti buoni.
+  function isLocked(strict){
+    const minStr = strict ? LOCK_STR : LOCK_STR-0.12;
+    const maxSpread = strict ? LOCK_SPREAD : LOCK_SPREAD*2;
+    const minN = strict ? 6 : 4, minSpan = strict ? 2000 : 1200;
+    if(!fingerPresent || hrStrength<minStr || !(hrAuto>=40 && hrAuto<=180)) return false;
+    if(hrHist.length<minN || (hrHist[hrHist.length-1].t-hrHist[0].t)<minSpan) return false;
+    let mn=1e9, mx=-1e9; for(const o of hrHist){ if(o.hr<mn) mn=o.hr; if(o.hr>mx) mx=o.hr; }
+    return (mx-mn)<=maxSpread;
   }
 
   /* ---- campionamento PPG e rilevamento battito ---- */
@@ -4165,7 +5352,7 @@ const CameraCoherence = (() => {
   function processSample(t, r, g, bl){
     // Dito presente = obiettivo coperto (predominanza del rosso, con torcia molto luminoso).
     fingerPresent = r>40 && r>g+4 && r>bl+8;
-    if(!fingerPresent){ raw.length=0; bpArr.length=0; hrAuto=0; hrStrength=0; return; }
+    if(!fingerPresent){ raw.length=0; bpArr.length=0; hrAuto=0; hrStrength=0; hrHist.length=0; return; }
     const v = (g>12)? g : r;                                  // VERDE = miglior segnale PPG; ripiego rosso
     raw.push({t,v}); while(raw.length>2 && t-raw[0].t>8000) raw.shift();
     // passa-banda: media corta (~160ms) − media lunga (baseline ~1100ms)
@@ -4173,7 +5360,12 @@ const CameraCoherence = (() => {
     let b=0,bc=0; for(let i=0;i<raw.length;i++){ if(t-raw[i].t<=BASELINE_MS){ b+=raw[i].v; bc++; } } b/=(bc||1);
     bpArr.push({t, bp:lp-b}); while(bpArr.length>2 && t-bpArr[0].t>8000) bpArr.shift();
     // FC robusta via AUTOCORRELAZIONE, ogni 300ms (immune ai falsi picchi)
-    if(t-lastHrCalc>300){ lastHrCalc=t; const e=estimateHR(); hrAuto=e.hr; hrStrength=e.strength; }
+    if(t-lastHrCalc>300){ lastHrCalc=t; const e=estimateHR(); hrAuto=e.hr; hrStrength=e.strength;
+      // storico delle stime buone: una sola stima scadente azzera la serie, così
+      // l'aggancio richiede davvero continuità e non una coincidenza fortunata.
+      if(hrStrength>=LOCK_STR && hrAuto>=40 && hrAuto<=180) hrHist.push({t, hr:hrAuto}); else hrHist.length=0;
+      while(hrHist.length && t-hrHist[0].t>3000) hrHist.shift();
+    }
     // rilevamento battiti per la coerenza, AGGANCIATO alla FC stimata
     if(bpArr.length<5) return;
     let m=0; for(const o of bpArr) m+=o.bp; m/=bpArr.length;
@@ -4182,7 +5374,9 @@ const CameraCoherence = (() => {
     const refr=expIbi?Math.max(300,0.55*expIbi):350;
     const a=bpArr[bpArr.length-3], bb=bpArr[bpArr.length-2], cc=bpArr[bpArr.length-1];
     if(bb.bp>a.bp && bb.bp>=cc.bp && bb.bp> Math.max(0.5, 0.9*std) && (bb.t-lastPeakT)>refr){
-      if(lastPeakT){ acceptBeat(bb.t, bb.t-lastPeakT, expIbi); }
+      // Nella serie RR entrano SOLO i battiti letti con segnale agganciato: un picco
+      // trovato mentre il dito si sta ancora sistemando non è un battito.
+      if(lastPeakT && isLocked(false)){ acceptBeat(bb.t, bb.t-lastPeakT, expIbi); }
       lastPeakT=bb.t;
     }
   }
@@ -4213,8 +5407,51 @@ const CameraCoherence = (() => {
   }
 
   /* ---- loop respiro + coerenza + timer ---- */
+  /* ---- stato del segnale mostrato all'utente (pallino + riga di stato) ---- */
+  function updateSignalUI(locked){
+    const dot=el('camDot');
+    // in fase di aggancio il messaggio è quello della barra: qui si eviterebbe un doppione
+    const sig=el('camSig'); if(sig) sig.style.display=(phase==='stab')?'none':'';
+    if(!fingerPresent){
+      el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
+    } else if(!locked){
+      el('camSig').textContent = (phase==='run')
+        ? '⚠️ Battito perso — risistema il dito: questo tratto non viene conteggiato.'
+        : 'Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
+      el('camHR').textContent='—'; if(dot) dot.className='cam-dot weak';
+    } else {
+      el('camSig').textContent = (phase==='run') ? 'Battito agganciato ✓ — misurazione in corso' : 'Battito agganciato ✓';
+      el('camHR').textContent=Math.round(hrAuto)+' bpm'; if(dot) dot.className='cam-dot ok';
+    }
+  }
+
+  /* ---- fase di aggancio: barra di avanzamento e partenza automatica ---- */
+  function stabTick(now, locked){
+    if(locked){ if(!lockSince) lockSince=now; } else lockSince=0;
+    const held = lockSince ? now-lockSince : 0;
+    const bar=el('camStabBar'); if(bar) bar.style.width=Math.min(100, held/HOLD_MS*100).toFixed(0)+'%';
+    const msg=el('camStabMsg');
+    if(msg){
+      if(!fingerPresent) msg.textContent='Appoggia il dito e copri tutto l\'obiettivo…';
+      else if(!locked)   msg.textContent='Dito rilevato — cerco il battito, tieni fermo…';
+      else               msg.textContent='Battito agganciato ✓ — si parte fra '+Math.max(1, Math.ceil((HOLD_MS-held)/1000))+'…';
+    }
+    if(now-stabT0>HINT_MS && !locked){
+      const w=el('camStabWarn'); if(w) w.style.display='';
+      const f=el('camStabForce'); if(f) f.style.display='';
+    }
+    if(held>=HOLD_MS) beginSession();
+  }
+
   function orbLoop(){
-    const now=performance.now(), elapsed=now-t0;
+    const now=performance.now();
+    const locked=isLocked(phase==='stab');
+    updateSignalUI(locked);
+    // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
+    if(now-lastDraw>80){ lastDraw=now; try{ drawGraphs(now); }catch(e){} }
+    if(phase==='stab'){ stabTick(now, locked); orbRAF=requestAnimationFrame(orbLoop); return; }
+    const elapsed=now-t0;
     // Respiro alla frequenza di RISONANZA impostata nel pacer (non 6/min fisso)
     const bs=(App&&App.breathStateAt)?App.breathStateAt(elapsed):{full:(1-Math.cos(2*Math.PI*(elapsed%BREATH_MS)/BREATH_MS))/2, text:((elapsed%BREATH_MS)/BREATH_MS<0.5?'Inspira':'Espira')};
     const orb=el('camOrb'); if(orb) orb.style.transform='scale('+(0.7+bs.full*0.9).toFixed(3)+')';
@@ -4223,34 +5460,19 @@ const CameraCoherence = (() => {
       if(guideMode==='voce'){ try{ Voice.say(bs.text); }catch(e){} }
       else if(guideMode==='campana'){ try{ phaseName==='inhale'?Audio.ding():Audio.dong(); }catch(e){} }   // ding acuto / dong grave (ottava sotto, lungo)
     }
-    // stato dito / qualità segnale / FC (autocorrelazione: aggancia solo se la
-    // periodicità è forte → niente numeri sballati tipo 163)
-    const dot=el('camDot'), locked=(hrStrength>0.4 && hrAuto>=40 && hrAuto<=180);
-    if(!fingerPresent){
-      el('camSig').textContent='Avvicina il dito alla fotocamera (copri tutto l\'obiettivo).';
-      el('camHR').textContent='—'; if(dot) dot.className='cam-dot';
-    } else if(!locked){
-      el('camSig').textContent='Dito rilevato — aggancio del battito, tieni fermo e premi leggero…';
-      el('camHR').textContent='—'; if(dot) dot.className='cam-dot weak';
-    } else {
-      el('camSig').textContent='Dito rilevato ✓ — misurazione in corso';
-      el('camHR').textContent=Math.round(hrAuto)+' bpm'; if(dot) dot.className='cam-dot ok';
-    }
-    // coerenza ogni 2s
+    // coerenza ogni 2s — i campioni entrano nella media SOLO con battito agganciato
     if(now-lastRecalc>RECALC_MS){
-      lastRecalc=now;
+      lastRecalc=now; qTot++; if(locked) qOk++;
       const tail=[]; for(let i=rr.length-1;i>=0;i--){ if(now-rr[i].t>COH_WIN_MS) break; const x=rr[i].ibi; if(x>=300&&x<=2000) tail.push(x); }
       tail.reverse();
-      const co=(tail.length>=16)?HRV.cohOf(tail):null;
+      const co=(tail.length>=16 && locked)?HRV.cohOf(tail):null;
       if(co){ const z=zoneOf(co.ratio);
         el('camCoh').textContent=Math.round(co.pct); const zEl=el('camZone'); zEl.textContent=z.txt; zEl.style.background=z.col;
         const bar=el('camCohBar'); if(bar) bar.style.width=Math.max(0,Math.min(100,co.pct))+'%';   // stessa barra della schermata con fascia
         cohSum+=co.pct; cohN++; if(co.ratio>=0.5) cohInZone++; if(co.pct>peakCoh) peakCoh=co.pct;
-        if(locked){ hrSum+=hrAuto; hrN++; }   // FC media solo su segnale agganciato
+        hrSum+=hrAuto; hrN++;   // FC media solo su segnale agganciato (co esiste solo se locked)
       }
     }
-    // grafici live (throttle ~12fps: fluidi ma leggeri sulla batteria)
-    if(now-lastDraw>80){ lastDraw=now; try{ drawGraphs(now); }catch(e){} }
     if(chosenMin>0){
       const left=chosenMin*60000-elapsed; el('camCount').textContent=fmt(left);
       if(left<=0){ finish(); return; }
@@ -4266,7 +5488,9 @@ const CameraCoherence = (() => {
   }
   function drawGraphs(now){
     // ── 1) Polso: ultimi 6 s del segnale PPG filtrato, con i battiti marcati ──
-    const cv1=el('camWavePulse');
+    // In fase di aggancio è l'unico grafico che serve (aiuta a trovare la posizione del
+    // dito) e va disegnato sul canvas di quella schermata.
+    const cv1=el(phase==='stab' ? 'camStabWave' : 'camWavePulse');
     if(cv1){
       const {ctx,w,h}=fitCanvas(cv1); ctx.clearRect(0,0,w,h);
       const WIN=6000, t1=now-WIN;
@@ -4283,6 +5507,7 @@ const CameraCoherence = (() => {
         ctx.fillText('In attesa del segnale dal dito…', w/2, h/2+4);
       }
     }
+    if(phase==='stab') return;                 // durante l'aggancio non c'è ancora una curva FC da mostrare
     // ── 2) Frequenza cardiaca: curva FC istantanea (ultimi 60 s), stile HeartMath ──
     const cv2=el('camWaveHrv'), rngEl=el('camHrvRange');
     if(cv2){
@@ -4369,9 +5594,15 @@ const CameraCoherence = (() => {
       host.innerHTML='<div class="cam-sum-row">Sessione di <b>'+fmt(dur).trim()+'</b>.</div>'
         +'<div class="cam-sum-sub">Segnale insufficiente per valutare la coerenza: la prossima volta tieni il dito fermo sulla fotocamera, in buona luce (o usa la fascia). L\'allenamento del respiro vale comunque.</div>';
     } else {
+      const qual = qTot? Math.round(qOk/qTot*100) : 100;
+      const qNote = (qual<90)
+        ? '<div class="cam-sum-sub" style="color:#ffb46b">Segnale buono per il <b>'+qual+'%</b> della sessione: nei tratti in cui il dito si è mosso la coerenza non è stata conteggiata. Tienilo più fermo, con pressione leggera.</div>'
+        : '';
       host.innerHTML='<div><span class="cam-sum-chip" style="background:'+col+'">'+lvl+'</span></div>'
         +'<div class="cam-sum-row">Coerenza media <b style="color:'+col+'">'+Math.round(avg)+'</b> · in coerenza il <b>'+Math.round(inZone)+'%</b> del tempo</div>'
         +'<div class="cam-sum-sub">Picco '+Math.round(peakCoh)+' · durata '+fmt(dur).trim()+'. Allenati con costanza: l\'obiettivo è far salire la quota di tempo in coerenza respirando a ~6 atti/minuto.</div>'
+        +qNote
+        +(window.CohFeedback ? '<div class="coh-soft" style="margin-top:14px">'+CohFeedback.record(avg, dur/60000)+'</div>' : '')
         +'<div class="cam-sum-sub" id="camSendStatus"></div>';
     }
     show('Done');
@@ -4387,7 +5618,11 @@ const CameraCoherence = (() => {
       }
     }
   }
-  function stop(){ if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish(); }
+  // In fase di aggancio il tasto è "Annulla": non c'è nulla da riassumere, si torna indietro.
+  function stop(){
+    if(phase==='stab'){ stopAll(); show('Setup'); return; }
+    if(chosenMin===0 || confirm('Terminare l\'allenamento?')) finish();
+  }
 
   function init(){
     if(!el('camStart')) return;
@@ -4410,6 +5645,8 @@ const CameraCoherence = (() => {
     });
     el('camStart').addEventListener('click', start);
     el('camStop').addEventListener('click', stop);
+    const force=el('camStabForce');
+    if(force) force.addEventListener('click', ()=>{ if(phase==='stab') beginSession(); });   // via d'uscita: non si resta bloccati
     el('camNew').addEventListener('click', ()=>{ stopAll(); show('Setup'); });
   }
   return { init };
@@ -4660,6 +5897,43 @@ const Screens = (() => {
   return { init, go };
 })();
 Screens.init();
+
+/* ---- Nota delle novità dopo un aggiornamento ----
+   Perché esiste: il service worker è network-first, quindi la nuova versione arriva
+   sul telefono del paziente da sola, senza che lui abbia chiesto nulla. Se compaiono
+   riquadri nuovi a fine attività senza una parola di spiegazione, la reazione è
+   "si è rotto qualcosa". Questa nota lo dice, una volta sola.
+
+   Regole del comportamento:
+   - NON tocca nessun dato: né il codice, né gli storici, né la baseline del mattino.
+   - Si mostra SOLO a chi usava già l'app. A chi la installa adesso non direbbe nulla,
+     quindi per lui la versione viene segnata come già vista, in silenzio.
+   - Non è un modale e non si sovrappone alla finestra del consenso del primo avvio:
+     i due casi si escludono a vicenda (o sei nuovo, o hai già usato l'app). */
+(function(){
+  const VER = '73';                                  // ← alzare a ogni versione che ha novità da raccontare
+  const SEEN = 'respiroPacer.seenVer.v1';
+  // Tracce di un uso precedente: se c'è anche una sola di queste, il paziente non è nuovo.
+  const TRACCE = ['respiroPacer.license.v1','respiroPacer.testProfile.v1','respiroPacer.morning.v1',
+                  'respiroPacer.hrv.v1','respiroPacer.alpha.v1','respiroPacer.consentAsked.v1'];
+  const get=k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+  const segna=()=>{ try{ localStorage.setItem(SEEN, VER); }catch(e){} };
+
+  if(get(SEEN) === VER) return;                      // già vista per questa versione
+  const giaUtente = TRACCE.some(k => !!get(k));
+  if(!giaUtente){ segna(); return; }                 // installazione nuova: niente nota
+
+  const box = document.getElementById('novitaBox'), ok = document.getElementById('novitaOk');
+  if(!box || !ok){ segna(); return; }
+  box.style.display = '';
+  ok.addEventListener('click', ()=>{ segna(); box.style.display = 'none'; });
+})();
+
+/* ---- Riepilogo della settimana (deve girare DOPO la nota delle novità) ----
+   L'ordine non è casuale: WeekReport si tira indietro se la nota è a schermo, e per
+   saperlo la nota deve aver già deciso se mostrarsi. Invertendo le due chiamate il
+   riquadro comparirebbe insieme alla nota al primo avvio dopo l'aggiornamento. */
+WeekReport.init();
 
 /* ---- Guida utente (overlay) ---- */
 (function(){
