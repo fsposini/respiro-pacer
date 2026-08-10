@@ -436,6 +436,24 @@
 <!-- HOME: prima cosa che vede il paziente. In alto la cosa da fare per prima
      (agganciare la fascia), poi l'alternativa senza fascia, poi il menu delle attività. -->
 <div id="homeScreen">
+  <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
+       poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
+       quindi si può far partire la connessione direttamente da questo tasto. -->
+  <button type="button" class="home-hero" id="homeConnect">
+    <span class="hh-ico" id="homeConnIco">❤️</span>
+    <span><b id="homeConnTitle">Aggancia la fascia cardio</b><i id="homeConnState">Tocca qui per collegarla: serve a quasi tutte le attività</i></span>
+  </button>
+  <button type="button" class="home-alt" data-go="cam">
+    Non hai la fascia cardio?
+    <b>Fai la respirazione di coerenza con la fotocamera →</b>
+  </button>
+
+  <!-- I due riquadri di avviso stanno DOPO i tasti, non prima. Sopra i tasti, il 09/08/2026
+       la nota delle novità (759 px su uno schermo da 844) spingeva l'intera Home fuori
+       schermo: aprendo l'app si vedeva solo l'avviso, e il tasto della fotocamera finiva a
+       1.283 px dall'alto. Federico l'ha segnalato come "la respirazione con la fotocamera
+       non c'è più" — il tasto c'era, era sotto. Un avviso non deve mai coprire l'azione:
+       qui resta comunque visibile appena sotto i due tasti, quindi non si perde nulla. -->
   <!-- Nota delle novità: la mostra il modulo Novita, una volta sola dopo l'aggiornamento
        e SOLO a chi usava già l'app (a chi installa adesso non direbbe nulla). -->
   <div class="novita" id="novitaBox" style="display:none">
@@ -472,17 +490,6 @@
     <div style="display:flex;flex-wrap:wrap;gap:5px" id="bancoTasti"></div>
   </div>
 
-  <!-- La fascia serve a 4 attività su 5: si collega da qui e si RESTA sulla Home,
-       poi si sceglie l'attività. Il tocco è il gesto utente che il Bluetooth esige,
-       quindi si può far partire la connessione direttamente da questo tasto. -->
-  <button type="button" class="home-hero" id="homeConnect">
-    <span class="hh-ico" id="homeConnIco">❤️</span>
-    <span><b id="homeConnTitle">Aggancia la fascia cardio</b><i id="homeConnState">Tocca qui per collegarla: serve a quasi tutte le attività</i></span>
-  </button>
-  <button type="button" class="home-alt" data-go="cam">
-    Non hai la fascia cardio?
-    <b>Fai la respirazione di coerenza con la fotocamera →</b>
-  </button>
 
   <div class="home-lbl">Le tue attività</div>
   <div class="home-menu">
