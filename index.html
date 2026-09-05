@@ -1157,6 +1157,7 @@
     <div class="hrv-exports">
       <button class="hrv-btn" id="hrvExportJSON">Esporta sessione (JSON)</button>
       <button class="hrv-btn ghost" id="hrvExportCSV">Esporta storico (CSV)</button>
+      <button class="hrv-btn ghost" id="hrvExportAll">Esporta archivio completo (JSON)</button>
       <button class="hrv-btn ghost" id="hrvClear">Cancella storico</button>
     </div>
   </div>
@@ -3449,9 +3450,21 @@ const HRV = (() => {
     // Non persistere lo spettro (array pesante): serve solo per il grafico a video.
     let freqLite = null;
     if(r.freq){ freqLite = Object.assign({}, r.freq); delete freqLite.spectrum; }
+    // Metriche di coerenza della seduta. Fino al 05/09/2026 venivano solo inviate al
+    // medico e poi buttate: l'export del paziente usciva senza i parametri della
+    // coerenza, cioe' senza il senso della seduta. Stesse formule di
+    // sendCoherenceSession(), cosi' il file del paziente e il foglio del medico
+    // dicono gli stessi numeri e un confronto fra i due non trova differenze finte.
+    const coh = cohN ? {
+      media: cohPctSum/cohN,                 // 0–100, stessa scala della fotocamera
+      picco: cohPctMax,                      // 0–100
+      pctInCoerenza: cohCoherentN/cohN*100,  // % del tempo sopra la soglia COH_LOW
+      ratio: cohSum/cohN,                    // ratio HeartMath (0–16)
+      campioni: cohN
+    } : null;
     list.push({
       id: Date.now(), date: r.meta.start, breathRate: r.meta.breathRate, durationS: r.durationS,
-      time: r.time, freq: freqLite, quality: r.quality, rrRaw: r.rrRaw, rrKept: r.rrKept
+      time: r.time, freq: freqLite, quality: r.quality, coh: coh, rrRaw: r.rrRaw, rrKept: r.rrKept
     });
     try{ localStorage.setItem(STORE, JSON.stringify(list)); }catch(e){
       status('Storico non salvato (memoria piena). Esporta i dati per non perderli.', true);
@@ -3480,21 +3493,97 @@ const HRV = (() => {
     shareOrDl('hrv_sessione_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json',
        JSON.stringify(list[list.length-1], null, 2), 'application/json');
   }
+
+  /* ---------------- Export unificato dei dati del paziente ----------------
+     Perche' esiste in questa forma: chi vuole rileggersi i propri dati (o portarli
+     in un foglio, in Python, in un altro archivio) non deve dover mettere insieme a
+     mano tre file diversi. Qui esce UN file solo con tutte le sedute in ordine di
+     data, la colonna 'tipo_sessione' a dire da quale test viene ogni riga, e sempre
+     le stesse intestazioni.
+     Le celle vuote sono volute: la misura α1 non calcola RMSSD/SDNN/pNN50, la seduta
+     di respirazione non calcola α1. Meglio una cella vuota che una colonna in meno —
+     chi legge il file si aspetta intestazioni stabili nel tempo. */
+
+  // Archivio α1 del modulo "Test α1" (localStorage separato). Lo leggiamo da qui
+  // invece di toccare quel modulo, cosi' l'export resta un punto solo del codice.
+  // Record: { ts, d, alpha, hr, nkept, nexcl }. La misura a riposo dura 5 minuti fissi.
+  const ALPHA_STORE = 'respiroPacer.alpha.v1', ALPHA_DUR_S = 300;
+  function loadAlpha(){ try{ return JSON.parse(localStorage.getItem(ALPHA_STORE))||[]; }catch(e){ return []; } }
+
+  const EXPORT_HEAD = ['data','tipo_sessione','durata_s','respiro_atti_min',
+    'battiti_tot','battiti_validi','battiti_esclusi','perc_validi',
+    'RMSSD_ms','SDNN_ms','pNN50_pct','FC_media_bpm','NN_media_ms','DFA_alpha1',
+    'coerenza_media_pct','coerenza_picco_pct','perc_tempo_in_coerenza','coerenza_ratio','coerenza_campioni',
+    'VLF_ms2','LF_ms2','HF_ms2','LF_HF','LFn','HFn','TP_ms2',
+    'VLF_pct','LF_pct','HF_pct','VLF_picco_Hz','LF_picco_Hz','HF_picco_Hz'];
+
+  // Punto decimale (non virgola): questo file e' fatto per essere riletto da un
+  // programma, dove la virgola decimale si scontrerebbe con il separatore del CSV.
+  const fx = (v,dec)=> (v==null || v==='' || !isFinite(v)) ? '' : Number(v).toFixed(dec);
+  const nz = v => (v==null ? '' : v);
+
+  function righeExport(){
+    const righe = [];
+    for(const s of load()){
+      const f=s.freq||{}, q=s.quality||{}, t=s.time||{}, c=s.coh||{};
+      const esclusi = (q.total!=null && q.kept!=null) ? q.total-q.kept : null;
+      righe.push({ ord: s.date, cells: [
+        s.date, 'respirazione/coerenza', nz(s.durationS), nz(s.breathRate),
+        nz(q.total), nz(q.kept), nz(esclusi), fx(q.keptPct,1),
+        fx(t.rmssd,1), fx(t.sdnn,1), fx(t.pnn50,1), fx(t.meanHR,0), fx(t.meanNN,0), '',
+        fx(c.media,0), fx(c.picco,0), fx(c.pctInCoerenza,0), fx(c.ratio,2), nz(c.campioni),
+        fx(f.vlf,0), fx(f.lf,0), fx(f.hf,0), fx(f.lfhf,2), fx(f.lfn,1), fx(f.hfn,1), fx(f.totalPower,0),
+        fx(f.vlfPct,1), fx(f.lfPct,1), fx(f.hfPct,1),
+        fx(f.vlfPeakHz,3), fx(f.lfPeakHz,3), fx(f.hfPeakHz,3)
+      ]});
+    }
+    for(const a of loadAlpha()){
+      const tot = (a.nkept!=null && a.nexcl!=null) ? a.nkept+a.nexcl : null;
+      righe.push({ ord: a.ts, cells: [
+        a.ts, 'alpha1', ALPHA_DUR_S, '',
+        nz(tot), nz(a.nkept), nz(a.nexcl), tot ? fx(a.nkept/tot*100,1) : '',
+        '', '', '', nz(a.hr), '', fx(a.alpha,3),
+        '', '', '', '', '',
+        '', '', '', '', '', '', '',
+        '', '', '', '', '', ''
+      ]});
+    }
+    // Ordine cronologico: le date sono ISO, quindi l'ordine alfabetico e' quello giusto.
+    righe.sort((x,y)=> String(x.ord).localeCompare(String(y.ord)));
+    return righe.map(r=>r.cells.join(','));
+  }
+
   function exportCSV(){
-    const list = load(); if(!list.length){ status('Nessuna sessione da esportare.', true); return; }
-    const head = ['data','respiro_atti_min','durata_s','battiti_tot','battiti_validi','perc_validi',
-      'RMSSD_ms','SDNN_ms','pNN50_pct','FC_media_bpm','NN_media_ms','VLF_ms2','LF_ms2','HF_ms2','LF_HF','LFn','HFn','TP_ms2',
-      'VLF_pct','LF_pct','HF_pct','VLF_picco_Hz','LF_picco_Hz','HF_picco_Hz'];
-    const rows = list.map(s=>{
-      const f=s.freq||{};
-      return [s.date, s.breathRate, s.durationS, s.quality.total, s.quality.kept, s.quality.keptPct.toFixed(1),
-        s.time.rmssd.toFixed(1), s.time.sdnn.toFixed(1), s.time.pnn50.toFixed(1), s.time.meanHR.toFixed(0), s.time.meanNN.toFixed(0),
-        f.vlf?f.vlf.toFixed(0):'', f.lf?f.lf.toFixed(0):'', f.hf?f.hf.toFixed(0):'', f.lfhf?f.lfhf.toFixed(2):'',
-        f.lfn?f.lfn.toFixed(1):'', f.hfn?f.hfn.toFixed(1):'', f.totalPower?f.totalPower.toFixed(0):'',
-        f.vlfPct!=null?f.vlfPct.toFixed(1):'', f.lfPct!=null?f.lfPct.toFixed(1):'', f.hfPct!=null?f.hfPct.toFixed(1):'',
-        f.vlfPeakHz?f.vlfPeakHz.toFixed(3):'', f.lfPeakHz?f.lfPeakHz.toFixed(3):'', f.hfPeakHz?f.hfPeakHz.toFixed(3):''].join(',');
-    });
-    shareOrDl('hrv_storico.csv', [head.join(','), ...rows].join('\n'), 'text/csv');
+    const rows = righeExport();
+    if(!rows.length){ status('Nessuna sessione da esportare.', true); return; }
+    shareOrDl('hrv_storico.csv', [EXPORT_HEAD.join(','), ...rows].join('\n'), 'text/csv');
+  }
+
+  // Archivio completo in JSON: le sedute con gli RR battito per battito (rrRaw = tutti
+  // i battiti registrati, rrKept = quelli validi su cui sono calcolati gli indici) piu'
+  // le misure α1. E' la forma per chi vuole rifare i conti per conto proprio; il CSV
+  // resta la forma tabellare pronta all'uso.
+  function exportAllJSON(){
+    const sessioni = load(), alpha1 = loadAlpha();
+    if(!sessioni.length && !alpha1.length){ status('Nessuna sessione da esportare.', true); return; }
+    const pacchetto = {
+      app: 'Respiro Pacer',
+      esportato: new Date().toISOString(),
+      legenda: {
+        durationS: 'durata della seduta in secondi',
+        breathRate: 'ritmo respiratorio guidato, atti al minuto',
+        quality: 'total = battiti registrati · kept = battiti validi · keptPct = % validi',
+        time: 'indici nel dominio del tempo, in ms (pnn50 in %)',
+        freq: 'potenze in ms2, picchi in Hz',
+        coh: 'coerenza 0-100 · pctInCoerenza = % del tempo sopra soglia · ratio = scala HeartMath 0-16',
+        rrRaw: 'tutti gli intervalli RR in ms',
+        rrKept: 'gli RR validi usati per il calcolo degli indici',
+        alpha1: 'misure DFA alpha1 a riposo: alpha = valore · hr = FC media · nkept/nexcl = battiti validi/esclusi'
+      },
+      sessioni: sessioni,
+      alpha1: alpha1
+    };
+    shareOrDl('hrv_archivio_completo.json', JSON.stringify(pacchetto, null, 2), 'application/json');
   }
   function clearStore(){
     if(!load().length){ status('Storico già vuoto.'); return; }
@@ -4095,8 +4184,9 @@ const HRV = (() => {
     el('hrvDisconnect').addEventListener('click', disconnect);
     el('hrvExportJSON').addEventListener('click', exportJSON);
     el('hrvExportCSV').addEventListener('click', exportCSV);
+    { const b = el('hrvExportAll'); if(b) b.addEventListener('click', exportAllJSON); }
     el('hrvClear').addEventListener('click', clearStore);
-    const ver = el('appVer'); if(ver) ver.textContent = 'build v74';
+    const ver = el('appVer'); if(ver) ver.textContent = 'build v75';
     let rsz; window.addEventListener('resize', ()=>{
       clearTimeout(rsz);
       rsz = setTimeout(()=>{ if(lastSpectrumF && el('hrvResults').classList.contains('show')) drawSpectrum(lastSpectrumF); }, 150);
