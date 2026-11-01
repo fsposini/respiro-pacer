@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Cambio della fascia — HRV Tool</title>
+<style>
+  :root{ --blu:#1B549B; --bg:#F4FBF8; --testo:#2E3538; --grigio:#545E62; --linea:#e3e8ea; --ok:#3f8a24; --bad:#c62f24; --warn:#a35b00; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--testo);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:40px}
+  header{background:var(--blu);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px}
+  header h1{margin:0;font-size:20px}
+  header .sub{opacity:.85;font-size:12.5px;font-weight:600;letter-spacing:.5px}
+  main{max-width:620px;margin:0 auto;padding:12px 14px}
+  .card{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .card h2{margin:0 0 6px;font-size:16px;color:var(--blu)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:15px}
+  .kv b{color:var(--grigio);font-weight:500}
+  button{font:inherit;border:0;cursor:pointer}
+  .big{width:100%;border-radius:14px;padding:18px 14px;font-size:19px;font-weight:700;background:var(--blu);color:#fff;margin-top:4px}
+  .big:disabled{opacity:.45}
+  .sec{width:100%;border-radius:12px;padding:13px 14px;font-size:16px;font-weight:600;background:#e9eff5;color:var(--blu);margin-top:9px}
+  .danger{background:#fbeaea;color:var(--bad)}
+  .steps{list-style:none;padding:0;margin:8px 0 0}
+  .steps li{padding:6px 0 6px 30px;position:relative;font-size:15.5px;color:var(--grigio)}
+  .steps li::before{content:"";position:absolute;left:4px;top:9px;width:14px;height:14px;border-radius:50%;border:2px solid #c9d3d8}
+  .steps li.wait{color:var(--testo);font-weight:600}
+  .steps li.wait::before{border-color:var(--blu);border-top-color:transparent;animation:spin 1s linear infinite}
+  .steps li.ok{color:var(--testo)}
+  .steps li.ok::before{background:var(--ok);border-color:var(--ok)}
+  .steps li.skip::before{background:#c9d3d8;border-color:#c9d3d8}
+  .steps li.no{color:var(--bad);font-weight:600}
+  .steps li.no::before{background:var(--bad);border-color:var(--bad)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  progress{width:100%;height:12px;margin-top:6px}
+  .msg{border-radius:10px;padding:11px 13px;margin-top:10px;font-size:15.5px}
+  .msg.ok{background:#e8f4e1;color:#2b5e19}
+  .msg.bad{background:#fbeaea;color:#8e2019}
+  .msg.warn{background:#fdf3df;color:#6b4a00}
+  .note{font-size:13.5px;color:var(--grigio)}
+  .days div{display:flex;justify-content:space-between;border-top:1px solid var(--linea);padding:7px 0;font-size:14.5px}
+  .days div:first-child{border-top:0}
+  details{margin-top:10px}
+  summary{color:var(--blu);font-weight:600;cursor:pointer}
+  #log{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--grigio);max-height:280px;overflow:auto;background:#f3f5f6;border-radius:8px;padding:8px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cambio della fascia</h1>
+  <div class="sub">HRV TOOL · MONITORAGGIO DI PIÙ GIORNI</div>
+</header>
+<main>
+
+<div class="card">
+  <h2>Come funziona</h2>
+  <p class="note" style="margin:0">La fascia registra da sola i battiti nella sua memoria, ma la memoria basta per circa una giornata. <b>Ogni mattina e ogni sera</b> apri questa pagina e tocca <b>"Fai il cambio"</b>: i dati passano sul telefono e la fascia riparte subito. Ci vogliono 5–8 minuti.<br>Durante il cambio: <b>fascia addosso, telefono vicino a te, schermo acceso</b>.</p>
+</div>
+
+<div class="card">
+  <h2>Situazione</h2>
+  <div class="kv" id="state"></div>
+  <button class="big" id="bGo">Fai il cambio</button>
+  <ul class="steps" id="steps"></ul>
+  <div id="prog"></div>
+  <div id="out"></div>
+</div>
+
+<div class="card">
+  <h2>Giornate salvate su questo telefono</h2>
+  <div class="days" id="days"></div>
+  <button class="sec" id="bSend">Manda tutto al medico</button>
+  <p class="note">Crea i file con i battiti (e il diario, se l'hai compilato in questo stesso browser), senza nome né dati personali, e apre la condivisione del telefono.</p>
+  <button class="sec danger" id="bEnd">Fine del monitoraggio</button>
+  <p class="note">Solo l'ultimo giorno, quando il medico te lo dice: salva i dati come un cambio ma <b>non</b> fa ripartire la fascia.</p>
+  <details>
+    <summary>Altre opzioni</summary>
+    <button class="sec danger" id="bWipe">Cancella le giornate da questo telefono</button>
+    <p class="note">Solo dopo che il medico ti ha confermato di aver ricevuto i file.</p>
+    <div style="margin-top:10px"><b>Registro tecnico</b> <button class="sec" id="bCopyLog" style="width:auto;padding:6px 12px;font-size:14px;margin-left:8px">Copia</button></div>
+    <div id="log"></div>
+  </details>
+</div>
+
+</main>
+
+<!-- Protocollo copiato da prova-memoria-h10.html (collaudato con collaudo_core.js) -->
+<script id="core">
+// Protocollo Polar per la memoria interna della H10 (servizio file PSFTP).
+// Riscritto dalla documentazione di polar-h10-web (PROTOCOL.md, derivata dal
+// Polar BLE SDK ufficiale) e collaudato sulle sue tracce di una H10 reale.
+// Nessun accesso al DOM: la parte sotto lo usa, il collaudo in Node pure.
+const PolarCore = (() => {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+
+  const PSFTP_SERVICE = '0000feee-0000-1000-8000-00805f9b34fb';
+  const PSFTP_MTU_CHAR = 'fb005c51-02e7-f387-1cad-8acd2d8df0c8';
+  const Q = { SET_LOCAL_TIME: 3, START_RECORDING: 14, STOP_RECORDING: 15, RECORDING_STATUS: 16 };
+  const CMD = { GET: 0, REMOVE: 3 };
+  const SAMPLE_TYPE_RR = 16;
+  const PACKET_TIMEOUT_MS = 90000;
+
+  const ERR = {
+    1: 'la fascia si sta riavviando', 2: 'riprova',
+    101: 'comando non valido', 102: 'parametro non valido', 103: 'file non trovato',
+    106: 'operazione non permessa', 108: 'tempo scaduto', 201: 'non implementato',
+    202: 'fascia occupata', 203: 'contenuto non valido', 205: 'memoria piena',
+    208: 'attendi che la fascia sia libera', 209: 'batteria troppo scarica'
+  };
+  class PftpError extends Error {
+    constructor(code) { super('errore ' + code + ' (' + (ERR[code] || 'sconosciuto') + ')'); this.code = code; }
+  }
+
+  function concatList(list) {
+    let n = 0; for (const a of list) n += a.length;
+    const out = new Uint8Array(n); let p = 0;
+    for (const a of list) { out.set(a, p); p += a.length; }
+    return out;
+  }
+  const concat = (...a) => concatList(a);
+  const hex = (b) => Array.from(b, (x) => x.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+
+  // --- protobuf minimo (proto2: varint, length-delimited) ---
+  function varint(n) {
+    let v = BigInt.asUintN(64, BigInt(n));
+    const out = [];
+    do { let b = Number(v & 0x7Fn); v >>= 7n; if (v) b |= 0x80; out.push(b); } while (v);
+    return Uint8Array.from(out);
+  }
+  const fVar = (f, n) => concat(varint((f << 3) | 0), varint(n));
+  const fBytes = (f, b) => concat(varint((f << 3) | 2), varint(b.length), b);
+  const fStr = (f, s) => fBytes(f, enc.encode(s));
+
+  function readVarint(buf, pos) {
+    let r = 0n, shift = 0n, b;
+    do {
+      if (pos >= buf.length) throw new Error('dati protobuf troncati');
+      b = buf[pos++]; r |= BigInt(b & 0x7f) << shift; shift += 7n;
+    } while (b & 0x80);
+    return [r, pos];
+  }
+  function parse(buf) {
+    const m = new Map(); let pos = 0;
+    while (pos < buf.length) {
+      let k; [k, pos] = readVarint(buf, pos);
+      const field = Number(k >> 3n), wire = Number(k & 7n); let val;
+      if (wire === 0) { [val, pos] = readVarint(buf, pos); }
+      else if (wire === 2) {
+        let len; [len, pos] = readVarint(buf, pos); len = Number(len);
+        if (pos + len > buf.length) throw new Error('dati protobuf troncati');
+        val = buf.subarray(pos, pos + len); pos += len;
+      }
+      else if (wire === 1) { val = buf.subarray(pos, pos + 8); pos += 8; }
+      else if (wire === 5) { val = buf.subarray(pos, pos + 4); pos += 4; }
+      else throw new Error('tipo protobuf ' + wire + ' non gestito');
+      if (!m.has(field)) m.set(field, []);
+      m.get(field).push({ wire, val });
+    }
+    return m;
+  }
+  const last = (m, f) => { const e = m.get(f); return e ? e[e.length - 1] : null; };
+  const getNum = (m, f) => { const e = last(m, f); return e && e.wire === 0 ? Number(e.val) : 0; };
+  const getStr = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? dec.decode(e.val) : ''; };
+  const getMsg = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? parse(e.val) : null; };
+  function getUints(m, f) {
+    const out = [];
+    for (const e of (m.get(f) || [])) {
+      if (e.wire === 0) out.push(Number(e.val));
+      else if (e.wire === 2) { let p = 0, v; while (p < e.val.length) { [v, p] = readVarint(e.val, p); out.push(Number(v)); } }
+    }
+    return out;
+  }
+
+  // --- buste RFC60 e pacchetti RFC76 ---
+  const queryEnvelope = (id, params) => {
+    const pre = Uint8Array.of(id & 0xff, ((id >> 8) & 0x7f) | 0x80);
+    return params ? concat(pre, params) : pre;
+  };
+  const requestEnvelope = (hdr) => concat(Uint8Array.of(hdr.length & 0xff, (hdr.length >> 8) & 0x7f), hdr);
+  const operation = (cmd, path) => concat(fVar(1, cmd), fStr(2, path));
+
+  function buildPackets(stream, size = 20) {
+    const max = size - 1, packets = [];
+    let off = 0, seq = 0, next = 0;
+    do {
+      const more = stream.length - off > max, take = more ? max : stream.length - off;
+      const p = new Uint8Array(1 + take);
+      p[0] = next | (more ? 0x06 : 0x02) | (seq << 4);
+      p.set(stream.subarray(off, off + take), 1);
+      packets.push(p); off += take; seq = (seq + 1) & 0x0f; next = 1;
+    } while (off < stream.length);
+    return packets;
+  }
+
+  // write(bytes) scrive un pacchetto sulla caratteristica; onPacket(bytes)
+  // va chiamato per ogni notifica ricevuta; fail(err) alla disconnessione.
+  function createPsftp(write) {
+    let queue = [], waiters = [], failed = null, chain = Promise.resolve();
+    function onPacket(bytes) { if (waiters.length) waiters.shift().resolve(bytes); else queue.push(bytes); }
+    function fail(err) { failed = err; while (waiters.length) waiters.shift().reject(err); }
+    function next() {
+      if (queue.length) return Promise.resolve(queue.shift());
+      if (failed) return Promise.reject(failed);
+      return new Promise((resolve, reject) => {
+        const w = {
+          resolve: (v) => { clearTimeout(t); resolve(v); },
+          reject: (e) => { clearTimeout(t); reject(e); }
+        };
+        const t = setTimeout(() => {
+          const i = waiters.indexOf(w); if (i >= 0) waiters.splice(i, 1);
+          reject(new Error('nessuna risposta dalla fascia per ' + PACKET_TIMEOUT_MS / 1000 + ' secondi'));
+        }, PACKET_TIMEOUT_MS);
+        waiters.push(w);
+      });
+    }
+    async function run(stream, onProgress) {
+      queue = [];
+      for (const p of buildPackets(stream)) await write(p);
+      let expSeq = 0, expNext = 0, received = 0;
+      const chunks = [];
+      try {
+        for (;;) {
+          const pk = await next();
+          received += Math.max(0, pk.length - 1);
+          if (onProgress) onProgress(received);
+          const b0 = pk[0], nxt = b0 & 1, st = (b0 >> 1) & 3, seq = (b0 >> 4) & 15;
+          if (seq !== expSeq) throw new Error('pacchetto perso (atteso ' + expSeq + ', arrivato ' + seq + ')');
+          expSeq = (expSeq + 1) & 15;
+          if (nxt !== expNext) throw new Error('flusso dati fuori sincronia');
+          expNext = 1;
+          if (st === 3) { chunks.push(pk.slice(1)); continue; }
+          if (st === 1) { chunks.push(pk.slice(1)); return concatList(chunks); }
+          if (st === 0) {
+            const code = (pk[1] | 0) | ((pk[2] | 0) << 8);
+            if (code) throw new PftpError(code);
+            return concatList(chunks);
+          }
+          throw new Error('pacchetto con stato sconosciuto ' + st);
+        }
+      } catch (e) {
+        if (!(e instanceof PftpError)) { try { await write(Uint8Array.of(0, 0, 0)); } catch (_) {} }
+        throw e;
+      }
+    }
+    function transact(stream, onProgress) {
+      const p = chain.then(() => run(stream, onProgress));
+      chain = p.catch(() => {});
+      return p;
+    }
+    const query = (id, params) => transact(queryEnvelope(id, params));
+    const request = (hdr, onProgress) => transact(requestEnvelope(hdr), onProgress);
+
+    async function status() {
+      const m = parse(await query(Q.RECORDING_STATUS));
+      return { recording: getNum(m, 1) !== 0, id: getStr(m, 2) };
+    }
+    async function listDir(path) {
+      const m = parse(await request(operation(CMD.GET, path)));
+      return (m.get(1) || []).map((e) => { const em = parse(e.val); return { name: getStr(em, 1), size: getNum(em, 2) }; });
+    }
+    // Le registrazioni stanno in /<identificativo>/SAMPLES.BPB
+    async function listRecordings(path = '/', depth = 0, seen = []) {
+      if (depth > 3) return [];
+      let entries;
+      try { entries = await listDir(path); }
+      catch (e) { if (e.code === 103) return []; throw e; }
+      seen.push(path + ' → ' + entries.map((x) => x.name + ' (' + x.size + ' B)').join(', '));
+      const out = [];
+      for (const en of entries) {
+        if (en.name.endsWith('/')) out.push(...await listRecordings(path + en.name, depth + 1, seen));
+        else if (en.name === 'SAMPLES.BPB') out.push({ path: path + en.name, id: path.split('/').filter(Boolean)[0] || path, size: en.size });
+      }
+      return out;
+    }
+    async function fetchRecording(path, onProgress) {
+      return decodeSamples(await request(operation(CMD.GET, path), onProgress));
+    }
+    const remove = (path) => request(operation(CMD.REMOVE, path));
+    async function setLocalTime(d = new Date()) {
+      const date = concat(fVar(1, d.getFullYear()), fVar(2, d.getMonth() + 1), fVar(3, d.getDate()));
+      const time = concat(fVar(1, d.getHours()), fVar(2, d.getMinutes()), fVar(3, d.getSeconds()), fVar(4, d.getMilliseconds()));
+      await query(Q.SET_LOCAL_TIME, concat(fBytes(1, date), fBytes(2, time), fVar(3, -d.getTimezoneOffset())));
+    }
+    const startRr = (id) => query(Q.START_RECORDING, concat(fVar(1, SAMPLE_TYPE_RR), fBytes(2, fVar(3, 1)), fStr(3, id)));
+    const stop = () => query(Q.STOP_RECORDING);
+
+    return { onPacket, fail, status, listRecordings, fetchRecording, remove, setLocalTime, startRr, stop };
+  }
+
+  // PbExerciseSamples: campo 1 = intervallo (PbDuration, secondi nel campo 3),
+  // campo 2 = FC in bpm, campo 28 = PbExerciseRRIntervals (RR in ms nel campo 1).
+  function decodeSamples(body) {
+    const m = parse(body);
+    const dur = getMsg(m, 1);
+    const interval = dur ? getNum(dur, 3) : 0;
+    const rr = getMsg(m, 28);
+    if (rr) return { type: 'rr', interval, samples: getUints(rr, 1) };
+    return { type: 'hr', interval, samples: getUints(m, 2) };
+  }
+
+  return { PSFTP_SERVICE, PSFTP_MTU_CHAR, PftpError, createPsftp, decodeSamples, buildPackets, hex, parse };
+})();
+if (typeof module !== 'undefined') module.exports = PolarCore;
+</script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const DIARY_KEY = 'hrv24.diarioTelefono.v1';
+  const MAX_BYTES_PER_BEAT = 2.5; // misurato: 162.283 B per 81.135 battiti = 2,0 B/battito
+  let device = null, psftp = null, wakeLock = null, busy = false, endArmed = false, wipeArmed = false;
+
+  /* ---------- registro tecnico ---------- */
+  const logLines = [];
+  function log(s) { logLines.push(new Date().toLocaleTimeString('it-IT') + '  ' + s); if (logLines.length > 500) logLines.shift(); $('log').textContent = logLines.join('\n'); $('log').scrollTop = 1e9; }
+  $('bCopyLog').onclick = async () => { try { await navigator.clipboard.writeText(logLines.join('\n')); $('bCopyLog').textContent = 'Copiato'; } catch (e) {} };
+  log('Browser: ' + navigator.userAgent);
+
+  /* ---------- archivio sul telefono (IndexedDB) ---------- */
+  let dbp = null;
+  function db() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('hrv24cambio', 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore('reg', { keyPath: 'id' }); r.result.createObjectStore('meta'); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  async function tx(store, mode, fn) {
+    const d = await db();
+    return new Promise((res, rej) => { const t = d.transaction(store, mode); const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); });
+  }
+  const putReg = r => tx('reg', 'readwrite', s => s.put(r));
+  const getReg = id => tx('reg', 'readonly', s => s.get(id));
+  const allRegs = () => tx('reg', 'readonly', s => s.getAll());
+  const setMeta = (k, v) => tx('meta', 'readwrite', s => s.put(v, k));
+  const getMeta = k => tx('meta', 'readonly', s => s.get(k));
+  const clearAll = async () => { await tx('reg', 'readwrite', s => s.clear()); await tx('meta', 'readwrite', s => s.clear()); };
+
+  /* ---------- formato ---------- */
+  const p2 = n => String(n).padStart(2, '0');
+  const fmtWhen = t => { const d = new Date(t), o = new Date(); const same = d.toDateString() === o.toDateString(); const y = new Date(o.getTime() - 864e5).toDateString() === d.toDateString(); return (same ? 'oggi' : y ? 'ieri' : d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })) + ' alle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); };
+  const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60); return h ? h + ' h ' + p2(min % 60) + ' min' : min + ' min'; };
+  function buildCsv(r) {
+    const head = ['# HRV Tool · cambio della fascia', '# identificativo: ' + r.id, '# tipo: ' + r.type];
+    if (r.startedAt) head.push('# avvio: ' + new Date(r.startedAt).toISOString());
+    head.push('# fine: ' + new Date(r.stoppedAt || r.savedAt).toISOString(), '# scaricato: ' + new Date(r.savedAt).toISOString());
+    return head.concat([r.type === 'rr' ? 'rr_ms' : 'fc_bpm'], r.samples.map(String)).join('\n') + '\n';
+  }
+
+  /* ---------- interfaccia ---------- */
+  const STEPS = [['conn', 'Collego la fascia'], ['stop', 'Fermo la registrazione'], ['dl', 'Scarico i dati'], ['save', 'Salvo nel telefono'], ['del', 'Libero la memoria della fascia'], ['start', 'Faccio ripartire la registrazione']];
+  const st = {};
+  function step(k, s, extra) { st[k] = [s, extra]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
+  function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; }
+  const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
+
+  async function renderState() {
+    const m = (await getMeta('ultimoAvvio')) || null;
+    const regs = (await allRegs()).sort((a, b) => (a.startedAt || a.savedAt) - (b.startedAt || b.savedAt));
+    const ended = await getMeta('fine');
+    $('state').innerHTML = m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span><b>Stato</b><span>${ended && ended > m.t ? 'monitoraggio concluso' : 'la fascia sta registrando da ' + fmtDur((Date.now() - m.t) / 60000)}</span>` : '<b>Stato</b><span>Nessun cambio fatto da questo telefono.</span>';
+    const tot = regs.reduce((s, r) => s + r.durMin, 0);
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${r.startedAt ? fmtWhen(r.startedAt) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+    $('bSend').disabled = !regs.length;
+    if (m && !(ended && ended > m.t)) {
+      const h = (Date.now() - m.t) / 3600000;
+      if (h > 14) $('state').insertAdjacentHTML('beforeend', `<b></b><span style="color:var(--warn);font-weight:600">È ora di fare il cambio.</span>`);
+    }
+  }
+
+  async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { log('Schermo sempre acceso non disponibile: ' + e.message); } }
+
+  /* ---------- Bluetooth ---------- */
+  const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ': tempo scaduto')), ms))]);
+  async function connect() {
+    if (!navigator.bluetooth) throw Object.assign(new Error('Questo browser non ha il Bluetooth. Su iPhone apri la pagina con l\'app Bluefy, su Android con Chrome.'), { user: true });
+    if (!device) {
+      const opt = ['heart_rate', 'battery_service', PolarCore.PSFTP_SERVICE];
+      try { device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }], optionalServices: opt }); }
+      catch (e) { if (e && e.name === 'NotFoundError') throw Object.assign(new Error('Nessuna fascia scelta. Tocca di nuovo "Fai il cambio" e scegli "Polar H10" dall\'elenco.'), { user: true }); throw e; }
+      device.addEventListener('gattserverdisconnected', () => { log('Fascia scollegata'); if (psftp) psftp.fail(new Error('la fascia si è scollegata')); psftp = null; });
+      log('Fascia: ' + (device.name || '(senza nome)'));
+    }
+    if (psftp && device.gatt.connected) return;
+    const server = await withTimeout(device.gatt.connect(), 15000, 'Collegamento');
+    try { const bs = await server.getPrimaryService('battery_service'); const bc = await bs.getCharacteristic('battery_level'); log('Batteria fascia ' + (await bc.readValue()).getUint8(0) + '%'); } catch (e) {}
+    const svc = await server.getPrimaryService(PolarCore.PSFTP_SERVICE);
+    const ch = await svc.getCharacteristic(PolarCore.PSFTP_MTU_CHAR);
+    const pr = ch.properties || {};
+    let noResp = !!pr.writeWithoutResponse && typeof ch.writeValueWithoutResponse === 'function';
+    const write = async (b) => {
+      if (noResp) { try { await ch.writeValueWithoutResponse(b); return; } catch (e) { noResp = false; } }
+      if (typeof ch.writeValueWithResponse === 'function') await ch.writeValueWithResponse(b); else await ch.writeValue(b);
+    };
+    psftp = PolarCore.createPsftp(write);
+    ch.addEventListener('characteristicvaluechanged', ev => { const v = ev.target.value; if (psftp) psftp.onPacket(new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength))); });
+    await ch.startNotifications();
+    log('Collegata');
+  }
+  // ogni comando breve si ritenta: al primo collegamento può arrivare un pacchetto vecchio
+  async function retry(what, fn, n = 3) {
+    let last;
+    for (let i = 1; i <= n; i++) {
+      try { await connect(); return await fn(); }
+      catch (e) { last = e; if (e.user || e.code) throw e; log(what + ': tentativo ' + i + ' non riuscito (' + e.message + ')'); await new Promise(r => setTimeout(r, 1200)); }
+    }
+    throw last;
+  }
+
+  /* ---------- il cambio ---------- */
+  async function cambio(restart) {
+    if (busy) return; busy = true;
+    $('bGo').disabled = true; resetSteps(); keepAwake();
+    let cur = 'conn';
+    try {
+      step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok');
+
+      cur = 'stop'; step('stop', 'wait');
+      const s = await retry('Stato', () => psftp.status());
+      log('Stato: registrando=' + s.recording + ', identificativo="' + s.id + '"');
+      const stoppedAt = Date.now();
+      if (s.recording) { await retry('Stop', () => psftp.stop()); step('stop', 'ok'); log('Registrazione fermata'); }
+      else step('stop', 'skip', 'non stava registrando');
+
+      cur = 'dl'; step('dl', 'wait');
+      const seen = [];
+      const recs = await retry('Elenco', () => psftp.listRecordings('/', 0, seen));
+      seen.forEach(x => log('Cartella ' + x));
+      const meta = await getMeta('ultimoAvvio');
+      if (!recs.length) step('dl', 'skip', 'memoria vuota');
+      for (const rec of recs) {
+        const prev = await getReg(rec.id);
+        if (prev && prev.size === rec.size) { log('Già salvata in precedenza: ' + rec.id); step('dl', 'ok', 'già nel telefono'); }
+        else {
+          const t0 = performance.now();
+          $('prog').innerHTML = `<progress id="pg" max="${Math.max(1, rec.size)}" value="0"></progress><div class="note" id="pgT"></div>`;
+          const data = await psftp.fetchRecording(rec.path, n => {
+            const pg = $('pg'); if (pg) pg.value = n;
+            const el = (performance.now() - t0) / 1000, rate = n / Math.max(1, el), left = (rec.size - n) / Math.max(1, rate);
+            const t = $('pgT'); if (t) t.textContent = Math.round(n / rec.size * 100) + '% · ' + (n > 2000 ? 'mancano circa ' + Math.max(1, Math.ceil(left / 60)) + ' min' : 'calcolo il tempo…');
+          });
+          log('Scaricata ' + rec.id + ': ' + data.type + ', ' + data.samples.length + ' valori in ' + Math.round((performance.now() - t0) / 1000) + ' s');
+          $('prog').innerHTML = '';
+          // controllo di completezza prima di qualsiasi cancellazione
+          // ogni RR occupa ~2 byte: meno di un battito ogni 2,5 byte vuol dire che manca un pezzo
+          if (data.type === 'rr' && rec.size > 2000 && data.samples.length < rec.size / MAX_BYTES_PER_BEAT) throw Object.assign(new Error('scarico incompleto (' + data.samples.length + ' battiti per ' + rec.size + ' byte)'), { retryable: true });
+          step('dl', 'ok', data.samples.length.toLocaleString('it-IT') + ' battiti');
+
+          cur = 'save'; step('save', 'wait');
+          const durMin = data.type === 'rr' ? data.samples.reduce((a, b) => a + b, 0) / 60000 : data.samples.length * (data.interval || 1) / 60;
+          const startedAt = meta && meta.id === rec.id ? meta.t : null;
+          const r = { id: rec.id, size: rec.size, type: data.type, n: data.samples.length, samples: data.samples, durMin, startedAt, stoppedAt: s.recording && s.id === rec.id ? stoppedAt : null, savedAt: Date.now() };
+          await putReg(r);
+          const back = await getReg(rec.id);
+          if (!back || back.n !== r.n) throw new Error('salvataggio nel telefono non verificato');
+          step('save', 'ok', fmtDur(durMin));
+          if (data.type !== 'rr') log('ATTENZIONE: la registrazione contiene solo la frequenza, non i battiti');
+        }
+        cur = 'del'; step('del', 'wait');
+        await retry('Cancellazione', () => psftp.remove(rec.path));
+        log('Cancellata dalla fascia: ' + rec.path);
+        step('del', 'ok');
+      }
+      if (!recs.length) { step('save', 'skip'); step('del', 'skip'); }
+
+      if (restart) {
+        cur = 'start'; step('start', 'wait');
+        const d = new Date();
+        const id = 'HRVT_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes());
+        await retry('Orologio', () => psftp.setLocalTime(d));
+        await retry('Avvio', () => psftp.startRr(id));
+        const s2 = await retry('Controllo', () => psftp.status());
+        if (!s2.recording) throw new Error('la fascia non risulta in registrazione dopo l\'avvio');
+        await setMeta('ultimoAvvio', { id, t: d.getTime() });
+        log('Registrazione avviata: ' + id);
+        step('start', 'ok', 'dalle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
+        out('ok', '<b>Fatto.</b> La fascia sta registrando di nuovo. Puoi chiudere la pagina e allontanarti dal telefono. Prossimo cambio stasera o domattina.');
+      } else {
+        await setMeta('fine', Date.now());
+        out('ok', '<b>Monitoraggio concluso.</b> La fascia non registra più. Ora tocca <b>"Manda tutto al medico"</b>.');
+      }
+      try { device.gatt.disconnect(); } catch (e) {}
+    } catch (e) {
+      log('Errore in "' + cur + '": ' + (e.name || '') + ' ' + e.message);
+      step(cur, 'no');
+      $('prog').innerHTML = '';
+      const safe = cur === 'dl' || cur === 'conn' || cur === 'stop' || cur === 'save';
+      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${safe ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.' : cur === 'start' ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'I dati sono salvati nel telefono.'}<br>Avvicina il telefono alla fascia e tocca di nuovo <b>"Fai il cambio"</b>: riprende da dove si era fermato.<br><span class="note">Dettaglio: ${e.message}</span>`);
+    } finally {
+      busy = false; $('bGo').disabled = false; renderState();
+    }
+  }
+
+  $('bGo').onclick = () => cambio(true);
+  $('bEnd').onclick = () => {
+    if (!endArmed) { endArmed = true; $('bEnd').textContent = 'Tocca di nuovo per concludere'; setTimeout(() => { endArmed = false; $('bEnd').textContent = 'Fine del monitoraggio'; }, 4000); return; }
+    endArmed = false; $('bEnd').textContent = 'Fine del monitoraggio'; cambio(false);
+  };
+  $('bWipe').onclick = async () => {
+    if (!wipeArmed) { wipeArmed = true; $('bWipe').textContent = 'Tocca di nuovo per cancellare'; setTimeout(() => { wipeArmed = false; $('bWipe').textContent = 'Cancella le giornate da questo telefono'; }, 4000); return; }
+    wipeArmed = false; await clearAll(); $('bWipe').textContent = 'Cancella le giornate da questo telefono'; renderState(); out('ok', 'Giornate cancellate da questo telefono.');
+  };
+
+  /* ---------- invio ---------- */
+  function diaryFile() {
+    try {
+      const D = JSON.parse(localStorage.getItem(DIARY_KEY) || 'null'); if (!D || !D.voci || !D.voci.length) return null;
+      const t = Date.now();
+      const outj = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(), voci: D.voci.map(v => ({ label: v.label, categoria: null, inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
+      return new File([JSON.stringify(outj, null, 1)], 'diario_' + new Date(t).toISOString().slice(0, 10) + '.json', { type: 'application/json' });
+    } catch (e) { return null; }
+  }
+  $('bSend').onclick = async () => {
+    const regs = await allRegs();
+    const files = regs.map(r => new File([buildCsv(r)], 'h10_' + r.id + '.csv', { type: 'text/csv' }));
+    const dj = diaryFile(); if (dj) files.push(dj);
+    log('Invio di ' + files.length + ' file');
+    try {
+      if (navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, title: 'Monitoraggio HRV' }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; log('Condivisione non riuscita: ' + e.message); }
+    for (const f of files) { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 400)); }
+  };
+
+  renderState().catch(e => log('Archivio non disponibile: ' + e.message));
+  setInterval(() => { if (!busy) renderState(); }, 60000);
+})();
+</script>
+</body>
+</html>

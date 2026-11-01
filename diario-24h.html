@@ -70,6 +70,13 @@
   <div class="row"><button class="plain" id="dlgCancel">Annulla</button></div>
 </dialog>
 
+<dialog id="dlgWake">
+  <b>A che ora sei andato a letto?</b>
+  <div class="note">Ieri sera non era stato segnato: indicalo qui e la notte viene registrata lo stesso.</div>
+  <input type="time" id="bedTime" value="23:00" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
+  <div class="row"><button class="plain" id="wakeCancel">Annulla</button><button class="main" id="wakeOk" style="width:auto;flex:1">Registra la notte</button></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -128,6 +135,24 @@
     }
     save(); render();
   }
+  // "Mi sono svegliato" funziona anche se la sera non è stato toccato "Vado a dormire"
+  function sveglia() {
+    const sl = apertaLabel('Sonno');
+    if (sl) return sfondo('Sonno');
+    const dlg = $('dlgWake');
+    $('wakeCancel').onclick = () => dlg.close();
+    $('wakeOk').onclick = () => {
+      const v = $('bedTime').value; if (!v) return;
+      const now = Date.now(), [h, m] = v.split(':').map(Number), d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() >= now) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri sera
+      const a = aperta('durata'); if (a) chiudi(a, d.getTime());
+      D.voci.push({ label: 'Sonno', inizio: d.getTime(), fine: now });
+      save(); render(); dlg.close(); toast('Notte registrata: dalle ' + hhmm(d.getTime()) + ' alle ' + hhmm(now));
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
   function chiediLivello() {
     const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
     box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
@@ -153,10 +178,12 @@
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
       `<h2>Giornata</h2><div class="grid">
         <button class="btn" style="background:var(--giornata)" data-s="Lavoro">${wk ? 'Fine lavoro' : 'Inizio lavoro'}<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
-        <button class="btn" style="background:#2E2A5A" data-s="Sonno">${sl ? 'Mi sono svegliato' : 'Vado a dormire'}<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
+        <button class="btn" style="background:#2E2A5A${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
+        <button class="btn" style="background:#C79A2E;grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
       </div>`;
     document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
     document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
+    $('bWake').onclick = sveglia;
 
     const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
     $('log').innerHTML = items.length ? items.map(({ v, i }) => `<div class="it">
