@@ -50,6 +50,16 @@
 <main>
   <div class="now" id="now"></div>
 
+  <div class="now" id="voiceCard">
+    <div class="lab">Dimmelo a voce</div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <input type="text" id="voiceIn" enterkeyhint="done" autocomplete="off" placeholder="es. vado a fare una passeggiata" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:11px;border:1px solid var(--linea);border-radius:10px">
+      <button class="plain" id="voiceGo" style="padding:10px 14px">Segna</button>
+    </div>
+    <div class="note" style="margin-top:6px">Tocca la casella e poi il <b>microfono</b> della tastiera. Puoi dire anche l'orario: <i>"alle 10 ho preso un caffè"</i>, <i>"dalle 9 alle 10 palestra"</i>, <i>"sono tornato"</i>.</div>
+    <div id="voiceOut"></div>
+  </div>
+
   <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. Se ti accorgi in ritardo, segnalo lo stesso e correggi l'orario nell'elenco in fondo.</p>
 
   <div id="groups"></div>
@@ -90,6 +100,104 @@
 
 <div class="toast" id="toast"></div>
 
+<script id="voce">
+/* Interpreta una frase dettata ("vado a fare una passeggiata", "alle 10 ho preso un caffè",
+   "dalle 9 alle 10 palestra", "sono tornato") tutto sul telefono, a parole chiave. */
+const VOCE = (() => {
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’'`]/g, ' ').replace(/[^a-z0-9:.,\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  // dal più specifico al più generico: la prima regola che corrisponde vince
+  const ATTIVITA = [
+    ['Telefonata o discussione difficile', /\b(litig\w*|lite|discussion\w*|discuss\w*|telefonata difficile|chiamata difficile|arrabbiat\w*)\b/],
+    ['Riunione di lavoro', /\b(riunion\w*|meeting|call|videochiamat\w*|conference|colloqui\w*)\b/],
+    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|coerenza|pacer)\b/],
+    ['Meditazione', /\b(medit\w*|mindfulness)\b/],
+    ['Pisolino', /\b(pisolino|riposino|sonnellino|pennichella)\b/],
+    ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
+    ['Telefono / social', /\b(social|instagram|tiktok|facebook|whatsapp|scroll\w*|cellulare|telefonino|telefono)\b/],
+    ['Bicicletta', /\b(bici\w*|pedal\w*|ciclismo|spinning)\b/],
+    ['Allenamento', /\b(palestra|allen\w*|corsa|corr[eo]\w*|jogging|nuot\w*|piscina|tennis|padel|calcetto|pesi|crossfit|sport)\b/],
+    ['Camminata', /\b(passeggi\w*|cammin\w*|a piedi|giro col cane|cane fuori)\b/],
+    ['Scale / lavoro fisico', /\b(scale|giardinaggio|pulizie|faccende|trasloco|lavoro fisico|spesa pesante)\b/],
+    ['Guida', /\b(guid\w*|macchina|in auto|traffico|al volante)\b/],
+    ['Attivita mentale / PC', /\b(computer|pc|portatile|email|mail|studi\w*|scriv\w*|leggo|lettura|documenti|contabilita)\b/],
+    ['Pausa / relax', /\b(pausa|relax|rilass\w*|riposo|riposarmi|divano|musica)\b/],
+  ];
+  const PUNTUALI = [
+    ['Mi sento sotto stress', /\b(stressat\w*|sotto stress|ansia|ansios\w*|agitat\w*|nervos\w*|teso|tesa)\b/],
+    ['Caffè', /\b(caffe\w*|espresso|cappuccino|macchiato|ginseng)\b/],
+    ['Sigaretta', /\b(sigarett\w*|fumo|fumato|fumare|fumata|svapo|iqos)\b/],
+    ['Alcol', /\b(vino|birra|birre|alcol\w*|aperitivo|spritz|cocktail|amaro|grappa|whisky|prosecco)\b/],
+    ['Farmaco / integratore', /\b(farmac\w*|medicin\w*|pastiglia|pillola|compress\w*|integrator\w*|melatonina|magnesio)\b/],
+    ['Pasto', /\b(pranz\w*|cena|cenato|colazione|mangi\w*|pasto|spuntino|merenda)\b/],
+  ];
+  const FINE = /\b(finit\w*|fine|tornat\w*|rientrat\w*|smess\w*|basta|terminat\w*|uscit\w* dal|esco dal|ho chiuso|stop)\b/;
+  const NUM = { una: 1, un: 1, uno: 1, due: 2, tre: 3, quattro: 4, cinque: 5, sei: 6, sette: 7, otto: 8, nove: 9, dieci: 10, undici: 11, dodici: 12, tredici: 13, quattordici: 14, quindici: 15, sedici: 16, diciassette: 17, diciotto: 18, diciannove: 19, venti: 20, ventuno: 21, ventidue: 22, ventitre: 23, trenta: 30, quaranta: 40, quarantacinque: 45, cinquanta: 50 };
+  const WORDNUM = Object.keys(NUM).sort((a, b) => b.length - a.length).join('|');
+  const ORA = `(\\d{1,2}(?:[:.]\\d{2})?|${WORDNUM}|mezzogiorno|mezzanotte)(?:\\s+e\\s+(mezza|mezzo|un quarto|tre quarti|\\d{1,2}|${WORDNUM}))?`;
+
+  function hm(hTok, mTok) {
+    let h, m = 0;
+    if (hTok === 'mezzogiorno') h = 12; else if (hTok === 'mezzanotte') h = 0;
+    else if (/^\d/.test(hTok)) { const p = hTok.split(/[:.]/); h = +p[0]; if (p[1]) m = +p[1]; }
+    else h = NUM[hTok];
+    if (mTok) m = mTok === 'mezza' || mTok === 'mezzo' ? 30 : mTok === 'un quarto' ? 15 : mTok === 'tre quarti' ? 45 : /^\d/.test(mTok) ? +mTok : (NUM[mTok] || 0);
+    if (!(h >= 0 && h <= 24 && m >= 0 && m < 60)) return null;
+    return [h % 24, m];
+  }
+  // l'orario detto è il più recente già passato: "alle 3" detto alle 16 = le 15
+  function risolvi([h, m], now, nonOltre) {
+    const cands = h < 12 && h !== 0 ? [h, h + 12] : h === 12 ? [12, 0] : [h];
+    let best = null;
+    for (const hh of cands) {
+      const d = new Date(now); d.setHours(hh, m, 0, 0);
+      let t = d.getTime();
+      while (t > (nonOltre != null ? nonOltre : now) + 5 * 60000) t -= 864e5;
+      if (best == null || t > best) best = t;
+    }
+    return best;
+  }
+
+  function interpreta(testo, now = Date.now()) {
+    const s = ' ' + norm(testo) + ' ';
+    const out = { testo: testo.trim(), t: now };
+    if (!s.trim()) return null;
+    // orari
+    let m;
+    if ((m = s.match(new RegExp(`\\bdall[ea']?\\s*${ORA}\\s+(?:all[ea']?|fino alle)\\s*${ORA}`)))) {
+      const a = hm(m[1], m[2]), b = hm(m[3], m[4]);
+      if (a && b) { out.to = risolvi(b, now); out.from = risolvi(a, now, out.to); if (out.from >= out.to) out.from -= 864e5; }
+    } else if ((m = s.match(/\b(\d{1,3}|un|una|mezz|mezzo|un quarto d)\s*(minut\w*|ora|ore|or)\s+fa\b/)) || (m = s.match(/\bmezz\s*ora fa\b/))) {
+      let min;
+      if (/mezz/.test(m[0])) min = 30; else if (/quarto/.test(m[0])) min = 15;
+      else { const n = /^\d/.test(m[1]) ? +m[1] : 1; min = /min/.test(m[2]) ? n : n * 60; }
+      out.t = now - min * 60000;
+    } else if ((m = s.match(new RegExp(`\\b(?:all[ea']?|verso le|alle ore|dalle|dall)\\s*(?:ore\\s+)?${ORA}`)))) {
+      const a = hm(m[1], m[2]); if (a) out.t = risolvi(a, now);
+    }
+    // sonno e lavoro
+    if (/\b(vado a dormire|vado a letto|a letto|buonanotte|mi corico|spengo la luce)\b/.test(s) && !/\bsvegli/.test(s)) return { ...out, azione: 'dormo' };
+    if (/\b(svegliat\w*|sveglio|sveglia|buongiorno|mi alzo|alzat\w*)\b/.test(s)) return { ...out, azione: 'sveglio' };
+    if (/\b(fine (del )?lavoro|finit\w* (di )?lavorare|smess\w* (di )?lavorare|esco dal(l)? (lavoro|ufficio)|uscit\w* dal(l)? (lavoro|ufficio)|stacco)\b/.test(s)) return { ...out, azione: 'lavoro_fine' };
+    if (/\b(inizio (a )?lavorare|inizio (il )?lavoro|comincio (a )?lavorare|arrivat\w* in ufficio|sono in ufficio|attacco)\b/.test(s)) return { ...out, azione: 'lavoro_inizio' };
+    // attività
+    const fine = FINE.test(s);
+    const att = ATTIVITA.find(([, re]) => re.test(s));
+    const pun = PUNTUALI.find(([, re]) => re.test(s));
+    if (pun && !(att && /\b(guard|faccio|vado|inizio|sto)\w*/.test(s) && !/\b(preso|bevuto|mangiat|fumat)\w*/.test(s))) {
+      const lv = pun[0] === 'Mi sento sotto stress' ? (s.match(/\b([1-5])\b/) || [])[1] : null;
+      return { ...out, azione: 'puntuale', label: pun[0], livello: lv ? +lv : null };
+    }
+    const label = att ? att[0].replace('Attivita mentale', 'Attività mentale') : null;
+    if (out.from != null) return label ? { ...out, azione: 'intervallo', label } : { ...out, azione: 'nota' };
+    if (fine) return { ...out, azione: 'fine', label };
+    if (label) return { ...out, azione: 'inizio', label };
+    return { ...out, azione: 'nota' };
+  }
+  return { interpreta, norm };
+})();
+if (typeof module !== 'undefined') module.exports = VOCE;
+</script>
+
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -111,6 +219,7 @@
   const CAT = {}; for (const g of GRUPPI) for (const v of g.voci) CAT[v[0]] = { cat: g.id, col: g.col, tipo: v[1], win: v[2] };
   CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+  CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
 
   let D = load();
   function load() { try { return JSON.parse(localStorage.getItem(KEY)) || { voci: [] }; } catch (e) { return { voci: [] }; } }
@@ -197,6 +306,42 @@
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
 
+  /* ---------- dettatura: la frase diventa un'azione, con "Annulla" ---------- */
+  function applicaVoce(r) {
+    const prima = JSON.stringify(D), t = r.t;
+    const chiudiTutto = () => { const a = aperta('durata'); if (a) chiudi(a, t); };
+    let txt;
+    switch (r.azione) {
+      case 'inizio': {
+        chiudiTutto(); const sl = apertaLabel('Sonno'); if (sl) chiudi(sl, t);
+        D.voci.push({ label: r.label, inizio: t, fine: null }); txt = `${r.label} dalle ${hhmm(t)}`; break;
+      }
+      case 'fine': {
+        const cur = r.label ? apertaLabel(r.label) : aperta('durata');
+        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; break; }
+        if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
+        $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
+      }
+      case 'intervallo': D.voci.push({ label: r.label, inizio: r.from, fine: r.to }); txt = `${r.label} dalle ${hhmm(r.from)} alle ${hhmm(r.to)}`; break;
+      case 'puntuale': { const c = CAT[r.label]; const v = { label: r.label, inizio: t, fine: t + c.win * 60000, puntuale: true }; if (r.livello) v.livello = r.livello; D.voci.push(v); txt = `${r.label}${r.livello ? ' ' + r.livello + '/5' : ''} alle ${hhmm(t)}`; break; }
+      case 'dormo': { chiudiTutto(); const w = apertaLabel('Lavoro'); if (w) chiudi(w, t); if (!apertaLabel('Sonno')) D.voci.push({ label: 'Sonno', inizio: t, fine: null }); txt = `a letto alle ${hhmm(t)}`; break; }
+      case 'sveglio': { const sl = apertaLabel('Sonno'); if (!sl) return sveglia(); chiudi(sl, t); txt = `sveglia alle ${hhmm(t)}`; break; }
+      case 'lavoro_inizio': if (!apertaLabel('Lavoro')) D.voci.push({ label: 'Lavoro', inizio: t, fine: null }); txt = `inizio lavoro alle ${hhmm(t)}`; break;
+      case 'lavoro_fine': { const w = apertaLabel('Lavoro'); if (!w) return passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui.'); chiudi(w, t); txt = `fine lavoro alle ${hhmm(t)}`; break; }
+      default: D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`;
+    }
+    save(); render();
+    $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
+    $('voiceUndo').onclick = () => { D = JSON.parse(prima); save(); render(); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
+  }
+  function segnaVoce() {
+    const inp = $('voiceIn'), s = inp.value.trim(); if (!s) return;
+    const r = VOCE.interpreta(s); if (!r) return;
+    inp.value = ''; inp.blur(); applicaVoce(r);
+  }
+  $('voiceGo').onclick = segnaVoce;
+  $('voiceIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); segnaVoce(); } });
+
   function chiediLivello() {
     const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
     box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
@@ -238,7 +383,7 @@
         <span class="dot" style="background:${CAT[v.label] ? CAT[v.label].col : '#999'}"></span>
         <input type="time" value="${hhmm(v.inizio)}" data-i="${i}">
         ${!v.puntuale && v.fine ? `<span class="note">→</span><input type="time" value="${hhmm(v.fine)}" data-f="${i}" title="ora di fine">` : ''}
-        <span class="t">${v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
+        <span class="t">${v.nota ? 'Nota: “' + v.nota.replace(/[<>&]/g, '') + '”' : v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
         <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
     document.querySelectorAll('#log input[type=time]').forEach(inp => inp.onchange = () => {
       const v = D.voci[+inp.dataset.i]; if (!inp.value) return;
@@ -263,7 +408,7 @@
   $('bSend').onclick = async () => {
     const t = Date.now();
     const out = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(),
-      voci: D.voci.map(v => ({ label: v.label, categoria: CAT[v.label] ? CAT[v.label].cat : 'altro', inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
+      voci: D.voci.map(v => ({ label: v.nota ? 'Nota: ' + v.nota : v.label, categoria: CAT[v.label] ? CAT[v.label].cat : 'altro', inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
     const name = 'diario_' + new Date(t).toISOString().slice(0, 10) + '.json';
     const text = JSON.stringify(out, null, 1);
     try {
