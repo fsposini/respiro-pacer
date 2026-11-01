@@ -113,14 +113,16 @@ const VOCE = (() => {
     ['Meditazione', /\b(medit\w*|mindfulness)\b/],
     ['Pisolino', /\b(pisolino|riposino|sonnellino|pennichella)\b/],
     ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
-    ['Telefono / social', /\b(social|instagram|tiktok|facebook|whatsapp|scroll\w*|cellulare|telefonino|telefono)\b/],
+    ['Telefono / tablet / social', /\b(social|instagram|tiktok|facebook|whatsapp|scroll\w*|cellulare|telefonino|telefono)\b/],
     ['Bicicletta', /\b(bici\w*|pedal\w*|ciclismo|spinning)\b/],
     ['Allenamento', /\b(palestra|allen\w*|corsa|corr[eo]\w*|jogging|nuot\w*|piscina|tennis|padel|calcetto|pesi|crossfit|sport)\b/],
     ['Camminata', /\b(passeggi\w*|cammin\w*|a piedi|giro col cane|cane fuori)\b/],
     ['Scale / lavoro fisico', /\b(scale|giardinaggio|pulizie|faccende|trasloco|lavoro fisico|spesa pesante)\b/],
     ['Guida', /\b(guid\w*|macchina|in auto|traffico|al volante)\b/],
-    ['Attivita mentale / PC', /\b(computer|pc|portatile|email|mail|studi\w*|scriv\w*|leggo|lettura|documenti|contabilita)\b/],
-    ['Pausa / relax', /\b(pausa|relax|rilass\w*|riposo|riposarmi|divano|musica)\b/],
+    ['Attivita mentale / PC', /\b(computer|pc|portatile|email|mail|studi\w*|scriv\w*|documenti|contabilita|pratiche)\b/],
+    // lettura fuori dal lavoro: sullo schermo conta come schermo, su carta come relax
+    ['Telefono / tablet / social', /\b(ipad|tablet|kindle|ebook)\b/],
+    ['Pausa / relax', /\b(pausa|relax|rilass\w*|riposo|riposarmi|divano|musica|libro|romanzo|giornale|rivista|legg\w*|lettura)\b/],
   ];
   const PUNTUALI = [
     ['Mi sento sotto stress', /\b(stressat\w*|sotto stress|ansia|ansios\w*|agitat\w*|nervos\w*|teso|tesa)\b/],
@@ -189,6 +191,15 @@ const VOCE = (() => {
     }
     const label = att ? att[0].replace('Attivita mentale', 'Attività mentale') : null;
     if (out.from != null) return label ? { ...out, azione: 'intervallo', label } : { ...out, azione: 'nota' };
+    // "faccio 5 minuti di respirazione" = da adesso per 5 minuti; "ho fatto 5 minuti di…" = i 5 minuti appena passati
+    const dm = s.match(new RegExp(`\\b(\\d{1,3}|${WORDNUM}) minut\\w*(?! fa\\b)`));
+    if (label && dm) {
+      const n = /^\d/.test(dm[1]) ? +dm[1] : NUM[dm[1]];
+      if (n > 0 && n <= 240) {
+        const passato = /\b(ho fatto|fatto|ho finito|finito|terminato|appena)\b/.test(s);
+        return passato ? { ...out, azione: 'intervallo', label, from: out.t - n * 60000, to: out.t } : { ...out, azione: 'intervallo', label, from: out.t, to: out.t + n * 60000, inCorso: true };
+      }
+    }
     if (fine) return { ...out, azione: 'fine', label };
     if (label) return { ...out, azione: 'inizio', label };
     return { ...out, azione: 'nota' };
@@ -211,7 +222,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
       ['Meditazione', 'durata'], ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
     { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
-      ['Telefono / social', 'durata'], ['TV / serie', 'durata'] ] },
+      ['Telefono / tablet / social', 'durata'], ['TV / serie', 'durata'] ] },
     { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
       ['Caffè', 'puntuale', 30], ['Sigaretta', 'puntuale', 20], ['Pasto', 'puntuale', 45], ['Alcol', 'puntuale', 60],
       ['Farmaco / integratore', 'puntuale', 30], ['Mi sento sotto stress', 'puntuale', 15] ] },
@@ -220,6 +231,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
+  CAT['Telefono / social'] = CAT['Telefono / tablet / social']; // nome della prima versione, per i diari già iniziati
 
   let D = load();
   function load() { try { return JSON.parse(localStorage.getItem(KEY)) || { voci: [] }; } catch (e) { return { voci: [] }; } }
@@ -322,7 +334,11 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
         $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
       }
-      case 'intervallo': D.voci.push({ label: r.label, inizio: r.from, fine: r.to }); txt = `${r.label} dalle ${hhmm(r.from)} alle ${hhmm(r.to)}`; break;
+      case 'intervallo': {
+        // se comincia adesso, chiude l'attività precedente (la fascia di lavoro resta aperta)
+        if (r.inCorso) { const a = aperta('durata'); if (a) chiudi(a, r.from); }
+        D.voci.push({ label: r.label, inizio: r.from, fine: r.to }); txt = `${r.label} dalle ${hhmm(r.from)} alle ${hhmm(r.to)}`; break;
+      }
       case 'puntuale': { const c = CAT[r.label]; const v = { label: r.label, inizio: t, fine: t + c.win * 60000, puntuale: true }; if (r.livello) v.livello = r.livello; D.voci.push(v); txt = `${r.label}${r.livello ? ' ' + r.livello + '/5' : ''} alle ${hhmm(t)}`; break; }
       case 'dormo': { chiudiTutto(); const w = apertaLabel('Lavoro'); if (w) chiudi(w, t); if (!apertaLabel('Sonno')) D.voci.push({ label: 'Sonno', inizio: t, fine: null }); txt = `a letto alle ${hhmm(t)}`; break; }
       case 'sveglio': { const sl = apertaLabel('Sonno'); if (!sl) return sveglia(); chiudi(sl, t); txt = `sveglia alle ${hhmm(t)}`; break; }
@@ -356,9 +372,11 @@ if (typeof module !== 'undefined') module.exports = VOCE;
 
   function render() {
     const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro');
+    // attività con durata già detta ("5 minuti di respirazione"), ancora in corso
+    const plan = !cur && !sl && D.voci.filter(v => !v.puntuale && v.fine && v.inizio <= Date.now() && v.fine > Date.now() && CAT[v.label] && CAT[v.label].tipo === 'durata').sort((a, b) => b.inizio - a.inizio)[0];
     $('now').innerHTML = `<div class="lab">Adesso</div>
-      <div class="what">${sl ? 'A letto' : cur ? cur.label : 'Nessuna attività segnata'}</div>
-      <div class="since">${sl ? 'dalle ' + hhmm(sl.inizio) : cur ? 'dalle ' + hhmm(cur.inizio) + ' · ' + durTxt(Date.now() - cur.inizio) : 'Tocca un pulsante quando inizi qualcosa.'}</div>
+      <div class="what">${sl ? 'A letto' : cur ? cur.label : plan ? plan.label : 'Nessuna attività segnata'}</div>
+      <div class="since">${sl ? 'dalle ' + hhmm(sl.inizio) : cur ? 'dalle ' + hhmm(cur.inizio) + ' · ' + durTxt(Date.now() - cur.inizio) : plan ? 'dalle ' + hhmm(plan.inizio) + ' alle ' + hhmm(plan.fine) + ' · si chiude da sola' : 'Tocca un pulsante quando inizi qualcosa.'}</div>
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
     const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); };
