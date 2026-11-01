@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diario della giornata — HRV Tool</title>
+<style>
+  :root{ --blu:#1B549B; --bg:#F4FBF8; --testo:#2E3538; --grigio:#545E62; --linea:#e3e8ea;
+    --fisica:#1565C8; --mente:#E5251D; --recupero:#5E9E2A; --schermi:#C2731B; --puntuale:#7A5C9E; --giornata:#545E62; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--testo);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:40px}
+  header{background:var(--blu);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:20px}
+  header .sub{opacity:.85;font-size:12.5px;font-weight:600;letter-spacing:.5px}
+  main{max-width:620px;margin:0 auto;padding:12px 14px}
+  .now{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .now .lab{font-size:12px;color:var(--grigio);text-transform:uppercase;letter-spacing:.5px}
+  .now .what{font-size:21px;font-weight:700;margin:2px 0}
+  .now .since{font-size:14px;color:var(--grigio)}
+  .now .bg{font-size:13.5px;margin-top:6px;color:var(--grigio)}
+  .now button{margin-top:10px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--grigio);margin:18px 2px 8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .btn{border:0;border-radius:13px;padding:14px 10px;font:600 15.5px/1.2 inherit;color:#fff;cursor:pointer;min-height:58px;text-align:center}
+  .btn.on{outline:4px solid #222;outline-offset:-4px}
+  .btn small{display:block;font-weight:500;font-size:11.5px;opacity:.9;margin-top:3px}
+  button.plain{border:0;border-radius:10px;padding:10px 14px;font:600 15px inherit;background:#e9eff5;color:var(--blu);cursor:pointer}
+  button.main{border:0;border-radius:10px;padding:12px 16px;font:600 16px inherit;background:var(--blu);color:#fff;cursor:pointer;width:100%}
+  .log{background:#fff;border-radius:14px;padding:6px 12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  .log .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--linea);font-size:15px}
+  .log .it:first-child{border-top:0}
+  .log .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .log .it span.t{flex:1}
+  .log input[type=time]{font:inherit;font-size:14px;padding:4px;border:1px solid var(--linea);border-radius:7px;width:92px}
+  .log .x{border:0;background:none;color:#b3261e;font-size:20px;cursor:pointer;padding:0 4px}
+  .note{font-size:13px;color:var(--grigio)}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+  .toast.show{opacity:.92}
+  dialog{border:0;border-radius:14px;padding:18px;max-width:340px}
+  dialog .row{display:flex;gap:8px;margin-top:12px}
+  .lvl{display:flex;gap:6px;margin-top:10px}
+  .lvl button{flex:1;border:0;border-radius:9px;padding:12px 0;font:700 17px inherit;background:#eef3f8;color:var(--blu)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Diario della giornata</h1>
+  <div class="sub">HRV TOOL · MONITORAGGIO 24 ORE</div>
+</header>
+<main>
+  <div class="now" id="now"></div>
+
+  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. Se ti accorgi in ritardo, segnalo lo stesso e correggi l'orario nell'elenco in fondo.</p>
+
+  <div id="groups"></div>
+
+  <h2>Oggi</h2>
+  <div class="log" id="log"></div>
+
+  <h2>A fine monitoraggio</h2>
+  <button class="main" id="bSend">Manda il diario al medico</button>
+  <p class="note">Crea un file con le attività e gli orari, senza nome né altri dati personali, e apre la condivisione del telefono (Mail, WhatsApp…). Il diario resta anche su questo telefono finché non lo azzeri.</p>
+  <button class="plain" id="bReset" style="margin-top:6px">Azzera il diario</button>
+</main>
+
+<dialog id="dlgStress">
+  <b>Quanto ti senti sotto pressione adesso?</b>
+  <div class="note">1 = per niente, 5 = moltissimo</div>
+  <div class="lvl"></div>
+  <div class="row"><button class="plain" id="dlgCancel">Annulla</button></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'hrv24.diarioTelefono.v1';
+  // tipo: 'durata' = inizia e resta attiva; 'puntuale' = un tocco, con una finestra di analisi di default (minuti)
+  const GRUPPI = [
+    { id: 'fisica', nome: 'Attività fisica', col: 'var(--fisica)', voci: [
+      ['Camminata', 'durata'], ['Allenamento', 'durata'], ['Bicicletta', 'durata'], ['Scale / lavoro fisico', 'durata'] ] },
+    { id: 'mente', nome: 'Lavoro e mente', col: 'var(--mente)', voci: [
+      ['Riunione di lavoro', 'durata'], ['Attività mentale / PC', 'durata'], ['Telefonata o discussione difficile', 'durata'], ['Guida', 'durata'] ] },
+    { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
+      ['Meditazione', 'durata'], ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
+    { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
+      ['Telefono / social', 'durata'], ['TV / serie', 'durata'] ] },
+    { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
+      ['Caffè', 'puntuale', 30], ['Sigaretta', 'puntuale', 20], ['Pasto', 'puntuale', 45], ['Alcol', 'puntuale', 60],
+      ['Farmaco / integratore', 'puntuale', 30], ['Mi sento sotto stress', 'puntuale', 15] ] },
+  ];
+  const CAT = {}; for (const g of GRUPPI) for (const v of g.voci) CAT[v[0]] = { cat: g.id, col: g.col, tipo: v[1], win: v[2] };
+  CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+  CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+
+  let D = load();
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || { voci: [] }; } catch (e) { return { voci: [] }; } }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); } }
+  const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
+  function toast(s) { const t = $('toast'); t.textContent = s; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+  if (navigator.vibrate) {} // la vibrazione su iPhone non è disponibile: il riscontro è il messaggio in basso
+
+  const aperta = cat => D.voci.find(v => v.fine == null && (cat === 'sfondo' ? CAT[v.label].tipo === 'sfondo' : CAT[v.label].tipo === 'durata'));
+  const apertaLabel = label => D.voci.find(v => v.fine == null && v.label === label);
+
+  function chiudi(v, t) { v.fine = Math.max(t, v.inizio + 60000); }
+  function tocca(label) {
+    const c = CAT[label], t = Date.now();
+    if (c.tipo === 'puntuale') {
+      if (label === 'Mi sento sotto stress') return chiediLivello();
+      D.voci.push({ label, inizio: t, fine: t + c.win * 60000, puntuale: true });
+      save(); render(); toast(label + ' segnato alle ' + hhmm(t)); return;
+    }
+    const cur = aperta('durata');
+    if (cur && cur.label === label) { chiudi(cur, t); save(); render(); toast(label + ': fine alle ' + hhmm(t)); return; }
+    if (cur) chiudi(cur, t);
+    D.voci.push({ label, inizio: t, fine: null });
+    save(); render(); toast(label + ' dalle ' + hhmm(t));
+  }
+  function sfondo(label) {
+    const t = Date.now(), cur = apertaLabel(label);
+    if (cur) { chiudi(cur, t); toast(label === 'Sonno' ? 'Buongiorno: sveglia alle ' + hhmm(t) : 'Fine lavoro alle ' + hhmm(t)); }
+    else {
+      if (label === 'Sonno') { const a = aperta('durata'); if (a) chiudi(a, t); }
+      D.voci.push({ label, inizio: t, fine: null }); toast(label === 'Sonno' ? 'Buonanotte: a letto alle ' + hhmm(t) : 'Inizio lavoro alle ' + hhmm(t));
+    }
+    save(); render();
+  }
+  function chiediLivello() {
+    const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
+    box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
+    box.querySelectorAll('button').forEach(b => b.onclick = () => {
+      const t = Date.now();
+      D.voci.push({ label: 'Mi sento sotto stress', inizio: t, fine: t + 15 * 60000, puntuale: true, livello: +b.dataset.n });
+      save(); render(); dlg.close(); toast('Stress ' + b.dataset.n + '/5 segnato alle ' + hhmm(t));
+    });
+    $('dlgCancel').onclick = () => dlg.close();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
+  function render() {
+    const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro');
+    $('now').innerHTML = `<div class="lab">Adesso</div>
+      <div class="what">${sl ? 'A letto' : cur ? cur.label : 'Nessuna attività segnata'}</div>
+      <div class="since">${sl ? 'dalle ' + hhmm(sl.inizio) : cur ? 'dalle ' + hhmm(cur.inizio) + ' · ' + durTxt(Date.now() - cur.inizio) : 'Tocca un pulsante quando inizi qualcosa.'}</div>
+      ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
+      ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
+    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); };
+
+    $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
+      `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
+      `<h2>Giornata</h2><div class="grid">
+        <button class="btn" style="background:var(--giornata)" data-s="Lavoro">${wk ? 'Fine lavoro' : 'Inizio lavoro'}<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
+        <button class="btn" style="background:#2E2A5A" data-s="Sonno">${sl ? 'Mi sono svegliato' : 'Vado a dormire'}<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
+      </div>`;
+    document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
+    document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
+
+    const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
+    $('log').innerHTML = items.length ? items.map(({ v, i }) => `<div class="it">
+        <span class="dot" style="background:${CAT[v.label] ? CAT[v.label].col : '#999'}"></span>
+        <input type="time" value="${hhmm(v.inizio)}" data-i="${i}">
+        <span class="t">${v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
+        <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
+    document.querySelectorAll('#log input[type=time]').forEach(inp => inp.onchange = () => {
+      const v = D.voci[+inp.dataset.i]; if (!inp.value) return;
+      const [h, m] = inp.value.split(':').map(Number), d = new Date(v.inizio);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = riferito a ieri sera
+      const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
+      if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+      save(); render(); toast('Orario corretto');
+    });
+    document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { D.voci.splice(+b.dataset.del, 1); save(); render(); });
+  }
+
+  $('bSend').onclick = async () => {
+    const t = Date.now();
+    const out = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(),
+      voci: D.voci.map(v => ({ label: v.label, categoria: CAT[v.label] ? CAT[v.label].cat : 'altro', inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
+    const name = 'diario_' + new Date(t).toISOString().slice(0, 10) + '.json';
+    const text = JSON.stringify(out, null, 1);
+    try {
+      const f = new File([text], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: 'Diario della giornata' }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click();
+  };
+  $('bReset').onclick = () => {
+    const b = $('bReset');
+    if (!b.dataset.arm) { b.dataset.arm = '1'; b.textContent = 'Tocca di nuovo per azzerare'; setTimeout(() => { delete b.dataset.arm; b.textContent = 'Azzera il diario'; }, 3000); return; }
+    D = { voci: [] }; save(); render(); delete b.dataset.arm; b.textContent = 'Azzera il diario'; toast('Diario azzerato');
+  };
+
+  render();
+  setInterval(render, 60000);
+})();
+</script>
+</body>
+</html>
