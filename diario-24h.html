@@ -70,6 +70,17 @@
   <div class="row"><button class="plain" id="dlgCancel">Annulla</button></div>
 </dialog>
 
+<dialog id="dlgPast">
+  <b id="pastTitle">Ho dimenticato di segnare</b>
+  <div class="note" id="pastNote">Scegli l'attività e gli orari, anche approssimati.</div>
+  <select id="pastLabel" style="font:inherit;font-size:17px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%"></select>
+  <div class="row" style="align-items:center">
+    <label id="pastFromL" style="flex:1">dalle<br><input type="time" id="pastFrom" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--linea);border-radius:9px;width:100%"></label>
+    <label style="flex:1"><span id="pastToT">alle</span><br><input type="time" id="pastTo" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--linea);border-radius:9px;width:100%"></label>
+  </div>
+  <div class="row"><button class="plain" id="pastCancel">Annulla</button><button class="main" id="pastOk" style="width:auto;flex:1">Registra</button></div>
+</dialog>
+
 <dialog id="dlgWake">
   <b>A che ora sei andato a letto?</b>
   <div class="note">Ieri sera non era stato segnato: indicalo qui e la notte viene registrata lo stesso.</div>
@@ -153,6 +164,39 @@
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
 
+  // attività dimenticata: orari "dalle–alle" riferiti all'ultima volta che sono passati (oggi o ieri)
+  function passato(preset, titolo, nota) {
+    const dlg = $('dlgPast'), sel = $('pastLabel');
+    sel.innerHTML = GRUPPI.map(g => `<optgroup label="${g.nome}">${g.voci.map(([l]) => `<option>${l}</option>`).join('')}</optgroup>`).join('') +
+      '<optgroup label="Giornata"><option>Lavoro</option><option>Sonno</option></optgroup>';
+    if (preset) sel.value = preset;
+    $('pastTitle').textContent = titolo || 'Ho dimenticato di segnare';
+    $('pastNote').textContent = nota || 'Scegli l\'attività e gli orari, anche approssimati.';
+    const now = new Date();
+    $('pastTo').value = hhmm(now.getTime());
+    $('pastFrom').value = hhmm(now.getTime() - 3600000);
+    const aggiorna = () => { const p = CAT[sel.value] && CAT[sel.value].tipo === 'puntuale'; $('pastFromL').style.display = p ? 'none' : ''; $('pastToT').textContent = p ? 'alle ore' : 'alle'; };
+    sel.onchange = aggiorna; aggiorna();
+    $('pastCancel').onclick = () => dlg.close();
+    $('pastOk').onclick = () => {
+      const label = sel.value, c = CAT[label], nowMs = Date.now();
+      const at = v => { const [h, m] = v.split(':').map(Number), d = new Date(nowMs); d.setHours(h, m, 0, 0); return d.getTime(); };
+      if (!$('pastTo').value) return;
+      let fine = at($('pastTo').value); if (fine > nowMs + 60000) fine -= 864e5;
+      if (c.tipo === 'puntuale') { D.voci.push({ label, inizio: fine, fine: fine + c.win * 60000, puntuale: true }); }
+      else {
+        if (!$('pastFrom').value) return;
+        let inizio = at($('pastFrom').value); while (inizio > fine - 60000) inizio -= 864e5;
+        // se l'attività dimenticata è quella ancora aperta, la chiude invece di duplicarla
+        const open = apertaLabel(label);
+        if (open) { open.inizio = Math.min(open.inizio, inizio); open.fine = fine; }
+        else D.voci.push({ label, inizio, fine });
+      }
+      save(); render(); dlg.close(); toast(label + ' registrato');
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
   function chiediLivello() {
     const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
     box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
@@ -177,18 +221,23 @@
     $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
       `<h2>Giornata</h2><div class="grid">
-        <button class="btn" style="background:var(--giornata)" data-s="Lavoro">${wk ? 'Fine lavoro' : 'Inizio lavoro'}<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
+        <button class="btn" style="background:var(--giornata)${wk ? ';opacity:.55' : ''}" data-s="Lavoro" ${wk ? 'disabled' : ''}>Inizio lavoro<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
+        <button class="btn" style="background:#7d878b" id="bWorkEnd">Fine lavoro</button>
         <button class="btn" style="background:#2E2A5A${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
         <button class="btn" style="background:#C79A2E;grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
       </div>`;
     document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
     document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
     $('bWake').onclick = sveglia;
+    $('bWorkEnd').onclick = () => apertaLabel('Lavoro') ? sfondo('Lavoro') : passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui, anche approssimato.');
+    $('groups').insertAdjacentHTML('beforeend', '<button class="plain" id="bPast" style="width:100%;margin-top:14px;padding:13px">Ho dimenticato di segnare qualcosa</button>');
+    $('bPast').onclick = () => passato();
 
     const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
     $('log').innerHTML = items.length ? items.map(({ v, i }) => `<div class="it">
         <span class="dot" style="background:${CAT[v.label] ? CAT[v.label].col : '#999'}"></span>
         <input type="time" value="${hhmm(v.inizio)}" data-i="${i}">
+        ${!v.puntuale && v.fine ? `<span class="note">→</span><input type="time" value="${hhmm(v.fine)}" data-f="${i}" title="ora di fine">` : ''}
         <span class="t">${v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
         <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
     document.querySelectorAll('#log input[type=time]').forEach(inp => inp.onchange = () => {
@@ -199,6 +248,14 @@
       const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
       if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
       save(); render(); toast('Orario corretto');
+    });
+    document.querySelectorAll('#log input[data-f]').forEach(inp => inp.onchange = () => {
+      const v = D.voci[+inp.dataset.f]; if (!inp.value) return;
+      const [h, m] = inp.value.split(':').map(Number), d = new Date(v.inizio);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() <= v.inizio) d.setDate(d.getDate() + 1); // la fine dopo mezzanotte cade il giorno dopo
+      v.fine = Math.min(d.getTime(), Date.now() + 60000);
+      save(); render(); toast('Orario di fine corretto');
     });
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { D.voci.splice(+b.dataset.del, 1); save(); render(); });
   }
