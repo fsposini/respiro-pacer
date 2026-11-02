@@ -56,7 +56,7 @@
       <input type="text" id="voiceIn" enterkeyhint="done" autocomplete="off" placeholder="es. vado a fare una passeggiata" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:11px;border:1px solid var(--linea);border-radius:10px">
       <button class="plain" id="voiceGo" style="padding:10px 14px">Segna</button>
     </div>
-    <div class="note" style="margin-top:6px">Tocca la casella e poi il <b>microfono</b> della tastiera. Puoi dire anche l'orario: <i>"alle 10 ho preso un caffè"</i>, <i>"dalle 9 alle 10 palestra"</i>, <i>"sono tornato"</i>.</div>
+    <div class="note" style="margin-top:6px">Tocca la casella e poi il <b>microfono</b> della tastiera. Puoi dire anche l'orario: <i>"alle 10 ho preso un caffè"</i>, <i>"dalle 9 alle 10 palestra"</i>, <i>"sono tornato"</i>, <i>"ho rotto il digiuno"</i>.</div>
     <div id="voiceOut"></div>
   </div>
 
@@ -176,6 +176,12 @@ const VOCE = (() => {
     } else if ((m = s.match(new RegExp(`\\b(?:all[ea']?|verso le|alle ore|dalle|dall)\\s*(?:ore\\s+)?${ORA}`)))) {
       const a = hm(m[1], m[2]); if (a) out.t = risolvi(a, now);
     }
+    // digiuno (prima dei pasti: "ho rotto il digiuno mangiando" è la fine del digiuno, non solo un pasto)
+    if (/\bdigiun/.test(s) || /\bultimo pasto\b/.test(s)) {
+      if (out.from != null) return { ...out, azione: 'intervallo', label: 'Digiuno' };
+      if (/\b(fine (del )?digiuno|rott\w* (il )?digiuno|romp\w* (il )?digiuno|interromp\w* (il )?digiuno|interrott\w* (il )?digiuno|finit\w* (il )?digiuno|finisco (il )?digiuno|chius\w* (il )?digiuno|smess\w* (il |di fare )?(il )?digiuno|termin\w* (il )?digiuno)\b/.test(s)) return { ...out, azione: 'digiuno_fine' };
+      if (/\b(inizi\w* (il |a fare )?(il )?digiuno|cominci\w* (il |a fare )?(il )?digiuno|parte il digiuno|ultimo pasto)\b/.test(s)) return { ...out, azione: 'digiuno_inizio' };
+    }
     // sonno e lavoro
     if (/\b(vado a dormire|vado a letto|a letto|buonanotte|mi corico|spengo la luce)\b/.test(s) && !/\bsvegli/.test(s)) return { ...out, azione: 'dormo' };
     if (/\b(svegliat\w*|sveglio|sveglia|buongiorno|mi alzo|alzat\w*)\b/.test(s)) return { ...out, azione: 'sveglio' };
@@ -230,6 +236,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   const CAT = {}; for (const g of GRUPPI) for (const v of g.voci) CAT[v[0]] = { cat: g.id, col: g.col, tipo: v[1], win: v[2] };
   CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+  // il digiuno è una fascia di sfondo indipendente: può comprendere la notte, il lavoro e le altre attività
+  CAT['Digiuno'] = { cat: 'giornata', col: '#B07A1E', tipo: 'sfondo' };
   CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
   CAT['Telefono / social'] = CAT['Telefono / tablet / social']; // nome della prima versione, per i diari già iniziati
 
@@ -257,6 +265,16 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     if (cur) chiudi(cur, t);
     D.voci.push({ label, inizio: t, fine: null });
     save(); render(); toast(label + ' dalle ' + hhmm(t));
+  }
+  // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
+  function digiuno() {
+    const t = Date.now(), cur = apertaLabel('Digiuno');
+    if (cur) {
+      chiudi(cur, t);
+      D.voci.push({ label: 'Pasto', inizio: t, fine: t + CAT['Pasto'].win * 60000, puntuale: true });
+      toast('Fine digiuno alle ' + hhmm(t) + ' (' + durTxt(t - cur.inizio) + '), pasto segnato');
+    } else { D.voci.push({ label: 'Digiuno', inizio: t, fine: null }); toast('Inizio digiuno alle ' + hhmm(t)); }
+    save(); render();
   }
   function sfondo(label) {
     const t = Date.now(), cur = apertaLabel(label);
@@ -289,7 +307,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   function passato(preset, titolo, nota) {
     const dlg = $('dlgPast'), sel = $('pastLabel');
     sel.innerHTML = GRUPPI.map(g => `<optgroup label="${g.nome}">${g.voci.map(([l]) => `<option>${l}</option>`).join('')}</optgroup>`).join('') +
-      '<optgroup label="Giornata"><option>Lavoro</option><option>Sonno</option></optgroup>';
+      '<optgroup label="Giornata"><option>Lavoro</option><option>Sonno</option><option>Digiuno</option></optgroup>';
     if (preset) sel.value = preset;
     $('pastTitle').textContent = titolo || 'Ho dimenticato di segnare';
     $('pastNote').textContent = nota || 'Scegli l\'attività e gli orari, anche approssimati.';
@@ -312,6 +330,9 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         const open = apertaLabel(label);
         if (open) { open.inizio = Math.min(open.inizio, inizio); open.fine = fine; }
         else D.voci.push({ label, inizio, fine });
+        // un digiuno finisce con un pasto: lo aggiunge se non è già segnato vicino alla fine
+        if (label === 'Digiuno' && !D.voci.some(v => v.label === 'Pasto' && Math.abs(v.inizio - fine) <= 30 * 60000))
+          D.voci.push({ label: 'Pasto', inizio: fine, fine: fine + CAT['Pasto'].win * 60000, puntuale: true });
       }
       save(); render(); dlg.close(); toast(label + ' registrato');
     };
@@ -342,6 +363,18 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       case 'puntuale': { const c = CAT[r.label]; const v = { label: r.label, inizio: t, fine: t + c.win * 60000, puntuale: true }; if (r.livello) v.livello = r.livello; D.voci.push(v); txt = `${r.label}${r.livello ? ' ' + r.livello + '/5' : ''} alle ${hhmm(t)}`; break; }
       case 'dormo': { chiudiTutto(); const w = apertaLabel('Lavoro'); if (w) chiudi(w, t); if (!apertaLabel('Sonno')) D.voci.push({ label: 'Sonno', inizio: t, fine: null }); txt = `a letto alle ${hhmm(t)}`; break; }
       case 'sveglio': { const sl = apertaLabel('Sonno'); if (!sl) return sveglia(); chiudi(sl, t); txt = `sveglia alle ${hhmm(t)}`; break; }
+      case 'digiuno_inizio': {
+        const open = apertaLabel('Digiuno');
+        if (open) { open.inizio = t; txt = `digiuno: inizio corretto alle ${hhmm(t)}`; }
+        else { D.voci.push({ label: 'Digiuno', inizio: t, fine: null }); txt = `inizio digiuno alle ${hhmm(t)}`; }
+        break;
+      }
+      case 'digiuno_fine': {
+        const open = apertaLabel('Digiuno');
+        if (!open) return passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto, anche approssimata.');
+        chiudi(open, t); D.voci.push({ label: 'Pasto', inizio: t, fine: t + CAT['Pasto'].win * 60000, puntuale: true });
+        txt = `fine digiuno alle ${hhmm(t)} (${durTxt(t - open.inizio)}), con il pasto`; break;
+      }
       case 'lavoro_inizio': if (!apertaLabel('Lavoro')) D.voci.push({ label: 'Lavoro', inizio: t, fine: null }); txt = `inizio lavoro alle ${hhmm(t)}`; break;
       case 'lavoro_fine': { const w = apertaLabel('Lavoro'); if (!w) return passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui.'); chiudi(w, t); txt = `fine lavoro alle ${hhmm(t)}`; break; }
       default: D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`;
@@ -371,13 +404,14 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   }
 
   function render() {
-    const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro');
+    const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro'), dg = apertaLabel('Digiuno');
     // attività con durata già detta ("5 minuti di respirazione"), ancora in corso
     const plan = !cur && !sl && D.voci.filter(v => !v.puntuale && v.fine && v.inizio <= Date.now() && v.fine > Date.now() && CAT[v.label] && CAT[v.label].tipo === 'durata').sort((a, b) => b.inizio - a.inizio)[0];
     $('now').innerHTML = `<div class="lab">Adesso</div>
       <div class="what">${sl ? 'A letto' : cur ? cur.label : plan ? plan.label : 'Nessuna attività segnata'}</div>
       <div class="since">${sl ? 'dalle ' + hhmm(sl.inizio) : cur ? 'dalle ' + hhmm(cur.inizio) + ' · ' + durTxt(Date.now() - cur.inizio) : plan ? 'dalle ' + hhmm(plan.inizio) + ' alle ' + hhmm(plan.fine) + ' · si chiude da sola' : 'Tocca un pulsante quando inizi qualcosa.'}</div>
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
+      ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
     const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); };
 
@@ -388,10 +422,14 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         <button class="btn" style="background:#7d878b" id="bWorkEnd">Fine lavoro</button>
         <button class="btn" style="background:#2E2A5A${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
         <button class="btn" style="background:#C79A2E;grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
+        <button class="btn" style="background:#B07A1E${dg ? ';opacity:.55' : ''}" id="bFastStart" ${dg ? 'disabled' : ''}>Inizio digiuno<small>${dg ? 'dalle ' + hhmm(dg.inizio) : 'dopo l\'ultimo pasto'}</small></button>
+        <button class="btn" style="background:#8a6a2e" id="bFastEnd">Fine digiuno<small>segna anche il pasto</small></button>
       </div>`;
     document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
     document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
     $('bWake').onclick = sveglia;
+    $('bFastStart').onclick = digiuno;
+    $('bFastEnd').onclick = () => apertaLabel('Digiuno') ? digiuno() : passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto e quella in cui hai mangiato di nuovo.');
     $('bWorkEnd').onclick = () => apertaLabel('Lavoro') ? sfondo('Lavoro') : passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui, anche approssimato.');
     $('groups').insertAdjacentHTML('beforeend', '<button class="plain" id="bPast" style="width:100%;margin-top:14px;padding:13px">Ho dimenticato di segnare qualcosa</button>');
     $('bPast').onclick = () => passato();
