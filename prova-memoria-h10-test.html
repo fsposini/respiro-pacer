@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>PROVA · Prova memoria H10</title>
+<style>
+  :root{
+    --bg:#0c1620;--panel:#13283a;--line:#244563;--text:#e8f1f8;--muted:#8fb0c9;
+    --accent:#3fb8c4;--ok:#3fb46a;--warn:#e3b93a;--bad:#e0564f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:0 16px 40px}
+  header{padding:18px 0 8px}
+  h1{font-size:22px;margin:0}
+  .sub{color:var(--muted);font-size:14px;margin-top:2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
+  .card h2{font-size:17px;margin:0 0 6px}
+  .card p{margin:6px 0;color:var(--muted);font-size:14px}
+  button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 14px;margin:6px 6px 0 0;background:var(--accent);color:#06222a;cursor:pointer}
+  button.sec{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button.danger{background:var(--bad);color:#fff}
+  button:disabled{opacity:.35;cursor:default}
+  .row{display:flex;flex-wrap:wrap;align-items:center}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:14px;margin-top:6px}
+  .kv b{color:var(--muted);font-weight:500}
+  .esito li{margin:3px 0;font-size:15px;list-style:none}
+  .esito{padding:0;margin:6px 0 0}
+  .s-ok::before{content:"✅ "} .s-no::before{content:"❌ "} .s-wait::before{content:"⏳ "} .s-todo::before{content:"▫️ "}
+  .msg{font-size:14px;padding:8px 10px;border-radius:8px;margin-top:8px}
+  .msg.bad{background:rgba(224,86,79,.15);color:#ffb3ae}
+  .msg.ok{background:rgba(63,180,106,.15);color:#a6e8bd}
+  .msg.warn{background:rgba(227,185,58,.15);color:#f3dc94}
+  .rec{border-top:1px solid var(--line);padding-top:8px;margin-top:8px;font-size:14px}
+  progress{width:100%;height:10px;margin-top:8px}
+  #log{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--muted);max-height:320px;overflow:auto;background:#0a131c;border-radius:8px;padding:8px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Prova memoria H10 · versione di prova</h1>
+  <div class="sub">Pagina di collaudo, non è l'app dei pazienti. Serve a capire se HRV Tool può leggere e scaricare la registrazione salvata dentro la fascia.</div>
+</header>
+
+<div class="card">
+  <h2>Esito della prova</h2>
+  <ul class="esito" id="esito"></ul>
+</div>
+
+<div class="card">
+  <h2>1 · Collega la fascia</h2>
+  <p>Indossa la fascia (staccata dal corpo si spegne dopo circa 45 secondi). Su iPhone usa Bluefy.</p>
+  <div class="row">
+    <button id="bConnect">Collega</button>
+    <button id="bDisconnect" class="sec" disabled>Scollega</button>
+  </div>
+  <div class="kv" id="devInfo"></div>
+  <div id="connMsg"></div>
+</div>
+
+<div class="card">
+  <h2>2 · Cosa c'è nella memoria</h2>
+  <p>Sola lettura: questi tasti non avviano, non fermano e non cancellano nulla.</p>
+  <div class="row">
+    <button id="bStatus" disabled>Leggi stato</button>
+    <button id="bList" disabled>Elenca registrazioni</button>
+  </div>
+  <div class="kv" id="statusInfo"></div>
+  <div class="sub" id="stimaNota"></div>
+  <div id="recList"></div>
+  <div id="dlBox"></div>
+</div>
+
+<div class="card">
+  <h2>3 · Registrazione di prova</h2>
+  <p>Solo quando la memoria è vuota. Avvia, chiudi Bluefy, aspetta 10–15 minuti con la fascia addosso, poi riapri questa pagina, collega, ferma e scarica.</p>
+  <div class="row">
+    <button id="bStart" disabled>Avvia registrazione RR</button>
+    <button id="bStop" class="sec" disabled>Ferma registrazione</button>
+  </div>
+  <div id="recMsg"></div>
+</div>
+
+<div class="card" id="savedCard" hidden>
+  <h2>Ultimo scaricamento salvato su questo telefono</h2>
+  <div class="kv" id="savedInfo"></div>
+  <div class="row">
+    <button id="bSavedFile" class="sec">Salva file</button>
+    <button id="bSavedCopy" class="sec">Copia</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Registro tecnico</h2>
+  <p>Se qualcosa non va, fai uno screenshot di questo riquadro o copialo.</p>
+  <button id="bCopyLog" class="sec">Copia registro</button>
+  <div id="log"></div>
+</div>
+
+<script id="core">
+// Protocollo Polar per la memoria interna della H10 (servizio file PSFTP).
+// Riscritto dalla documentazione di polar-h10-web (PROTOCOL.md, derivata dal
+// Polar BLE SDK ufficiale) e collaudato sulle sue tracce di una H10 reale.
+// Nessun accesso al DOM: la parte sotto lo usa, il collaudo in Node pure.
+const PolarCore = (() => {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+
+  const PSFTP_SERVICE = '0000feee-0000-1000-8000-00805f9b34fb';
+  const PSFTP_MTU_CHAR = 'fb005c51-02e7-f387-1cad-8acd2d8df0c8';
+  const Q = { SET_LOCAL_TIME: 3, START_RECORDING: 14, STOP_RECORDING: 15, RECORDING_STATUS: 16 };
+  const CMD = { GET: 0, REMOVE: 3 };
+  const SAMPLE_TYPE_RR = 16;
+  const PACKET_TIMEOUT_MS = 90000;
+
+  const ERR = {
+    1: 'la fascia si sta riavviando', 2: 'riprova',
+    101: 'comando non valido', 102: 'parametro non valido', 103: 'file non trovato',
+    106: 'operazione non permessa', 108: 'tempo scaduto', 201: 'non implementato',
+    202: 'fascia occupata', 203: 'contenuto non valido', 205: 'memoria piena',
+    208: 'attendi che la fascia sia libera', 209: 'batteria troppo scarica'
+  };
+  class PftpError extends Error {
+    constructor(code) { super('errore ' + code + ' (' + (ERR[code] || 'sconosciuto') + ')'); this.code = code; }
+  }
+
+  function concatList(list) {
+    let n = 0; for (const a of list) n += a.length;
+    const out = new Uint8Array(n); let p = 0;
+    for (const a of list) { out.set(a, p); p += a.length; }
+    return out;
+  }
+  const concat = (...a) => concatList(a);
+  const hex = (b) => Array.from(b, (x) => x.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+
+  // --- protobuf minimo (proto2: varint, length-delimited) ---
+  function varint(n) {
+    let v = BigInt.asUintN(64, BigInt(n));
+    const out = [];
+    do { let b = Number(v & 0x7Fn); v >>= 7n; if (v) b |= 0x80; out.push(b); } while (v);
+    return Uint8Array.from(out);
+  }
+  const fVar = (f, n) => concat(varint((f << 3) | 0), varint(n));
+  const fBytes = (f, b) => concat(varint((f << 3) | 2), varint(b.length), b);
+  const fStr = (f, s) => fBytes(f, enc.encode(s));
+
+  function readVarint(buf, pos) {
+    let r = 0n, shift = 0n, b;
+    do {
+      if (pos >= buf.length) throw new Error('dati protobuf troncati');
+      b = buf[pos++]; r |= BigInt(b & 0x7f) << shift; shift += 7n;
+    } while (b & 0x80);
+    return [r, pos];
+  }
+  function parse(buf) {
+    const m = new Map(); let pos = 0;
+    while (pos < buf.length) {
+      let k; [k, pos] = readVarint(buf, pos);
+      const field = Number(k >> 3n), wire = Number(k & 7n); let val;
+      if (wire === 0) { [val, pos] = readVarint(buf, pos); }
+      else if (wire === 2) {
+        let len; [len, pos] = readVarint(buf, pos); len = Number(len);
+        if (pos + len > buf.length) throw new Error('dati protobuf troncati');
+        val = buf.subarray(pos, pos + len); pos += len;
+      }
+      else if (wire === 1) { val = buf.subarray(pos, pos + 8); pos += 8; }
+      else if (wire === 5) { val = buf.subarray(pos, pos + 4); pos += 4; }
+      else throw new Error('tipo protobuf ' + wire + ' non gestito');
+      if (!m.has(field)) m.set(field, []);
+      m.get(field).push({ wire, val });
+    }
+    return m;
+  }
+  const last = (m, f) => { const e = m.get(f); return e ? e[e.length - 1] : null; };
+  const getNum = (m, f) => { const e = last(m, f); return e && e.wire === 0 ? Number(e.val) : 0; };
+  const getStr = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? dec.decode(e.val) : ''; };
+  const getMsg = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? parse(e.val) : null; };
+  function getUints(m, f) {
+    const out = [];
+    for (const e of (m.get(f) || [])) {
+      if (e.wire === 0) out.push(Number(e.val));
+      else if (e.wire === 2) { let p = 0, v; while (p < e.val.length) { [v, p] = readVarint(e.val, p); out.push(Number(v)); } }
+    }
+    return out;
+  }
+
+  // --- buste RFC60 e pacchetti RFC76 ---
+  const queryEnvelope = (id, params) => {
+    const pre = Uint8Array.of(id & 0xff, ((id >> 8) & 0x7f) | 0x80);
+    return params ? concat(pre, params) : pre;
+  };
+  const requestEnvelope = (hdr) => concat(Uint8Array.of(hdr.length & 0xff, (hdr.length >> 8) & 0x7f), hdr);
+  const operation = (cmd, path) => concat(fVar(1, cmd), fStr(2, path));
+
+  function buildPackets(stream, size = 20) {
+    const max = size - 1, packets = [];
+    let off = 0, seq = 0, next = 0;
+    do {
+      const more = stream.length - off > max, take = more ? max : stream.length - off;
+      const p = new Uint8Array(1 + take);
+      p[0] = next | (more ? 0x06 : 0x02) | (seq << 4);
+      p.set(stream.subarray(off, off + take), 1);
+      packets.push(p); off += take; seq = (seq + 1) & 0x0f; next = 1;
+    } while (off < stream.length);
+    return packets;
+  }
+
+  // write(bytes) scrive un pacchetto sulla caratteristica; onPacket(bytes)
+  // va chiamato per ogni notifica ricevuta; fail(err) alla disconnessione.
+  function createPsftp(write) {
+    let queue = [], waiters = [], failed = null, chain = Promise.resolve();
+    function onPacket(bytes) { if (waiters.length) waiters.shift().resolve(bytes); else queue.push(bytes); }
+    function fail(err) { failed = err; while (waiters.length) waiters.shift().reject(err); }
+    function next() {
+      if (queue.length) return Promise.resolve(queue.shift());
+      if (failed) return Promise.reject(failed);
+      return new Promise((resolve, reject) => {
+        const w = {
+          resolve: (v) => { clearTimeout(t); resolve(v); },
+          reject: (e) => { clearTimeout(t); reject(e); }
+        };
+        const t = setTimeout(() => {
+          const i = waiters.indexOf(w); if (i >= 0) waiters.splice(i, 1);
+          reject(new Error('nessuna risposta dalla fascia per ' + PACKET_TIMEOUT_MS / 1000 + ' secondi'));
+        }, PACKET_TIMEOUT_MS);
+        waiters.push(w);
+      });
+    }
+    async function run(stream, onProgress) {
+      queue = [];
+      for (const p of buildPackets(stream)) await write(p);
+      let expSeq = 0, expNext = 0, received = 0;
+      const chunks = [];
+      try {
+        for (;;) {
+          const pk = await next();
+          received += Math.max(0, pk.length - 1);
+          if (onProgress) onProgress(received);
+          const b0 = pk[0], nxt = b0 & 1, st = (b0 >> 1) & 3, seq = (b0 >> 4) & 15;
+          if (seq !== expSeq) throw new Error('pacchetto perso (atteso ' + expSeq + ', arrivato ' + seq + ')');
+          expSeq = (expSeq + 1) & 15;
+          if (nxt !== expNext) throw new Error('flusso dati fuori sincronia');
+          expNext = 1;
+          if (st === 3) { chunks.push(pk.slice(1)); continue; }
+          if (st === 1) { chunks.push(pk.slice(1)); return concatList(chunks); }
+          if (st === 0) {
+            const code = (pk[1] | 0) | ((pk[2] | 0) << 8);
+            if (code) throw new PftpError(code);
+            return concatList(chunks);
+          }
+          throw new Error('pacchetto con stato sconosciuto ' + st);
+        }
+      } catch (e) {
+        if (!(e instanceof PftpError)) { try { await write(Uint8Array.of(0, 0, 0)); } catch (_) {} }
+        throw e;
+      }
+    }
+    function transact(stream, onProgress) {
+      const p = chain.then(() => run(stream, onProgress));
+      chain = p.catch(() => {});
+      return p;
+    }
+    const query = (id, params) => transact(queryEnvelope(id, params));
+    const request = (hdr, onProgress) => transact(requestEnvelope(hdr), onProgress);
+
+    async function status() {
+      const m = parse(await query(Q.RECORDING_STATUS));
+      return { recording: getNum(m, 1) !== 0, id: getStr(m, 2) };
+    }
+    async function listDir(path) {
+      const m = parse(await request(operation(CMD.GET, path)));
+      return (m.get(1) || []).map((e) => { const em = parse(e.val); return { name: getStr(em, 1), size: getNum(em, 2) }; });
+    }
+    // Le registrazioni stanno in /<identificativo>/SAMPLES.BPB
+    async function listRecordings(path = '/', depth = 0, seen = []) {
+      if (depth > 3) return [];
+      let entries;
+      try { entries = await listDir(path); }
+      catch (e) { if (e.code === 103) return []; throw e; }
+      seen.push(path + ' → ' + entries.map((x) => x.name + ' (' + x.size + ' B)').join(', '));
+      const out = [];
+      for (const en of entries) {
+        if (en.name.endsWith('/')) out.push(...await listRecordings(path + en.name, depth + 1, seen));
+        else if (en.name === 'SAMPLES.BPB') out.push({ path: path + en.name, id: path.split('/').filter(Boolean)[0] || path, size: en.size });
+      }
+      return out;
+    }
+    async function fetchRecording(path, onProgress) {
+      return decodeSamples(await request(operation(CMD.GET, path), onProgress));
+    }
+    const remove = (path) => request(operation(CMD.REMOVE, path));
+    async function setLocalTime(d = new Date()) {
+      const date = concat(fVar(1, d.getFullYear()), fVar(2, d.getMonth() + 1), fVar(3, d.getDate()));
+      const time = concat(fVar(1, d.getHours()), fVar(2, d.getMinutes()), fVar(3, d.getSeconds()), fVar(4, d.getMilliseconds()));
+      await query(Q.SET_LOCAL_TIME, concat(fBytes(1, date), fBytes(2, time), fVar(3, -d.getTimezoneOffset())));
+    }
+    const startRr = (id) => query(Q.START_RECORDING, concat(fVar(1, SAMPLE_TYPE_RR), fBytes(2, fVar(3, 1)), fStr(3, id)));
+    const stop = () => query(Q.STOP_RECORDING);
+
+    return { onPacket, fail, status, listRecordings, fetchRecording, remove, setLocalTime, startRr, stop };
+  }
+
+  // PbExerciseSamples: campo 1 = intervallo (PbDuration, secondi nel campo 3),
+  // campo 2 = FC in bpm, campo 28 = PbExerciseRRIntervals (RR in ms nel campo 1).
+  function decodeSamples(body) {
+    const m = parse(body);
+    const dur = getMsg(m, 1);
+    const interval = dur ? getNum(dur, 3) : 0;
+    const rr = getMsg(m, 28);
+    if (rr) return { type: 'rr', interval, samples: getUints(rr, 1) };
+    return { type: 'hr', interval, samples: getUints(m, 2) };
+  }
+
+  // Stima del tempo di registrazione che resta nella memoria della fascia.
+  // Ora di avvio dall'identificativo HRVT_AAAAMMGG_HHMM (ora locale, la scrive questa pagina all'avvio).
+  // Battiti usati: dalla dimensione del file, se la fascia la dà (circa 2,0 byte a battito: 162.283 byte
+  // per 81.135 battiti il 02/11/2026), altrimenti minuti trascorsi × FC media.
+  // Capienza di 95.000 battiti: stima, non ancora verificata registrando fino a memoria piena.
+  function stimaResiduo({ id, ora = new Date(), byte = null, fcMedia = 68, capienza = 95000, bytePerBattito = 2.0 }) {
+    const m = /^HRVT_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/.exec(id || '');
+    if (!m) return null;
+    const inizio = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]);
+    if (inizio.getMonth() !== m[2] - 1 || inizio.getDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) return null;
+    const trascorsiMin = (ora.getTime() - inizio.getTime()) / 60000;
+    if (!(trascorsiMin >= 0) || !(fcMedia > 0)) return null;
+    const daByte = byte != null && byte > 0;
+    const battitiUsati = daByte ? byte / bytePerBattito : trascorsiMin * fcMedia;
+    const restanoMin = Math.max(0, capienza - battitiUsati) / fcMedia;
+    const fine = new Date(ora.getTime() + restanoMin * 60000);
+    return { inizio, trascorsiMin, battitiUsati, restanoMin, fine, scaricaEntro: new Date(fine.getTime() - 60 * 60000), fonte: daByte ? 'byte' : 'stima' };
+  }
+
+  return { PSFTP_SERVICE, PSFTP_MTU_CHAR, PftpError, createPsftp, decodeSamples, buildPackets, hex, parse, stimaResiduo };
+})();
+if (typeof module !== 'undefined') module.exports = PolarCore;
+</script>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const DIS = '0000180a-0000-1000-8000-00805f9b34fb';
+  const CHAR_MODEL = '00002a24-0000-1000-8000-00805f9b34fb';
+  const CHAR_FW = '00002a26-0000-1000-8000-00805f9b34fb';
+  const SAVED_KEY = 'provaMemoriaH10.ultimo';
+
+  let device = null, psftp = null, wakeLock = null;
+  let lastDownload = null;      // { path, id, data, csv, saved }
+  let deleteArmed = null;
+
+  // --- registro ---
+  const logLines = [];
+  function log(s) {
+    const t = new Date().toLocaleTimeString('it-IT');
+    logLines.push(t + '  ' + s);
+    if (logLines.length > 400) logLines.shift();
+    $('log').textContent = logLines.join('\n');
+    $('log').scrollTop = 1e9;
+  }
+  function msg(el, kind, text) { $(el).innerHTML = text ? '<div class="msg ' + kind + '">' + text + '</div>' : ''; }
+
+  // --- riquadro esito ---
+  const steps = [
+    ['bt', 'Bluetooth disponibile in questo browser'],
+    ['psftp', 'Canale file di Polar raggiungibile'],
+    ['status', 'Stato della memoria letto'],
+    ['list', 'Elenco delle registrazioni letto'],
+    ['fetch', 'Registrazione scaricata'],
+    ['rr', 'Dentro ci sono i singoli battiti (RR)']
+  ];
+  const stepState = {};
+  function setStep(k, s) { stepState[k] = s; renderSteps(); }
+  function renderSteps() {
+    $('esito').innerHTML = steps.map(([k, label]) => '<li class="s-' + (stepState[k] || 'todo') + '">' + label + '</li>').join('');
+  }
+  renderSteps();
+
+  log('Browser: ' + navigator.userAgent);
+  if (!navigator.bluetooth) {
+    setStep('bt', 'no');
+    msg('connMsg', 'bad', 'Questo browser non ha il Bluetooth. Su iPhone apri la pagina in Bluefy, su Android in Chrome.');
+  } else setStep('bt', 'ok');
+
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } }
+    catch (e) { log('Wake lock non disponibile: ' + e.message); }
+  }
+
+  function setConnected(on) {
+    $('bConnect').disabled = on;
+    $('bDisconnect').disabled = !on;
+    $('bStatus').disabled = !on;
+    $('bList').disabled = !on;
+    if (!on) { $('bStart').disabled = true; $('bStop').disabled = true; }
+  }
+
+  function withTimeout(p, ms, what) {
+    return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ': tempo scaduto')), ms))]);
+  }
+
+  async function requestH10() {
+    const optionalServices = ['heart_rate', 'battery_service', DIS, PolarCore.PSFTP_SERVICE];
+    try {
+      return await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }], optionalServices });
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') throw e;
+      log('Filtro sul servizio non riuscito (' + (e && e.name) + '), riprovo con elenco completo');
+      return await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices });
+    }
+  }
+
+  async function readText(server, svcUuid, charUuid) {
+    try {
+      const s = await server.getPrimaryService(svcUuid);
+      const c = await s.getCharacteristic(charUuid);
+      return new TextDecoder().decode(await c.readValue());
+    } catch (e) { return '—'; }
+  }
+
+  $('bConnect').onclick = async () => {
+    keepAwake();
+    msg('connMsg', '', '');
+    try {
+      device = await requestH10();
+      log('Dispositivo scelto: ' + (device.name || '(senza nome)'));
+      device.addEventListener('gattserverdisconnected', () => {
+        log('Fascia scollegata');
+        if (psftp) psftp.fail(new Error('la fascia si è scollegata'));
+        psftp = null; setConnected(false);
+        msg('connMsg', 'warn', 'Fascia scollegata. Se stavi scaricando, ricollega e riprova tenendo la fascia addosso.');
+      });
+      const server = await withTimeout(device.gatt.connect(), 12000, 'Connessione');
+      log('Connessa');
+
+      const model = await readText(server, DIS, CHAR_MODEL);
+      const fw = await readText(server, DIS, CHAR_FW);
+      let batt = '—';
+      try {
+        const bs = await server.getPrimaryService('battery_service');
+        const bc = await bs.getCharacteristic('battery_level');
+        batt = (await bc.readValue()).getUint8(0) + '%';
+      } catch (e) {}
+      $('devInfo').innerHTML = '<b>Nome</b><span>' + (device.name || '—') + '</span><b>Modello</b><span>' + model +
+        '</span><b>Firmware</b><span>' + fw + '</span><b>Batteria</b><span>' + batt + '</span>';
+      log('Modello ' + model + ', firmware ' + fw + ', batteria ' + batt);
+
+      let ch;
+      try {
+        const svc = await server.getPrimaryService(PolarCore.PSFTP_SERVICE);
+        ch = await svc.getCharacteristic(PolarCore.PSFTP_MTU_CHAR);
+      } catch (e) {
+        setStep('psftp', 'no');
+        log('Canale file NON raggiungibile: ' + (e.name || '') + ' ' + e.message);
+        msg('connMsg', 'bad', 'Il browser non dà accesso al canale file di Polar. È il risultato che cercavamo: con questo browser la memoria della fascia non si legge.');
+        return;
+      }
+      const pr = ch.properties || {};
+      log('Canale file trovato. Proprietà: write=' + !!pr.write + ' writeWithoutResponse=' + !!pr.writeWithoutResponse + ' notify=' + !!pr.notify);
+
+      let preferNoResponse = !!pr.writeWithoutResponse && typeof ch.writeValueWithoutResponse === 'function';
+      const write = async (bytes) => {
+        if (preferNoResponse) {
+          try { await ch.writeValueWithoutResponse(bytes); return; }
+          catch (e) { preferNoResponse = false; log('Scrittura senza risposta rifiutata, passo a quella con risposta'); }
+        }
+        if (typeof ch.writeValueWithResponse === 'function') await ch.writeValueWithResponse(bytes);
+        else await ch.writeValue(bytes);
+      };
+      psftp = PolarCore.createPsftp(write);
+      ch.addEventListener('characteristicvaluechanged', (ev) => {
+        const v = ev.target.value;
+        if (psftp) psftp.onPacket(new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)));
+      });
+      await ch.startNotifications();
+      setStep('psftp', 'ok');
+      setConnected(true);
+      msg('connMsg', 'ok', 'Collegata. Passa al riquadro 2.');
+    } catch (e) {
+      log('Errore di connessione: ' + (e.name || '') + ' ' + e.message);
+      if (!(e && e.name === 'NotFoundError')) msg('connMsg', 'bad', 'Connessione non riuscita: ' + e.message);
+    }
+  };
+
+  $('bDisconnect').onclick = () => { if (device && device.gatt.connected) device.gatt.disconnect(); };
+
+  let lastStatus = null, lastList = null;
+
+  function updateRecordingButtons() {
+    const empty = lastList && lastList.length === 0;
+    $('bStart').disabled = !(psftp && lastStatus && !lastStatus.recording && empty);
+    $('bStop').disabled = !(psftp && lastStatus && lastStatus.recording);
+  }
+
+  // FC media dell'ultimo scaricamento salvato su questo telefono; se non c'è, 68 bpm (registrazione del 01-02/11)
+  let fcSalvata;
+  function fcMedia() {
+    if (fcSalvata === undefined) {
+      fcSalvata = null;
+      try {
+        const s = JSON.parse(localStorage.getItem(SAVED_KEY) || 'null');
+        if (s && s.type === 'rr') {
+          const rr = s.csv.split('\n').map(Number).filter((v) => v >= 300 && v <= 2000);
+          if (rr.length > 1000) fcSalvata = 60000 / (rr.reduce((a, b) => a + b, 0) / rr.length);
+        }
+      } catch (e) {}
+    }
+    return fcSalvata ? { fc: fcSalvata, da: 'ultimo scaricamento' } : { fc: 68, da: 'valore tipico' };
+  }
+  const hhmm = (d) => d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const giornoOra = (d) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'numeric' }) + ' alle ' + hhmm(d);
+  let lastSize = null; // dimensione della registrazione in corso all'ultima lettura: cresce davvero?
+
+  function showStatus() {
+    let html = '<b>Sta registrando</b><span>' + (lastStatus.recording ? 'sì' : 'no') +
+      '</span><b>Identificativo</b><span>' + (lastStatus.id || '—') + '</span>';
+    let nota = '';
+    if (lastStatus.recording) {
+      const f = fcMedia();
+      const corrente = lastList && lastList.find((r) => r.id === lastStatus.id);
+      const s = PolarCore.stimaResiduo({ id: lastStatus.id, byte: corrente ? corrente.size : null, fcMedia: f.fc });
+      if (s) {
+        html += '<b>Partita</b><span>il ' + giornoOra(s.inizio) + '</span>' +
+          '<b>Registra da</b><span>' + fmtDur(s.trascorsiMin) + '</span>' +
+          '<b>Fine prevista</b><span>verso le ' + hhmm(s.fine) + ' del ' + s.fine.toLocaleDateString('it-IT', { day: 'numeric', month: 'numeric' }) + ' (stima)</span>' +
+          '<b>Scarica entro</b><span>le ' + hhmm(s.scaricaEntro) + '</span>';
+        nota = 'Stima basata sulla tua frequenza media (' + Math.round(f.fc) + ' bpm, ' + f.da + ')' +
+          (s.fonte === 'byte' ? ' e sullo spazio già usato nella fascia' : '') + '; con molta attività fisica finisce prima.';
+      } else nota = 'Ora di avvio non leggibile dall\'identificativo: stima del tempo rimasto non disponibile.';
+    }
+    $('statusInfo').innerHTML = html;
+    $('stimaNota').textContent = nota;
+  }
+
+  async function readStatus() {
+    lastStatus = await psftp.status();
+    setStep('status', 'ok');
+    showStatus();
+    log('Stato: registrando=' + lastStatus.recording + ', identificativo="' + lastStatus.id + '"');
+    updateRecordingButtons();
+  }
+
+  $('bStatus').onclick = async () => {
+    try { await readStatus(); }
+    catch (e) { setStep('status', 'no'); log('Lettura stato fallita: ' + e.message); msg('recMsg', 'bad', 'Lettura dello stato fallita: ' + e.message); }
+  };
+
+  $('bList').onclick = async () => {
+    $('recList').innerHTML = '';
+    try {
+      if (!lastStatus) await readStatus();
+      const seen = [];
+      setStep('list', 'wait');
+      const recs = await psftpList(seen);
+      seen.forEach((s) => log('Cartella ' + s));
+      lastList = recs;
+      setStep('list', 'ok');
+      updateRecordingButtons();
+      const corrente = lastStatus && lastStatus.recording && recs.find((r) => r.id === lastStatus.id);
+      if (corrente) {
+        const ora = Date.now();
+        if (lastSize && lastSize.id === corrente.id) {
+          const min = (ora - lastSize.t) / 60000;
+          log('Registrazione in corso: ' + corrente.size + ' B, prima ' + lastSize.size + ' B (' + (corrente.size - lastSize.size >= 0 ? '+' : '') +
+            (corrente.size - lastSize.size) + ' B in ' + min.toFixed(1) + ' min)' + (corrente.size === lastSize.size ? ': la dimensione NON cresce durante la registrazione' : ''));
+        } else log('Registrazione in corso: ' + corrente.size + ' B');
+        lastSize = { id: corrente.id, size: corrente.size, t: ora };
+        showStatus();
+      }
+      if (!recs.length) { $('recList').innerHTML = '<div class="msg ok">Memoria vuota: nessuna registrazione salvata.</div>'; return; }
+      $('recList').innerHTML = recs.map((r, i) =>
+        '<div class="rec"><b>' + r.id + '</b> · ' + (r.size / 1024).toFixed(1) + ' kB' +
+        ' (circa ' + Math.round(r.size / 2).toLocaleString('it-IT') + ' battiti se è RR)' +
+        '<div class="row"><button data-i="' + i + '" class="dl">Scarica</button></div></div>').join('');
+      document.querySelectorAll('button.dl').forEach((b) => { b.onclick = () => download(recs[+b.dataset.i]); });
+    } catch (e) { setStep('list', 'no'); log('Elenco fallito: ' + e.message); msg('recMsg', 'bad', 'Elenco fallito: ' + e.message); }
+  };
+  const psftpList = (seen) => psftp.listRecordings('/', 0, seen);
+
+  function stats(rr) {
+    let sum = 0, sq = 0, n = 0, min = Infinity, max = 0;
+    for (let i = 0; i < rr.length; i++) {
+      sum += rr[i]; if (rr[i] < min) min = rr[i]; if (rr[i] > max) max = rr[i];
+      if (i) { const d = rr[i] - rr[i - 1]; sq += d * d; n++; }
+    }
+    return { durMin: sum / 60000, hr: rr.length ? 60000 / (sum / rr.length) : 0, min, max, rmssd: n ? Math.sqrt(sq / n) : 0 };
+  }
+  function fmtDur(min) { const h = Math.floor(min / 60), m = Math.round(min % 60); return h ? h + ' h ' + m + ' min' : m + ' min'; }
+
+  function buildCsv(rec, data) {
+    const head = ['# Prova memoria H10 (HRV Tool)', '# identificativo: ' + rec.id, '# tipo: ' + data.type,
+      '# scaricato: ' + new Date().toISOString()];
+    return head.concat([data.type === 'rr' ? 'rr_ms' : 'fc_bpm'], data.samples.map(String)).join('\n') + '\n';
+  }
+
+  async function download(rec) {
+    keepAwake();
+    if (lastStatus && lastStatus.recording) {
+      msg('dlBox', 'warn', 'La fascia sta ancora registrando: ferma prima la registrazione (riquadro 3), poi scarica.');
+      return;
+    }
+    $('dlBox').innerHTML = '<div class="msg warn">Scaricamento in corso, tieni la fascia addosso e lo schermo acceso…</div><progress id="pg" max="' + Math.max(1, rec.size) + '" value="0"></progress><div id="pgTxt" class="sub"></div>';
+    setStep('fetch', 'wait');
+    const t0 = performance.now();
+    log('Scarico ' + rec.path + ' (' + rec.size + ' B)');
+    try {
+      const data = await psftp.fetchRecording(rec.path, (n) => {
+        const pg = $('pg'); if (pg) pg.value = n;
+        const tx = $('pgTxt'); if (tx) tx.textContent = (n / 1024).toFixed(1) + ' kB di ' + (rec.size / 1024).toFixed(1) + ' kB';
+      });
+      const secs = (performance.now() - t0) / 1000;
+      log('Scaricato in ' + secs.toFixed(1) + ' s: tipo ' + data.type + ', ' + data.samples.length + ' valori, intervallo ' + data.interval + ' s');
+      setStep('fetch', 'ok');
+      const csv = buildCsv(rec, data);
+      lastDownload = { path: rec.path, id: rec.id, data, csv, saved: false };
+      try { localStorage.setItem(SAVED_KEY, JSON.stringify({ id: rec.id, type: data.type, n: data.samples.length, when: new Date().toISOString(), csv })); }
+      catch (e) { log('Copia sul telefono non riuscita: ' + e.message); }
+      fcSalvata = undefined; // la FC media della stima va ricalcolata sul nuovo scaricamento
+      showSaved();
+
+      let html;
+      if (data.type === 'rr') {
+        setStep('rr', data.samples.length ? 'ok' : 'no');
+        const s = stats(data.samples);
+        html = '<div class="msg ok">Ci sono i singoli battiti: la registrazione è utilizzabile per l\'HRV.</div>' +
+          '<div class="kv"><b>Battiti</b><span>' + data.samples.length.toLocaleString('it-IT') + '</span>' +
+          '<b>Durata</b><span>' + fmtDur(s.durMin) + '</span>' +
+          '<b>FC media</b><span>' + s.hr.toFixed(0) + ' bpm</span>' +
+          '<b>RR min / max</b><span>' + s.min + ' / ' + s.max + ' ms</span>' +
+          '<b>RMSSD grezzo</b><span>' + s.rmssd.toFixed(1) + ' ms (controllo tecnico, senza pulizia artefatti)</span>' +
+          '<b>Primi valori</b><span>' + data.samples.slice(0, 10).join(', ') + '</span>' +
+          '<b>Tempo di scarico</b><span>' + secs.toFixed(0) + ' s</span></div>';
+      } else {
+        setStep('rr', 'no');
+        html = '<div class="msg bad">Dentro c\'è solo la frequenza cardiaca (' + data.samples.length + ' valori, uno ogni ' + (data.interval || '?') +
+          ' s), non i singoli battiti: per l\'HRV non serve.</div>';
+      }
+      html += '<div class="row"><button id="bFile" class="sec">Salva file</button><button id="bCopy" class="sec">Copia</button>' +
+        '<button id="bDel" class="danger" disabled>Cancella dalla fascia</button></div>' +
+        '<div class="sub" id="delHint">Il tasto Cancella si attiva dopo che hai salvato o copiato i dati.</div>';
+      $('dlBox').innerHTML = html;
+      $('bFile').onclick = () => saveFile(csv, rec.id).then(markSaved);
+      $('bCopy').onclick = () => copyText(csv).then(markSaved);
+      $('bDel').onclick = () => removeRecording(rec);
+    } catch (e) {
+      setStep('fetch', 'no');
+      log('Scaricamento fallito: ' + e.message);
+      let extra = '';
+      if (e.code === 106) extra = ' La fascia rifiuta la lettura: può succedere se la registrazione è stata avviata da un altro telefono o da un\'altra app.';
+      msg('dlBox', 'bad', 'Scaricamento fallito: ' + e.message + '.' + extra);
+    }
+  }
+
+  function markSaved(ok) {
+    if (!ok || !lastDownload) return;
+    lastDownload.saved = true;
+    const b = $('bDel'); if (b) b.disabled = false;
+    const h = $('delHint'); if (h) h.textContent = 'Dati salvati. Ora puoi liberare la memoria della fascia.';
+  }
+
+  async function saveFile(text, id) {
+    const name = 'h10_' + id + '.csv';
+    try {
+      const file = new File([text], name, { type: 'text/csv' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); log('File condiviso: ' + name); return true; }
+    } catch (e) { if (e.name === 'AbortError') return false; log('Condivisione non riuscita: ' + e.message); }
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      log('File scaricato: ' + name);
+      return true;
+    } catch (e) { log('Salvataggio non riuscito: ' + e.message); return false; }
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); log('Copiato negli appunti (' + text.length + ' caratteri)'); return true; }
+    catch (e) {
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (_) {}
+      ta.remove(); log(ok ? 'Copiato negli appunti' : 'Copia non riuscita'); return ok;
+    }
+  }
+
+  async function removeRecording(rec) {
+    if (!lastDownload || !lastDownload.saved || lastDownload.path !== rec.path) return;
+    const b = $('bDel');
+    if (deleteArmed !== rec.path) {
+      deleteArmed = rec.path; b.textContent = 'Tocca di nuovo per confermare';
+      setTimeout(() => { if (deleteArmed === rec.path) { deleteArmed = null; b.textContent = 'Cancella dalla fascia'; } }, 5000);
+      return;
+    }
+    deleteArmed = null;
+    try {
+      await psftp.remove(rec.path);
+      log('Cancellata ' + rec.path);
+      $('dlBox').innerHTML = '<div class="msg ok">Memoria della fascia liberata. I dati restano nel file salvato e su questo telefono.</div>';
+      $('recList').innerHTML = '';
+      lastList = []; updateRecordingButtons();
+    } catch (e) { log('Cancellazione fallita: ' + e.message); msg('dlBox', 'bad', 'Cancellazione fallita: ' + e.message); }
+  }
+
+  $('bStart').onclick = async () => {
+    keepAwake();
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const id = 'HRVT_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+    try {
+      await psftp.setLocalTime(d);
+      log('Orologio della fascia impostato');
+      await psftp.startRr(id);
+      log('Registrazione RR avviata: ' + id);
+      msg('recMsg', 'ok', 'Registrazione avviata (' + id + '). Ora puoi chiudere Bluefy. Tra 10–15 minuti riapri, collega, tocca "Leggi stato" e poi "Ferma registrazione".');
+      await readStatus();
+    } catch (e) {
+      log('Avvio fallito: ' + e.message);
+      msg('recMsg', 'bad', 'Avvio non riuscito: ' + e.message + (e.code === 106 ? '. La memoria contiene già una registrazione: scaricala prima.' : ''));
+    }
+  };
+
+  $('bStop').onclick = async () => {
+    try {
+      await psftp.stop();
+      log('Registrazione fermata');
+      msg('recMsg', 'ok', 'Registrazione fermata. Ora tocca "Elenca registrazioni" e scaricala.');
+      await readStatus();
+    } catch (e) { log('Stop fallito: ' + e.message); msg('recMsg', 'bad', 'Stop non riuscito: ' + e.message); }
+  };
+
+  function showSaved() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(SAVED_KEY) || 'null'); } catch (e) {}
+    if (!s) { $('savedCard').hidden = true; return; }
+    $('savedCard').hidden = false;
+    $('savedInfo').innerHTML = '<b>Identificativo</b><span>' + s.id + '</span><b>Tipo</b><span>' + s.type +
+      '</span><b>Valori</b><span>' + s.n.toLocaleString('it-IT') + '</span><b>Scaricato</b><span>' + new Date(s.when).toLocaleString('it-IT') + '</span>';
+    $('bSavedFile').onclick = () => saveFile(s.csv, s.id);
+    $('bSavedCopy').onclick = () => copyText(s.csv);
+  }
+  showSaved();
+
+  $('bCopyLog').onclick = () => copyText(logLines.join('\n'));
+})();
+</script>
+</body>
+</html>
