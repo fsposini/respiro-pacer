@@ -36,6 +36,8 @@
   .note{font-size:13px;color:var(--grigio)}
   .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
   .toast.show{opacity:.92}
+  .toast.act{pointer-events:auto;opacity:.97}
+  .toast button{border:0;border-radius:14px;background:#fff;color:var(--blu);font:600 14px inherit;padding:6px 11px;margin-left:8px;cursor:pointer}
   dialog{border:0;border-radius:14px;padding:18px;max-width:340px}
   dialog .row{display:flex;gap:8px;margin-top:12px}
   .lvl{display:flex;gap:6px;margin-top:10px}
@@ -60,7 +62,7 @@
     <div id="voiceOut"></div>
   </div>
 
-  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. Se ti accorgi in ritardo, segnalo lo stesso e correggi l'orario nell'elenco in fondo.</p>
+  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. <b>Se te ne ricordi dopo</b>, usa il pulsante qui sotto, oppure tocca normalmente e poi «Cambia orario» nel messaggio che compare in basso.</p>
 
   <div id="groups"></div>
 
@@ -96,6 +98,13 @@
   <div class="note">Ieri sera non era stato segnato: indicalo qui e la notte viene registrata lo stesso.</div>
   <input type="time" id="bedTime" value="23:00" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
   <div class="row"><button class="plain" id="wakeCancel">Annulla</button><button class="main" id="wakeOk" style="width:auto;flex:1">Registra la notte</button></div>
+</dialog>
+
+<dialog id="dlgOra">
+  <b id="oraTitle">A che ora?</b>
+  <div class="note">Se è dopo l'ora attuale, vale come ieri.</div>
+  <input type="time" id="oraIn" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
+  <div class="row"><button class="plain" id="oraCancel">Annulla</button><button class="main" id="oraOk" style="width:auto;flex:1">Correggi</button></div>
 </dialog>
 
 <div class="toast" id="toast"></div>
@@ -254,7 +263,34 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); } }
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
-  function toast(s) { const t = $('toast'); t.textContent = s; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+  function toast(s) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+  // dopo un tocco, per 8 secondi il messaggio offre di correggere l'orario: chi si ricorda in ritardo segna e sistema subito
+  function toastOra(s, v) {
+    const t = $('toast'); t.textContent = s;
+    const b = document.createElement('button'); b.textContent = 'Era prima? Cambia orario';
+    b.onclick = () => { t.classList.remove('show', 'act'); cambiaOra(v); };
+    t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
+  }
+  function cambiaOra(v) {
+    const dlg = $('dlgOra'), inp = $('oraIn');
+    $('oraTitle').textContent = v.puntuale ? `A che ora: ${v.label.toLowerCase()}?` : `Da che ora: ${v.label.toLowerCase()}?`;
+    inp.value = hhmm(v.inizio);
+    $('oraCancel').onclick = () => dlg.close();
+    $('oraOk').onclick = () => {
+      if (!inp.value) return;
+      const now = Date.now(), [h, m] = inp.value.split(':').map(Number), d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() > now + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri
+      const prima = v.inizio, delta = d.getTime() - prima;
+      v.inizio += delta; if (v.puntuale && v.fine != null) v.fine += delta;
+      if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+      // l'attività che questa aveva chiuso finisce anche lei all'orario corretto
+      // (entro un minuto: chiudi() allunga a 1 minuto le attività appena iniziate)
+      if (!v.puntuale) { const p = D.voci.find(x => x !== v && !x.puntuale && x.fine != null && Math.abs(x.fine - prima) <= 60000 && CAT[x.label] && CAT[x.label].tipo === 'durata'); if (p) p.fine = Math.max(p.inizio + 60000, v.inizio); }
+      save(); render(); dlg.close(); toast(`${v.label}: ${v.puntuale ? 'alle' : 'dalle'} ${hhmm(v.inizio)}`);
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
   if (navigator.vibrate) {} // la vibrazione su iPhone non è disponibile: il riscontro è il messaggio in basso
 
   // una voce che questa versione non conosce (diario scritto da una versione più nuova) non deve bloccare la pagina
@@ -266,14 +302,14 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     const c = CAT[label], t = Date.now();
     if (c.tipo === 'puntuale') {
       if (label === 'Mi sento sotto stress') return chiediLivello();
-      D.voci.push({ label, inizio: t, fine: t + c.win * 60000, puntuale: true });
-      save(); render(); toast(label + ' segnato alle ' + hhmm(t)); return;
+      const v = { label, inizio: t, fine: t + c.win * 60000, puntuale: true }; D.voci.push(v);
+      save(); render(); toastOra(label + ' alle ' + hhmm(t), v); return;
     }
     const cur = aperta('durata');
     if (cur && cur.label === label) { chiudi(cur, t); save(); render(); toast(label + ': fine alle ' + hhmm(t)); return; }
     if (cur) chiudi(cur, t);
-    D.voci.push({ label, inizio: t, fine: null });
-    save(); render(); toast(label + ' dalle ' + hhmm(t));
+    const v = { label, inizio: t, fine: null }; D.voci.push(v);
+    save(); render(); toastOra(label + ' dalle ' + hhmm(t), v);
   }
   // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
   function digiuno() {
@@ -440,7 +476,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     $('bFastStart').onclick = digiuno;
     $('bFastEnd').onclick = () => apertaLabel('Digiuno') ? digiuno() : passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto e quella in cui hai mangiato di nuovo.');
     $('bWorkEnd').onclick = () => apertaLabel('Lavoro') ? sfondo('Lavoro') : passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui, anche approssimato.');
-    $('groups').insertAdjacentHTML('beforeend', '<button class="plain" id="bPast" style="width:100%;margin-top:14px;padding:13px">Ho dimenticato di segnare qualcosa</button>');
+    // in cima, non in fondo: chi si ricorda dopo deve trovarlo subito
+    $('groups').insertAdjacentHTML('afterbegin', '<button class="plain" id="bPast" style="width:100%;margin-top:4px;padding:13px">＋ Segna qualcosa fatto prima, con l\'orario</button>');
     $('bPast').onclick = () => passato();
 
     const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
