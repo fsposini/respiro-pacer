@@ -107,6 +107,14 @@
   <div class="row"><button class="plain" id="oraCancel">Annulla</button><button class="main" id="oraOk" style="width:auto;flex:1">Correggi</button></div>
 </dialog>
 
+<dialog id="dlgFascia">
+  <b>Togli la fascia?</b>
+  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia o la sauna, la registrazione <b>si ferma e non riparte da sola</b> quando la rimetti.</p>
+  <p style="font-size:15px;margin:8px 0 0">Appena l'hai rimessa, apri la pagina <b>Cambio della fascia</b> (su iPhone con Bluefy) e tocca <b>«Fai il cambio»</b>: salva quello che ha registrato e la fa ripartire.</p>
+  <div class="note" style="margin-top:8px">Se la tieni addosso, non devi fare niente.</div>
+  <div class="row"><button class="main" id="fasciaOk" style="width:auto;flex:1">Ho capito</button></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script id="voce">
@@ -263,7 +271,16 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); } }
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
-  function toast(s) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+  function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
+  // doccia e sauna si fanno di solito senza fascia: tolta, la H10 si spegne e la registrazione si chiude, e rimettendola
+  // non riparte da sola (successo il 04/11: mattinata persa). All'inizio una finestra lo spiega, alla fine un promemoria.
+  const TOGLIE_FASCIA = /^(Sauna|Doccia)/;
+  const RIMESSA = 'Rimessa la fascia? Tocca «Fai il cambio» nella sua pagina.';
+  function avvisoFascia(poi) {
+    const dlg = $('dlgFascia');
+    $('fasciaOk').onclick = () => { dlg.close(); if (poi) poi(); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
   // dopo un tocco, per 8 secondi il messaggio offre di correggere l'orario: chi si ricorda in ritardo segna e sistema subito
   function toastOra(s, v) {
     const t = $('toast'); t.textContent = s;
@@ -306,10 +323,17 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       save(); render(); toastOra(label + ' alle ' + hhmm(t), v); return;
     }
     const cur = aperta('durata');
-    if (cur && cur.label === label) { chiudi(cur, t); save(); render(); toast(label + ': fine alle ' + hhmm(t)); return; }
+    if (cur && cur.label === label) {
+      chiudi(cur, t); save(); render();
+      if (TOGLIE_FASCIA.test(label)) toast(label + ': fine alle ' + hhmm(t) + '. ' + RIMESSA, 7000); else toast(label + ': fine alle ' + hhmm(t));
+      return;
+    }
+    const eraSenzaFascia = cur && TOGLIE_FASCIA.test(cur.label);
     if (cur) chiudi(cur, t);
     const v = { label, inizio: t, fine: null }; D.voci.push(v);
-    save(); render(); toastOra(label + ' dalle ' + hhmm(t), v);
+    save(); render();
+    const msg = () => toastOra(label + ' dalle ' + hhmm(t) + (eraSenzaFascia ? '. ' + RIMESSA : ''), v);
+    if (TOGLIE_FASCIA.test(label)) avvisoFascia(msg); else msg();
   }
   // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
   function digiuno() {
@@ -396,7 +420,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       }
       case 'fine': {
         const cur = r.label ? apertaLabel(r.label) : aperta('durata');
-        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; break; }
+        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}${TOGLIE_FASCIA.test(cur.label) ? '. ' + RIMESSA : ''}`; break; }
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
         $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
       }
@@ -427,6 +451,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     save(); render();
     $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
     $('voiceUndo').onclick = () => { D = JSON.parse(prima); save(); render(); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
+    if ((r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label)) avvisoFascia();
   }
   function segnaVoce() {
     const inp = $('voiceIn'), s = inp.value.trim(); if (!s) return;
@@ -458,7 +483,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
       ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
-    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); };
+    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); if (TOGLIE_FASCIA.test(cur.label)) toast('Fine alle ' + hhmm(Date.now()) + '. ' + RIMESSA, 7000); else toast('Fine alle ' + hhmm(Date.now())); };
 
     $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
