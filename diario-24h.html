@@ -36,6 +36,8 @@
   .note{font-size:13px;color:var(--grigio)}
   .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
   .toast.show{opacity:.92}
+  .toast.act{pointer-events:auto;opacity:.97}
+  .toast button{border:0;border-radius:14px;background:#fff;color:var(--blu);font:600 14px inherit;padding:6px 11px;margin-left:8px;cursor:pointer}
   dialog{border:0;border-radius:14px;padding:18px;max-width:340px}
   dialog .row{display:flex;gap:8px;margin-top:12px}
   .lvl{display:flex;gap:6px;margin-top:10px}
@@ -60,7 +62,7 @@
     <div id="voiceOut"></div>
   </div>
 
-  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. Se ti accorgi in ritardo, segnalo lo stesso e correggi l'orario nell'elenco in fondo.</p>
+  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. <b>Se te ne ricordi dopo</b>, usa il pulsante qui sotto, oppure tocca normalmente e poi «Cambia orario» nel messaggio che compare in basso.</p>
 
   <div id="groups"></div>
 
@@ -98,6 +100,21 @@
   <div class="row"><button class="plain" id="wakeCancel">Annulla</button><button class="main" id="wakeOk" style="width:auto;flex:1">Registra la notte</button></div>
 </dialog>
 
+<dialog id="dlgOra">
+  <b id="oraTitle">A che ora?</b>
+  <div class="note">Se è dopo l'ora attuale, vale come ieri.</div>
+  <input type="time" id="oraIn" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
+  <div class="row"><button class="plain" id="oraCancel">Annulla</button><button class="main" id="oraOk" style="width:auto;flex:1">Correggi</button></div>
+</dialog>
+
+<dialog id="dlgFascia">
+  <b>Togli la fascia?</b>
+  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia, la sauna o il bagno freddo, la registrazione <b>si ferma e non riparte da sola</b> quando la rimetti.</p>
+  <p style="font-size:15px;margin:8px 0 0">Appena l'hai rimessa, apri la pagina <b>Cambio della fascia</b> (su iPhone con Bluefy) e tocca <b>«Fai il cambio»</b>: salva quello che ha registrato e la fa ripartire.</p>
+  <div class="note" style="margin-top:8px">Se la tieni addosso, non devi fare niente.</div>
+  <div class="row"><button class="main" id="fasciaOk" style="width:auto;flex:1">Ho capito</button></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script id="voce">
@@ -114,8 +131,15 @@ const VOCE = (() => {
     ['Sauna', /\b(saun\w*)\b/],
     ['Doccia fredda', /\b(docci\w* fredd\w*|getto freddo)\b/],
     ['Doccia calda', /\b(docci\w*)\b/],
+    // bagno freddo o nel ghiaccio (06/11): prima di Allenamento, altrimenti "piscina ghiacciata" diventa un allenamento
+    ['Bagno freddo', /\b((?:bagn|piscin|vasc|immersion|tuff)\w* (?:\w+ ){0,2}(?:fredd\w*|ghiacc\w*|gelid\w*)|ice ?bath)\b/],
     ['Riunione di lavoro', /\b(riunion\w*|meeting|call|videochiamat\w*|conference|colloqui\w*)\b/],
-    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|coerenza|pacer)\b/],
+    // tre tecniche con effetti diversi sul grafico (06/11): prima le specifiche, poi la generica.
+    // Wim Hof anche storpiato dalla dettatura: "vim of", "win hof", "wimhof", "wim hoff"
+    ['Respirazione Wim Hof', /\b([wvu]h?i[mn]{1,2} ?h?o(?:f|ff|ph)|[wv]im)\b/],
+    ['Respirazione vagale', /\b(vagal\w*|espirazion\w* (?:lung\w*|prolungat\w*|lent\w*)|espir\w* lung\w*)\b/],
+    ['Respirazione di coerenza', /\b(coerenz\w*|coherence)\b/],
+    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|pacer)\b/],
     ['Meditazione', /\b(medit\w*|mindfulness)\b/],
     ['Pisolino', /\b(pisolino|riposino|sonnellino|pennichella)\b/],
     ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
@@ -232,9 +256,10 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     { id: 'mente', nome: 'Lavoro e mente', col: 'var(--mente)', voci: [
       ['Riunione di lavoro', 'durata'], ['Attività mentale / PC', 'durata'], ['Telefonata o discussione difficile', 'durata'], ['Guida', 'durata'] ] },
     { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
-      ['Meditazione', 'durata'], ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
+      ['Meditazione', 'durata'], ['Respirazione di coerenza', 'durata'], ['Respirazione vagale', 'durata'], ['Respirazione Wim Hof', 'durata'],
+      ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
     { id: 'terapie', nome: 'Terapie, caldo e freddo', col: 'var(--terapie)', voci: [
-      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
+      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Bagno freddo', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
     { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
       ['Telefono / tablet / social', 'durata'], ['TV / serie', 'durata'] ] },
     { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
@@ -254,7 +279,43 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); } }
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
-  function toast(s) { const t = $('toast'); t.textContent = s; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+  function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
+  // doccia, sauna e bagno freddo si fanno spesso senza fascia: tolta, la H10 si spegne e la registrazione si chiude, e rimettendola
+  // non riparte da sola (successo il 04/11: mattinata persa). All'inizio una finestra lo spiega, alla fine un promemoria.
+  const TOGLIE_FASCIA = /^(Sauna|Doccia|Bagno freddo)/;
+  const RIMESSA = 'Rimessa la fascia? Tocca «Fai il cambio» nella sua pagina.';
+  function avvisoFascia(poi) {
+    const dlg = $('dlgFascia');
+    $('fasciaOk').onclick = () => { dlg.close(); if (poi) poi(); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  // dopo un tocco, per 8 secondi il messaggio offre di correggere l'orario: chi si ricorda in ritardo segna e sistema subito
+  function toastOra(s, v) {
+    const t = $('toast'); t.textContent = s;
+    const b = document.createElement('button'); b.textContent = 'Era prima? Cambia orario';
+    b.onclick = () => { t.classList.remove('show', 'act'); cambiaOra(v); };
+    t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
+  }
+  function cambiaOra(v) {
+    const dlg = $('dlgOra'), inp = $('oraIn');
+    $('oraTitle').textContent = v.puntuale ? `A che ora: ${v.label.toLowerCase()}?` : `Da che ora: ${v.label.toLowerCase()}?`;
+    inp.value = hhmm(v.inizio);
+    $('oraCancel').onclick = () => dlg.close();
+    $('oraOk').onclick = () => {
+      if (!inp.value) return;
+      const now = Date.now(), [h, m] = inp.value.split(':').map(Number), d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() > now + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri
+      const prima = v.inizio, delta = d.getTime() - prima;
+      v.inizio += delta; if (v.puntuale && v.fine != null) v.fine += delta;
+      if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+      // l'attività che questa aveva chiuso finisce anche lei all'orario corretto
+      // (entro un minuto: chiudi() allunga a 1 minuto le attività appena iniziate)
+      if (!v.puntuale) { const p = D.voci.find(x => x !== v && !x.puntuale && x.fine != null && Math.abs(x.fine - prima) <= 60000 && CAT[x.label] && CAT[x.label].tipo === 'durata'); if (p) p.fine = Math.max(p.inizio + 60000, v.inizio); }
+      save(); render(); dlg.close(); toast(`${v.label}: ${v.puntuale ? 'alle' : 'dalle'} ${hhmm(v.inizio)}`);
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
   if (navigator.vibrate) {} // la vibrazione su iPhone non è disponibile: il riscontro è il messaggio in basso
 
   // una voce che questa versione non conosce (diario scritto da una versione più nuova) non deve bloccare la pagina
@@ -266,14 +327,21 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     const c = CAT[label], t = Date.now();
     if (c.tipo === 'puntuale') {
       if (label === 'Mi sento sotto stress') return chiediLivello();
-      D.voci.push({ label, inizio: t, fine: t + c.win * 60000, puntuale: true });
-      save(); render(); toast(label + ' segnato alle ' + hhmm(t)); return;
+      const v = { label, inizio: t, fine: t + c.win * 60000, puntuale: true }; D.voci.push(v);
+      save(); render(); toastOra(label + ' alle ' + hhmm(t), v); return;
     }
     const cur = aperta('durata');
-    if (cur && cur.label === label) { chiudi(cur, t); save(); render(); toast(label + ': fine alle ' + hhmm(t)); return; }
+    if (cur && cur.label === label) {
+      chiudi(cur, t); save(); render();
+      if (TOGLIE_FASCIA.test(label)) toast(label + ': fine alle ' + hhmm(t) + '. ' + RIMESSA, 7000); else toast(label + ': fine alle ' + hhmm(t));
+      return;
+    }
+    const eraSenzaFascia = cur && TOGLIE_FASCIA.test(cur.label);
     if (cur) chiudi(cur, t);
-    D.voci.push({ label, inizio: t, fine: null });
-    save(); render(); toast(label + ' dalle ' + hhmm(t));
+    const v = { label, inizio: t, fine: null }; D.voci.push(v);
+    save(); render();
+    const msg = () => toastOra(label + ' dalle ' + hhmm(t) + (eraSenzaFascia ? '. ' + RIMESSA : ''), v);
+    if (TOGLIE_FASCIA.test(label)) avvisoFascia(msg); else msg();
   }
   // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
   function digiuno() {
@@ -359,8 +427,10 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         D.voci.push({ label: r.label, inizio: t, fine: null }); txt = `${r.label} dalle ${hhmm(t)}`; break;
       }
       case 'fine': {
-        const cur = r.label ? apertaLabel(r.label) : aperta('durata');
-        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; break; }
+        // "finita la respirazione" chiude anche una respirazione di coerenza, vagale o Wim Hof in corso (e viceversa)
+        const stessaFamiglia = r.label && /^Respirazione/.test(r.label) ? D.voci.find(v => v.fine == null && /^Respirazione/.test(v.label)) : null;
+        const cur = r.label ? (apertaLabel(r.label) || stessaFamiglia) : aperta('durata');
+        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}${TOGLIE_FASCIA.test(cur.label) ? '. ' + RIMESSA : ''}`; break; }
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
         $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
       }
@@ -391,6 +461,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     save(); render();
     $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
     $('voiceUndo').onclick = () => { D = JSON.parse(prima); save(); render(); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
+    if ((r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label)) avvisoFascia();
   }
   function segnaVoce() {
     const inp = $('voiceIn'), s = inp.value.trim(); if (!s) return;
@@ -422,7 +493,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
       ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
-    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); };
+    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); if (TOGLIE_FASCIA.test(cur.label)) toast('Fine alle ' + hhmm(Date.now()) + '. ' + RIMESSA, 7000); else toast('Fine alle ' + hhmm(Date.now())); };
 
     $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
@@ -440,7 +511,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     $('bFastStart').onclick = digiuno;
     $('bFastEnd').onclick = () => apertaLabel('Digiuno') ? digiuno() : passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto e quella in cui hai mangiato di nuovo.');
     $('bWorkEnd').onclick = () => apertaLabel('Lavoro') ? sfondo('Lavoro') : passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui, anche approssimato.');
-    $('groups').insertAdjacentHTML('beforeend', '<button class="plain" id="bPast" style="width:100%;margin-top:14px;padding:13px">Ho dimenticato di segnare qualcosa</button>');
+    // in cima, non in fondo: chi si ricorda dopo deve trovarlo subito
+    $('groups').insertAdjacentHTML('afterbegin', '<button class="plain" id="bPast" style="width:100%;margin-top:4px;padding:13px">＋ Segna qualcosa fatto prima, con l\'orario</button>');
     $('bPast').onclick = () => passato();
 
     const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
