@@ -109,7 +109,7 @@
 
 <dialog id="dlgFascia">
   <b>Togli la fascia?</b>
-  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia o la sauna, la registrazione <b>si ferma e non riparte da sola</b> quando la rimetti.</p>
+  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia, la sauna o il bagno freddo, la registrazione <b>si ferma e non riparte da sola</b> quando la rimetti.</p>
   <p style="font-size:15px;margin:8px 0 0">Appena l'hai rimessa, apri la pagina <b>Cambio della fascia</b> (su iPhone con Bluefy) e tocca <b>«Fai il cambio»</b>: salva quello che ha registrato e la fa ripartire.</p>
   <div class="note" style="margin-top:8px">Se la tieni addosso, non devi fare niente.</div>
   <div class="row"><button class="main" id="fasciaOk" style="width:auto;flex:1">Ho capito</button></div>
@@ -131,8 +131,15 @@ const VOCE = (() => {
     ['Sauna', /\b(saun\w*)\b/],
     ['Doccia fredda', /\b(docci\w* fredd\w*|getto freddo)\b/],
     ['Doccia calda', /\b(docci\w*)\b/],
+    // bagno freddo o nel ghiaccio (06/11): prima di Allenamento, altrimenti "piscina ghiacciata" diventa un allenamento
+    ['Bagno freddo', /\b((?:bagn|piscin|vasc|immersion|tuff)\w* (?:\w+ ){0,2}(?:fredd\w*|ghiacc\w*|gelid\w*)|ice ?bath)\b/],
     ['Riunione di lavoro', /\b(riunion\w*|meeting|call|videochiamat\w*|conference|colloqui\w*)\b/],
-    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|coerenza|pacer)\b/],
+    // tre tecniche con effetti diversi sul grafico (06/11): prima le specifiche, poi la generica.
+    // Wim Hof anche storpiato dalla dettatura: "vim of", "win hof", "wimhof", "wim hoff"
+    ['Respirazione Wim Hof', /\b([wvu]h?i[mn]{1,2} ?h?o(?:f|ff|ph)|[wv]im)\b/],
+    ['Respirazione vagale', /\b(vagal\w*|espirazion\w* (?:lung\w*|prolungat\w*|lent\w*)|espir\w* lung\w*)\b/],
+    ['Respirazione di coerenza', /\b(coerenz\w*|coherence)\b/],
+    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|pacer)\b/],
     ['Meditazione', /\b(medit\w*|mindfulness)\b/],
     ['Pisolino', /\b(pisolino|riposino|sonnellino|pennichella)\b/],
     ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
@@ -249,9 +256,10 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     { id: 'mente', nome: 'Lavoro e mente', col: 'var(--mente)', voci: [
       ['Riunione di lavoro', 'durata'], ['Attività mentale / PC', 'durata'], ['Telefonata o discussione difficile', 'durata'], ['Guida', 'durata'] ] },
     { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
-      ['Meditazione', 'durata'], ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
+      ['Meditazione', 'durata'], ['Respirazione di coerenza', 'durata'], ['Respirazione vagale', 'durata'], ['Respirazione Wim Hof', 'durata'],
+      ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
     { id: 'terapie', nome: 'Terapie, caldo e freddo', col: 'var(--terapie)', voci: [
-      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
+      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Bagno freddo', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
     { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
       ['Telefono / tablet / social', 'durata'], ['TV / serie', 'durata'] ] },
     { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
@@ -272,9 +280,9 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
   function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
-  // doccia e sauna si fanno di solito senza fascia: tolta, la H10 si spegne e la registrazione si chiude, e rimettendola
+  // doccia, sauna e bagno freddo si fanno spesso senza fascia: tolta, la H10 si spegne e la registrazione si chiude, e rimettendola
   // non riparte da sola (successo il 04/11: mattinata persa). All'inizio una finestra lo spiega, alla fine un promemoria.
-  const TOGLIE_FASCIA = /^(Sauna|Doccia)/;
+  const TOGLIE_FASCIA = /^(Sauna|Doccia|Bagno freddo)/;
   const RIMESSA = 'Rimessa la fascia? Tocca «Fai il cambio» nella sua pagina.';
   function avvisoFascia(poi) {
     const dlg = $('dlgFascia');
@@ -419,7 +427,9 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         D.voci.push({ label: r.label, inizio: t, fine: null }); txt = `${r.label} dalle ${hhmm(t)}`; break;
       }
       case 'fine': {
-        const cur = r.label ? apertaLabel(r.label) : aperta('durata');
+        // "finita la respirazione" chiude anche una respirazione di coerenza, vagale o Wim Hof in corso (e viceversa)
+        const stessaFamiglia = r.label && /^Respirazione/.test(r.label) ? D.voci.find(v => v.fine == null && /^Respirazione/.test(v.label)) : null;
+        const cur = r.label ? (apertaLabel(r.label) || stessaFamiglia) : aperta('durata');
         if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}${TOGLIE_FASCIA.test(cur.label) ? '. ' + RIMESSA : ''}`; break; }
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
         $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
