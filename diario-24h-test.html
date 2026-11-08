@@ -6,7 +6,7 @@
 <title>PROVA · Diario della giornata — HRV Tool</title>
 <style>
   :root{ --blu:#1B549B; --bg:#F4FBF8; --testo:#2E3538; --grigio:#545E62; --linea:#e3e8ea;
-    --fisica:#1565C8; --mente:#E5251D; --recupero:#5E9E2A; --terapie:#0E7F86; --schermi:#C2731B; --puntuale:#7A5C9E; --giornata:#545E62; }
+    --fisica:#1565C8; --mente:#E5251D; --recupero:#5E9E2A; --terapie:#0E7F86; --schermi:#C2731B; --svago:#A8457E; --puntuale:#7A5C9E; --giornata:#545E62; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:var(--bg);color:var(--testo);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:40px}
   header{background:var(--blu);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;position:sticky;top:0;z-index:5}
@@ -42,6 +42,7 @@
   dialog .row{display:flex;gap:8px;margin-top:12px}
   .lvl{display:flex;gap:6px;margin-top:10px}
   .lvl button{flex:1;border:0;border-radius:9px;padding:12px 0;font:700 17px inherit;background:#eef3f8;color:var(--blu)}
+  .avviso{background:#fdf3df;color:#6b4a00;border-radius:12px;padding:11px 13px;margin-bottom:14px;font-size:14.5px}
 </style>
 </head>
 <body>
@@ -51,6 +52,12 @@
 </header>
 <main>
   <div class="now" id="now"></div>
+
+  <!-- istruzione fissa (Federico, 08/11/2026): vale anche per chi la doccia non la segna -->
+  <div class="avviso">
+    <b>Se togli la fascia</b> (doccia, bagno, sauna, nuoto o per qualsiasi altro motivo), la registrazione può fermarsi. Appena l'hai rimessa, fai il <b>cambio della fascia</b> e poi tocca <b>«Manda tutto al medico»</b>, anche se qui non l'hai segnato.
+    <button class="plain" id="bCambio" style="width:100%;margin-top:9px">Apri la pagina del cambio</button>
+  </div>
 
   <div class="now" id="voiceCard">
     <div class="lab">Dimmelo a voce</div>
@@ -109,10 +116,18 @@
 
 <dialog id="dlgFascia">
   <b>Togli la fascia?</b>
-  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia, la sauna o il bagno freddo, la registrazione <b>si ferma e non riparte da sola</b> quando la rimetti.</p>
-  <p style="font-size:15px;margin:8px 0 0">Appena l'hai rimessa, apri la pagina <b>Cambio della fascia</b> (su iPhone con Bluefy) e tocca <b>«Fai il cambio»</b>: salva quello che ha registrato e la fa ripartire.</p>
+  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia, il bagno, la sauna o il nuoto, la registrazione <b>può fermarsi</b> e non ripartire da sola quando la rimetti.</p>
+  <p style="font-size:15px;margin:8px 0 0">Quando segni la fine, ti porto alla pagina <b>Cambio della fascia</b>: lì tocchi <b>«Fai il cambio»</b> e poi <b>«Manda tutto al medico»</b>.</p>
   <div class="note" style="margin-top:8px">Se la tieni addosso, non devi fare niente.</div>
   <div class="row"><button class="main" id="fasciaOk" style="width:auto;flex:1">Ho capito</button></div>
+</dialog>
+
+<dialog id="dlgRimessa">
+  <b id="rimTitolo">Hai tolto la fascia?</b>
+  <p style="font-size:15px;margin:10px 0 0" id="rimStima"></p>
+  <p style="font-size:15px;margin:8px 0 0">Ti consiglio di fare il <b>cambio della fascia</b> appena l'hai rimessa: salva tutto, poi tocca <b>«Manda tutto al medico»</b>. Togliendo la fascia, a volte la registrazione si ferma da sola: con il cambio non si perde niente.</p>
+  <div class="note" style="margin-top:8px">Se non l'hai tolta, puoi farlo più tardi.</div>
+  <div class="row"><button class="plain" id="rimessaDopo">Più tardi</button><button class="main" id="rimessaVai" style="width:auto;flex:1">Apri la pagina del cambio</button></div>
 </dialog>
 
 <div class="toast" id="toast"></div>
@@ -128,11 +143,16 @@ const VOCE = (() => {
     // terapie, caldo e freddo: prima della respirazione ("respiro con l'airnergy" è una seduta di Airnergy)
     ['Airnergy', /\b(airnergy|airenergy|air energy|air nergy)\b/],
     ['Fotobiomodulazione', /\b(fotobiomodul\w*|foto biomodul\w*|luce rossa|luce infrarossa|red light|pbm)\b/],
-    ['Sauna', /\b(saun\w*)\b/],
+    ['Sauna', /\b(saun\w*|bagno turco|hammam)\b/],
     ['Doccia fredda', /\b(docci\w* fredd\w*|getto freddo)\b/],
     ['Doccia calda', /\b(docci\w*)\b/],
     // bagno freddo o nel ghiaccio (06/11): prima di Allenamento, altrimenti "piscina ghiacciata" diventa un allenamento
     ['Bagno freddo', /\b((?:bagn|piscin|vasc|immersion|tuff)\w* (?:\w+ ){0,2}(?:fredd\w*|ghiacc\w*|gelid\w*)|ice ?bath)\b/],
+    // bagno caldo (08/11): anche vasca, idromassaggio, terme
+    ['Bagno caldo', /\b((?:bagn|vasc|immersion)\w* (?:\w+ ){0,2}(?:cald\w*|bollent\w*|tiepid\w*)|bagno nella vasca|vasca da bagno|idromassaggio|jacuzzi|terme|termal\w*)\b/],
+    // suonare uno strumento (08/11): solo in prima persona ("sta suonando la batteria" detto di un altro resta una nota);
+    // "batteria" da sola no, potrebbe essere quella del telefono
+    ['Suonare uno strumento', /\b(suono|suonare|suonato|sto suonando|vado a suonare|(?:esercizi\w*|lezion\w*|prov\w*|studio) (?:di|alla|al|con la|con il|della|del) (?:batteria|chitarra|pianoforte|piano|basso|violino|canto|sax\w*)|chitarra|pianoforte|violino|violoncello|flauto|sassofono)\b/],
     ['Riunione di lavoro', /\b(riunion\w*|meeting|call|videochiamat\w*|conference|colloqui\w*)\b/],
     // tre tecniche con effetti diversi sul grafico (06/11): prima le specifiche, poi la generica.
     // Wim Hof anche storpiato dalla dettatura: "vim of", "win hof", "wimhof", "wim hoff"
@@ -145,7 +165,9 @@ const VOCE = (() => {
     ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
     ['Telefono / tablet / social', /\b(social|instagram|tiktok|facebook|whatsapp|scroll\w*|cellulare|telefonino|telefono)\b/],
     ['Bicicletta', /\b(bici\w*|pedal\w*|ciclismo|spinning)\b/],
-    ['Allenamento', /\b(palestra|allen\w*|corsa|corr[eo]\w*|jogging|nuot\w*|piscina|tennis|padel|calcetto|pesi|crossfit|sport)\b/],
+    // nuoto (08/11): voce a sé, perché in acqua la fascia di solito si toglie; prima di Allenamento
+    ['Nuoto', /\b(nuot\w*|piscina|bracciate)\b/],
+    ['Allenamento', /\b(palestra|allen\w*|corsa|corr[eo]\w*|jogging|tennis|padel|calcetto|pesi|crossfit|sport)\b/],
     ['Camminata', /\b(passeggi\w*|cammin\w*|a piedi|giro col cane|cane fuori)\b/],
     ['Scale / lavoro fisico', /\b(scale|giardinaggio|pulizie|faccende|trasloco|lavoro fisico|spesa pesante)\b/],
     ['Guida', /\b(guid\w*|macchina|in auto|traffico|al volante)\b/],
@@ -225,6 +247,9 @@ const VOCE = (() => {
       const lv = pun[0] === 'Mi sento sotto stress' ? (s.match(/\b([1-5])\b/) || [])[1] : null;
       return { ...out, azione: 'puntuale', label: pun[0], livello: lv ? +lv : null };
     }
+    // fascia tolta o rimessa per qualunque motivo (08/11): se la frase nomina anche doccia, bagno o sauna, vince l'attività
+    if (/\b(fascia|sensore|polar|cardiofrequenzimetro)\b/.test(s) && /\b(tolt\w*|tolgo|togli\w*|slacci\w*|stacc\w*|rimess\w*|rimett\w*)\b/.test(s) && !(att && /^(Sauna|Doccia|Bagno|Nuoto)/.test(att[0])))
+      return { ...out, azione: 'fascia' };
     const label = att ? att[0].replace('Attivita mentale', 'Attività mentale') : null;
     if (out.from != null) return label ? { ...out, azione: 'intervallo', label } : { ...out, azione: 'nota' };
     // "faccio 5 minuti di respirazione" = da adesso per 5 minuti; "ho fatto 5 minuti di…" = i 5 minuti appena passati
@@ -252,16 +277,19 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   // tipo: 'durata' = inizia e resta attiva; 'puntuale' = un tocco, con una finestra di analisi di default (minuti)
   const GRUPPI = [
     { id: 'fisica', nome: 'Attività fisica', col: 'var(--fisica)', voci: [
-      ['Camminata', 'durata'], ['Allenamento', 'durata'], ['Bicicletta', 'durata'], ['Scale / lavoro fisico', 'durata'] ] },
+      ['Camminata', 'durata'], ['Allenamento', 'durata'], ['Bicicletta', 'durata'], ['Nuoto', 'durata'], ['Scale / lavoro fisico', 'durata'] ] },
     { id: 'mente', nome: 'Lavoro e mente', col: 'var(--mente)', voci: [
       ['Riunione di lavoro', 'durata'], ['Attività mentale / PC', 'durata'], ['Telefonata o discussione difficile', 'durata'], ['Guida', 'durata'] ] },
     { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
       ['Meditazione', 'durata'], ['Respirazione di coerenza', 'durata'], ['Respirazione vagale', 'durata'], ['Respirazione Wim Hof', 'durata'],
       ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
     { id: 'terapie', nome: 'Terapie, caldo e freddo', col: 'var(--terapie)', voci: [
-      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Bagno freddo', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
+      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Bagno caldo', 'durata'], ['Bagno freddo', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
     { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
       ['Telefono / tablet / social', 'durata'], ['TV / serie', 'durata'] ] },
+    // tempo libero (08/11): misurato, non colorato come attività fisica, per vedere se suonare fa recuperare o carica
+    { id: 'svago', nome: 'Tempo libero', col: 'var(--svago)', voci: [
+      ['Suonare uno strumento', 'durata'] ] },
     { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
       ['Caffè', 'puntuale', 30], ['Sigaretta', 'puntuale', 20], ['Pasto', 'puntuale', 45], ['Alcol', 'puntuale', 60],
       ['Farmaco / integratore', 'puntuale', 30], ['Mi sento sotto stress', 'puntuale', 15] ] },
@@ -280,13 +308,67 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
   function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
-  // doccia, sauna e bagno freddo si fanno spesso senza fascia: tolta, la H10 si spegne e la registrazione si chiude, e rimettendola
-  // non riparte da sola (successo il 04/11: mattinata persa). All'inizio una finestra lo spiega, alla fine un promemoria.
-  const TOGLIE_FASCIA = /^(Sauna|Doccia|Bagno freddo)/;
-  const RIMESSA = 'Rimessa la fascia? Tocca «Fai il cambio» nella sua pagina.';
+  // doccia, sauna e bagno freddo si fanno spesso senza fascia. Tolta, a volte la registrazione si chiude e rimettendola non
+  // riparte (04/11: mattinata persa), a volte continua (08/11: stessa doccia, nessun buco). All'inizio una finestra lo spiega;
+  // alla fine si consiglia SEMPRE il cambio con l'invio al medico (decisione di Federico, 08/11/2026: dopo tante ore servirebbe comunque).
+  const TOGLIE_FASCIA = /^(Sauna|Doccia|Bagno|Nuoto)/; // sauna, docce calda e fredda, bagni caldo e freddo, nuoto
+  const PAGINA_CAMBIO = 'cambio-h10-test.html'; // PROVA: nella pagina vera 'cambio-h10.html'
   function avvisoFascia(poi) {
     const dlg = $('dlgFascia');
     $('fasciaOk').onclick = () => { dlg.close(); if (poi) poi(); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  // Ora dell'ultimo cambio, letta dall'archivio della pagina del cambio (stesso sito: su iPhone solo se anche il diario è in Bluefy).
+  // Solo lettura, e non crea MAI l'archivio: creato vuoto da qui, la pagina del cambio non riuscirebbe più a usarlo.
+  function statoFascia() {
+    return new Promise(res => {
+      let fatto = false; const fine = v => { if (!fatto) { fatto = true; res(v); } };
+      setTimeout(() => fine(null), 1500);
+      let r;
+      try { r = indexedDB.open('hrv24cambio'); } catch (e) { return fine(null); }
+      r.onupgradeneeded = e => { if (e.oldVersion === 0) r.transaction.abort(); }; // non esiste: si rinuncia senza crearlo
+      r.onerror = () => fine(null);
+      r.onblocked = () => fine(null);
+      r.onsuccess = () => {
+        const d = r.result;
+        try {
+          if (!d.objectStoreNames.contains('meta') || !d.objectStoreNames.contains('reg')) { d.close(); return fine(null); }
+          const t = d.transaction(['meta', 'reg'], 'readonly'), out = {};
+          t.objectStore('meta').get('ultimoAvvio').onsuccess = e => { out.avvio = e.target.result; };
+          t.objectStore('meta').get('fine').onsuccess = e => { out.fine = e.target.result; };
+          t.objectStore('reg').getAll().onsuccess = e => { out.regs = e.target.result || []; };
+          t.oncomplete = () => { d.close(); fine(out); };
+          t.onerror = t.onabort = () => { d.close(); fine(null); };
+        } catch (e) { d.close(); fine(null); }
+      };
+    });
+  }
+  // stessa stima della pagina del cambio: capienza 95.000 battiti (non ancora verificata fino a memoria piena),
+  // frequenza media delle registrazioni salvate oltre l'ora, altrimenti 68 battiti al minuto
+  function stimaFascia(s) {
+    if (!s || !s.avvio || !(s.avvio.t > 0)) return null;
+    if (s.fine && s.fine > s.avvio.t) return { conclusa: true };
+    const rr = (s.regs || []).filter(r => r.type === 'rr' && r.durMin > 60), n = rr.reduce((a, r) => a + r.n, 0), m = rr.reduce((a, r) => a + r.durMin, 0);
+    const fc = m ? n / m : 68, ora = Date.now(), trascorsi = (ora - s.avvio.t) / 60000, restano = Math.max(0, 95000 - trascorsi * fc) / fc;
+    return { avvio: s.avvio.t, trascorsi, restano, piena: ora + restano * 60000 };
+  }
+  const quando = t => {
+    const g = Math.round((new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+    return (g === 0 ? 'oggi' : g === -1 ? 'ieri' : g === 1 ? 'domani' : new Date(t).toLocaleDateString('it-IT', { day: 'numeric', month: 'numeric' })) + ' alle ' + hhmm(t);
+  };
+  // fine di doccia, sauna o bagno freddo: domanda, stima di quanto resta e consiglio del cambio (testo di Federico, 08/11)
+  async function avvisoRimessa(label) {
+    const dlg = $('dlgRimessa');
+    if (dlg.open) return;
+    const s = stimaFascia(await statoFascia());
+    if (s && s.conclusa) return; // monitoraggio già concluso: la fascia non registra, il cambio non serve
+    const fatto = !label || !TOGLIE_FASCIA.test(label) ? '' : label === 'Nuoto' ? 'Hai nuotato. ' : 'Hai fatto ' + (/^Bagno/.test(label) ? 'il ' : 'la ') + label.toLowerCase() + '. ';
+    $('rimTitolo').textContent = fatto + 'Hai tolto la fascia?';
+    $('rimStima').innerHTML = !s ? 'Su questo telefono non trovo l\'ora dell\'ultimo cambio: il diario e la pagina del cambio vanno usati tutti e due in Bluefy.'
+      : `La fascia registra dall'ultimo cambio, ${quando(s.avvio)} (da ${durTxt(s.trascorsi * 60000)}). ` +
+        (s.restano > 0 ? `Se sta ancora registrando, la memoria si riempirebbe ${quando(s.piena)}: <b>restano circa ${durTxt(s.restano * 60000)}</b>.` : '<b>La memoria potrebbe essere già piena.</b>');
+    $('rimessaDopo').onclick = () => dlg.close();
+    $('rimessaVai').onclick = () => { dlg.close(); location.href = PAGINA_CAMBIO; };
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   // dopo un tocco, per 8 secondi il messaggio offre di correggere l'orario: chi si ricorda in ritardo segna e sistema subito
@@ -333,14 +415,15 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     const cur = aperta('durata');
     if (cur && cur.label === label) {
       chiudi(cur, t); save(); render();
-      if (TOGLIE_FASCIA.test(label)) toast(label + ': fine alle ' + hhmm(t) + '. ' + RIMESSA, 7000); else toast(label + ': fine alle ' + hhmm(t));
+      toast(label + ': fine alle ' + hhmm(t)); if (TOGLIE_FASCIA.test(label)) avvisoRimessa(label);
       return;
     }
     const eraSenzaFascia = cur && TOGLIE_FASCIA.test(cur.label);
     if (cur) chiudi(cur, t);
     const v = { label, inizio: t, fine: null }; D.voci.push(v);
     save(); render();
-    const msg = () => toastOra(label + ' dalle ' + hhmm(t) + (eraSenzaFascia ? '. ' + RIMESSA : ''), v);
+    // dalla sauna alla doccia la fascia è ancora tolta: il consiglio del cambio aspetta la fine dell'ultima
+    const msg = () => { toastOra(label + ' dalle ' + hhmm(t), v); if (eraSenzaFascia && !TOGLIE_FASCIA.test(label)) avvisoRimessa(cur.label); };
     if (TOGLIE_FASCIA.test(label)) avvisoFascia(msg); else msg();
   }
   // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
@@ -412,6 +495,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
           D.voci.push({ label: 'Pasto', inizio: fine, fine: fine + CAT['Pasto'].win * 60000, puntuale: true });
       }
       save(); render(); dlg.close(); toast(label + ' registrato');
+      if (TOGLIE_FASCIA.test(label) && fine > nowMs - 2 * 3600000) avvisoRimessa(label); // segnata dopo, ma finita da poco
     };
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
@@ -419,7 +503,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   /* ---------- dettatura: la frase diventa un'azione, con "Annulla" ---------- */
   function applicaVoce(r) {
     const prima = JSON.stringify(D), t = r.t;
-    const chiudiTutto = () => { const a = aperta('durata'); if (a) chiudi(a, t); };
+    let rimessa = null; // voce senza fascia appena chiusa: alla fine si consiglia il cambio
+    const chiudiTutto = () => { const a = aperta('durata'); if (a) { chiudi(a, t); if (TOGLIE_FASCIA.test(a.label)) rimessa = a.label; } };
     let txt;
     switch (r.azione) {
       case 'inizio': {
@@ -430,13 +515,13 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         // "finita la respirazione" chiude anche una respirazione di coerenza, vagale o Wim Hof in corso (e viceversa)
         const stessaFamiglia = r.label && /^Respirazione/.test(r.label) ? D.voci.find(v => v.fine == null && /^Respirazione/.test(v.label)) : null;
         const cur = r.label ? (apertaLabel(r.label) || stessaFamiglia) : aperta('durata');
-        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}${TOGLIE_FASCIA.test(cur.label) ? '. ' + RIMESSA : ''}`; break; }
+        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; if (TOGLIE_FASCIA.test(cur.label)) rimessa = cur.label; break; }
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
         $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
       }
       case 'intervallo': {
         // se comincia adesso, chiude l'attività precedente (la fascia di lavoro resta aperta)
-        if (r.inCorso) { const a = aperta('durata'); if (a) chiudi(a, r.from); }
+        if (r.inCorso) { const a = aperta('durata'); if (a) { chiudi(a, r.from); if (TOGLIE_FASCIA.test(a.label)) rimessa = a.label; } }
         D.voci.push({ label: r.label, inizio: r.from, fine: r.to }); txt = `${r.label} dalle ${hhmm(r.from)} alle ${hhmm(r.to)}`; break;
       }
       case 'puntuale': { const c = CAT[r.label]; const v = { label: r.label, inizio: t, fine: t + c.win * 60000, puntuale: true }; if (r.livello) v.livello = r.livello; D.voci.push(v); txt = `${r.label}${r.livello ? ' ' + r.livello + '/5' : ''} alle ${hhmm(t)}`; break; }
@@ -456,12 +541,18 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       }
       case 'lavoro_inizio': if (!apertaLabel('Lavoro')) D.voci.push({ label: 'Lavoro', inizio: t, fine: null }); txt = `inizio lavoro alle ${hhmm(t)}`; break;
       case 'lavoro_fine': { const w = apertaLabel('Lavoro'); if (!w) return passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui.'); chiudi(w, t); txt = `fine lavoro alle ${hhmm(t)}`; break; }
+      // "ho tolto / rimesso la fascia": resta come nota e apre il consiglio del cambio
+      case 'fascia': D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`; rimessa = 'fascia'; break;
       default: D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`;
     }
     save(); render();
     $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
     $('voiceUndo').onclick = () => { D = JSON.parse(prima); save(); render(); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
-    if ((r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label)) avvisoFascia();
+    const iniziaSenzaFascia = (r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label);
+    const finitaDaPoco = r.azione === 'intervallo' && !r.inCorso && TOGLIE_FASCIA.test(r.label) && r.to > Date.now() - 2 * 3600000; // "ho fatto la doccia"
+    if (iniziaSenzaFascia) avvisoFascia();
+    else if (finitaDaPoco) avvisoRimessa(r.label);
+    else if (rimessa) avvisoRimessa(rimessa);
   }
   function segnaVoce() {
     const inp = $('voiceIn'), s = inp.value.trim(); if (!s) return;
@@ -469,6 +560,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     inp.value = ''; inp.blur(); applicaVoce(r);
   }
   $('voiceGo').onclick = segnaVoce;
+  $('bCambio').onclick = () => { location.href = PAGINA_CAMBIO; };
   $('voiceIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); segnaVoce(); } });
 
   function chiediLivello() {
@@ -493,7 +585,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
       ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
-    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); if (TOGLIE_FASCIA.test(cur.label)) toast('Fine alle ' + hhmm(Date.now()) + '. ' + RIMESSA, 7000); else toast('Fine alle ' + hhmm(Date.now())); };
+    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); if (TOGLIE_FASCIA.test(cur.label)) avvisoRimessa(cur.label); };
 
     $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
