@@ -378,6 +378,13 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     b.onclick = () => { t.classList.remove('show', 'act'); cambiaOra(v); };
     t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
   }
+  // dopo una correzione d'orario nell'elenco: 8 secondi per tornare indietro
+  function toastAnnulla(s, prima) {
+    const t = $('toast'); t.textContent = s;
+    const b = document.createElement('button'); b.textContent = 'Annulla';
+    b.onclick = () => { D = JSON.parse(prima); save(); render(); t.classList.remove('act'); toast('Orario ripristinato'); };
+    t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
+  }
   function cambiaOra(v) {
     const dlg = $('dlgOra'), inp = $('oraIn');
     $('oraTitle').textContent = v.puntuale ? `A che ora: ${v.label.toLowerCase()}?` : `Da che ora: ${v.label.toLowerCase()}?`;
@@ -614,22 +621,29 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         ${!v.puntuale && v.fine ? `<span class="note">→</span><input type="time" value="${hhmm(v.fine)}" data-f="${i}" title="ora di fine">` : ''}
         <span class="t">${v.nota ? 'Nota: “' + v.nota.replace(/[<>&]/g, '') + '”' : v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
         <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
-    document.querySelectorAll('#log input[type=time]').forEach(inp => inp.onchange = () => {
-      const v = D.voci[+inp.dataset.i]; if (!inp.value) return;
-      const [h, m] = inp.value.split(':').map(Number), d = new Date(v.inizio);
-      d.setHours(h, m, 0, 0);
-      if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = riferito a ieri sera
-      const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
-      if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
-      save(); render(); toast('Orario corretto');
-    });
-    document.querySelectorAll('#log input[data-f]').forEach(inp => inp.onchange = () => {
-      const v = D.voci[+inp.dataset.f]; if (!inp.value) return;
-      const [h, m] = inp.value.split(':').map(Number), d = new Date(v.inizio);
-      d.setHours(h, m, 0, 0);
-      if (d.getTime() <= v.inizio) d.setDate(d.getDate() + 1); // la fine dopo mezzanotte cade il giorno dopo
-      v.fine = Math.min(d.getTime(), Date.now() + 60000);
-      save(); render(); toast('Orario di fine corretto');
+    // 11/11/2026: l'orario si salva solo quando la rotella si chiude (spunta), non mentre gira. Prima si salvava a ogni
+    // "change", che l'iPhone manda a ogni scatto della rotella: il diario ridisegnava l'elenco, la rotella si chiudeva e
+    // restava l'orario di passaggio. Dopo il salvataggio, 8 secondi per annullare.
+    document.querySelectorAll('#log input[type=time]').forEach(inp => {
+      inp.dataset.orig = inp.value;
+      inp.onblur = () => {
+        if (!inp.value || inp.value === inp.dataset.orig) return;
+        const prima = JSON.stringify(D), [h, m] = inp.value.split(':').map(Number);
+        if (inp.dataset.f != null) {
+          const v = D.voci[+inp.dataset.f], d = new Date(v.inizio);
+          d.setHours(h, m, 0, 0);
+          if (d.getTime() <= v.inizio) d.setDate(d.getDate() + 1); // la fine dopo mezzanotte cade il giorno dopo
+          v.fine = Math.min(d.getTime(), Date.now() + 60000);
+          save(); render(); toastAnnulla('Fine corretta: ' + hhmm(v.fine), prima);
+        } else {
+          const v = D.voci[+inp.dataset.i], d = new Date(v.inizio);
+          d.setHours(h, m, 0, 0);
+          if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = riferito a ieri sera
+          const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
+          if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+          save(); render(); toastAnnulla('Orario corretto: ' + hhmm(v.inizio), prima);
+        }
+      };
     });
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { D.voci.splice(+b.dataset.del, 1); save(); render(); });
   }
@@ -653,7 +667,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   };
 
   render();
-  setInterval(render, 60000);
+  // ogni minuto si aggiornano le durate, ma non mentre si sta cambiando un orario: ridisegnare chiuderebbe la rotella
+  setInterval(() => { const a = document.activeElement; if (a && a.matches && a.matches('#log input[type=time]')) return; render(); }, 60000);
 })();
 </script>
 </body>
