@@ -71,14 +71,20 @@
 <div class="card">
   <h2>Giornate salvate su questo telefono</h2>
   <div class="days" id="days"></div>
+  <label style="display:block;margin-top:12px;font-size:15px">Il tuo codice
+    <input id="inCodice" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--linea);border-radius:10px;text-transform:uppercase">
+  </label>
   <button class="sec" id="bSend">Manda tutto al medico</button>
-  <p class="note">Crea i file con i battiti (e il diario, se l'hai compilato in questo stesso browser), senza nome né dati personali, e apre la condivisione del telefono.</p>
+  <div id="sendOut"></div>
+  <p class="note">Manda direttamente al medico i battiti e il diario (se l'hai compilato in questo stesso browser), con il tuo codice e senza nome. Spedisce solo quello che il medico non ha ancora e ti dice quando è arrivato. Se manca la rete non si perde niente: riprova più tardi.</p>
   <button class="sec danger" id="bEnd">Fine del monitoraggio</button>
   <p class="note">Solo l'ultimo giorno, quando il medico te lo dice: salva i dati come un cambio ma <b>non</b> fa ripartire la fascia.</p>
   <details>
     <summary>Altre opzioni</summary>
+    <button class="sec" id="bShare">Condividi i file in un altro modo</button>
+    <p class="note">Solo se «Manda tutto al medico» non funziona: crea i file e apre la condivisione del telefono (email, WhatsApp…).</p>
     <button class="sec danger" id="bWipe">Cancella le giornate da questo telefono</button>
-    <p class="note">Solo dopo che il medico ti ha confermato di aver ricevuto i file.</p>
+    <p class="note">Solo quando tutte le giornate hanno il segno ✓ (arrivate al medico), o se il medico ti conferma di averle ricevute.</p>
     <div style="margin-top:10px"><b>Registro tecnico</b> <button class="sec" id="bCopyLog" style="width:auto;padding:6px 12px;font-size:14px;margin-left:8px">Copia</button></div>
     <div id="log"></div>
   </details>
@@ -382,7 +388,8 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const ended = await getMeta('fine');
     $('state').innerHTML = m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span><b>Stato</b><span>${ended && ended > m.t ? 'monitoraggio concluso' : 'la fascia sta registrando da ' + fmtDur((Date.now() - m.t) / 60000)}</span>` : '<b>Stato</b><span>Nessun cambio fatto da questo telefono.</span>';
     const tot = regs.reduce((s, r) => s + r.durMin, 0);
-    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${r.startedAt ? fmtWhen(r.startedAt) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+    const inviati = (await getMeta('inviati')) || {};
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${r.startedAt ? fmtWhen(r.startedAt) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${inviati['h10_' + r.id + '.csv'] ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
     $('bSend').disabled = !regs.length;
     if (m && !(ended && ended > m.t)) {
       // quando si riempie la memoria: FC media delle registrazioni già salvate (battiti per minuto), altrimenti 68 bpm
@@ -530,19 +537,92 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   };
 
   /* ---------- invio ---------- */
-  function diaryFile() {
+  // Diario come testo: { fname, data }. Il nome usa la data di oggi: il diario è cumulativo, quindi il file del giorno
+  // contiene anche i giorni prima e un nuovo invio nello stesso giorno lo sostituisce sul Drive.
+  function diaryItem() {
     try {
       const D = JSON.parse(localStorage.getItem(DIARY_KEY) || 'null'); if (!D || !D.voci || !D.voci.length) return null;
-      const t = Date.now();
-      const outj = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(), voci: D.voci.map(v => ({ label: v.label, categoria: null, inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
-      return new File([JSON.stringify(outj, null, 1)], 'diario_' + new Date(t).toISOString().slice(0, 10) + '.json', { type: 'application/json' });
+      const t = Date.now(), d = new Date(t);
+      const outj = { formato: 'diario-24h', versione: 1, creato: d.toISOString(), voci: D.voci.map(v => ({ label: v.label, categoria: null, inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null })) };
+      return { fname: 'diario_' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '.json', data: JSON.stringify(outj, null, 1), type: 'application/json' };
     } catch (e) { return null; }
   }
+  const allItems = async () => { const its = (await allRegs()).map(r => ({ fname: 'h10_' + r.id + '.csv', data: buildCsv(r), type: 'text/csv' })); const dj = diaryItem(); if (dj) its.push(dj); return its; };
+
+  // Invio diretto al Drive del medico: stesso Apps Script del Respiro Pacer (tipo "mon24"), cartella del paziente
+  // HRV pazienti/<codice>/monitoraggio_24h/. La risposta di un POST no-cors è opaca, quindi l'arrivo si CONFERMA
+  // chiedendo al Drive (JSONP, kind=mon24check) quali file ha e con che dimensione: segnato come spedito solo ciò che
+  // è arrivato intero. Prima di spedire si chiede cosa c'è già, così parte solo il nuovo (anche da un altro telefono).
+  const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbxCZSzyXdHN70Fi8iVA7L2fQi_C5N38axZN4mQuO_b76z6mTMEvmUoPhUMsF8POxn50Rg/exec';
+  const CODE_KEY = 'hrv24.codice.v1', RE_COD = /^(MF|ATL)-[A-Z0-9]{4,8}$/;
+  function codiceIniziale() {
+    try {
+      const q = new URLSearchParams(location.search).get('codice'); if (q && RE_COD.test(q.trim().toUpperCase())) { localStorage.setItem(CODE_KEY, q.trim().toUpperCase()); return q.trim().toUpperCase(); }
+      const c = localStorage.getItem(CODE_KEY); if (c) return c;
+      const L = JSON.parse(localStorage.getItem('respiroPacer.license.v1') || 'null'); if (L && L.code) return String(L.code).trim().toUpperCase();   // codice già attivato nel Respiro Pacer
+    } catch (e) {}
+    return '';
+  }
+  $('inCodice').value = codiceIniziale();
+  const nByte = s => new TextEncoder().encode(s).length;
+  const sendOut = (kind, html) => { $('sendOut').innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : ''; };
+  function jsonp(url, ms) {
+    return new Promise((res, rej) => {
+      const cb = 'cb24_' + Date.now() + '_' + Math.floor(Math.random() * 1e6), s = document.createElement('script');
+      const fine = () => { delete window[cb]; s.remove(); };
+      const tm = setTimeout(() => { fine(); rej(new Error('nessuna risposta dal Drive')); }, ms || 25000);
+      window[cb] = d => { clearTimeout(tm); fine(); res(d); };
+      s.onerror = () => { clearTimeout(tm); fine(); rej(new Error('Drive non raggiungibile')); };
+      s.src = url + '&callback=' + cb; document.head.appendChild(s);
+    });
+  }
+  async function suDrive(code, nomi) {
+    const r = await jsonp(UPLOAD_URL + '?kind=mon24check&code=' + encodeURIComponent(code) + '&files=' + encodeURIComponent(nomi.join(',')));
+    if (!r || !r.ok) throw new Error((r && r.error) || 'verifica non riuscita');
+    return r.files || {};
+  }
+  let sending = false;
   $('bSend').onclick = async () => {
-    const regs = await allRegs();
-    const files = regs.map(r => new File([buildCsv(r)], 'h10_' + r.id + '.csv', { type: 'text/csv' }));
-    const dj = diaryFile(); if (dj) files.push(dj);
-    log('Invio di ' + files.length + ' file');
+    if (sending) return;
+    const code = ($('inCodice').value || '').trim().toUpperCase();
+    if (!RE_COD.test(code)) { sendOut('bad', 'Scrivi il tuo <b>codice</b> (te l\'ha dato il medico, per esempio MF-AB12CD) e tocca di nuovo <b>«Manda tutto al medico»</b>.'); $('inCodice').focus(); return; }
+    try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
+    sending = true; $('bSend').disabled = true; keepAwake();
+    try {
+      const items = await allItems(); for (const it of items) it.len = nByte(it.data);
+      if (!items.length) { sendOut('warn', 'Non c\'è niente da mandare.'); return; }
+      sendOut('warn', 'Controllo cosa ha già il medico…');
+      let gia = {};
+      try { gia = await suDrive(code, items.map(i => i.fname)); } catch (e) { log('Verifica iniziale: ' + e.message); sendOut('bad', '<b>Non riesco a raggiungere il Drive del medico.</b> Controlla di avere internet e tocca di nuovo «Manda tutto al medico». Non si è perso niente.'); return; }
+      const nuovi = items.filter(i => gia[i.fname] !== i.len);
+      log(`Invio al Drive: ${items.length} file, già presenti ${items.length - nuovi.length}, da mandare ${nuovi.length}`);
+      for (let i = 0; i < nuovi.length; i++) {
+        const it = nuovi[i];
+        sendOut('warn', `Invio ${i + 1} di ${nuovi.length}… <span class="note">(${it.fname})</span>`);
+        const body = new URLSearchParams({ kind: 'mon24', code, fname: it.fname, data: it.data, consent: '1', ts: new Date().toISOString() });
+        try { await fetch(UPLOAD_URL, { method: 'POST', mode: 'no-cors', body }); } catch (e) { log('Invio ' + it.fname + ': ' + e.message); }
+      }
+      sendOut('warn', 'Controllo che sia arrivato tutto…');
+      let arr = {};
+      for (let tent = 0; tent < 3; tent++) {
+        try { arr = await suDrive(code, items.map(i => i.fname)); } catch (e) { log('Verifica finale: ' + e.message); }
+        if (items.every(i => arr[i.fname] === i.len)) break;
+        await new Promise(r => setTimeout(r, 4000));
+      }
+      const ok = items.filter(i => arr[i.fname] === i.len), ko = items.filter(i => arr[i.fname] !== i.len);
+      const inviati = (await getMeta('inviati')) || {}; for (const i of ok) inviati[i.fname] = i.len; await setMeta('inviati', inviati);
+      log(`Arrivati ${ok.length}, non confermati ${ko.length}` + (ko.length ? ': ' + ko.map(i => i.fname).join(', ') : ''));
+      if (!ko.length) sendOut('ok', `<b>Arrivato tutto al medico.</b> ${nuovi.length ? nuovi.length + (nuovi.length === 1 ? ' file spedito ora' : ' file spediti ora') : 'Niente di nuovo da spedire'}${items.length - nuovi.length ? ', ' + (items.length - nuovi.length) + ' c\'erano già' : ''}.`);
+      else sendOut('bad', `<b>${ok.length} file arrivati, ${ko.length} non ancora.</b> Controlla di avere internet e tocca di nuovo «Manda tutto al medico»: rimanda solo quelli mancanti. Se continua a non funzionare, in «Altre opzioni» c'è «Condividi i file in un altro modo».`);
+    } catch (e) { log('Invio: ' + e.message); sendOut('bad', 'Invio interrotto: ' + e.message + '. Tocca di nuovo «Manda tutto al medico».'); }
+    finally { sending = false; $('bSend').disabled = false; renderState().catch(() => {}); }
+  };
+
+  // Riserva: la vecchia condivisione del telefono (email, WhatsApp…)
+  $('bShare').onclick = async () => {
+    const files = (await allItems()).map(i => new File([i.data], i.fname, { type: i.type }));
+    if (!files.length) return;
+    log('Condivisione di ' + files.length + ' file');
     try {
       if (navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, title: 'Monitoraggio HRV' }); return; }
     } catch (e) { if (e.name === 'AbortError') return; log('Condivisione non riuscita: ' + e.message); }

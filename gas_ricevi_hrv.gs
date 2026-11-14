@@ -45,6 +45,10 @@ function doPost(e) {
 
     if (consent !== '1') return _json({ ok: false, error: 'consenso mancante' });
 
+    // ── MONITORAGGIO 24 ORE (pagina "Cambio della fascia"): un file per registrazione o diario
+    //    nella cartella del paziente HRV pazienti/<codice>/monitoraggio_24h/ (vedi _salva24 in fondo) ──
+    if (kind === 'mon24') return _json(_salva24(code, p));
+
     var folder = DriveApp.getFolderById(FOLDER_ID);
 
     // ── Allenamento di COERENZA: una riga sul foglio "coerenza_pazienti" ──
@@ -166,6 +170,17 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
     return _json(result);
+  }
+
+  // ── Monitoraggio 24 ore: la pagina chiede quali file sono arrivati e con che lunghezza (JSONP) ──
+  if (p.kind === 'mon24check') {
+    var r24 = _verifica24(p.code, p.files);
+    if (p.callback && /^[A-Za-z0-9_$.]+$/.test(p.callback)) {
+      return ContentService
+        .createTextOutput(p.callback + '(' + JSON.stringify(r24) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return _json(r24);
   }
 
   // Nota: l'export dei dati verso il PC NON passa di qui. Lo fa esportaFogliCSV()
@@ -403,6 +418,63 @@ function _foglioInCsv(sheet) {
     }).join(',');
   });
   return righe.join('\n');
+}
+
+// ───────────────────── MONITORAGGIO 24 ORE ─────────────────────
+// La pagina "Cambio della fascia" (cambio-h10.html) manda ogni registrazione della fascia H10
+// (CSV dei battiti) e il diario della giornata (JSON), con il SOLO codice del paziente.
+// Ogni file va in HRV pazienti/<codice>/monitoraggio_24h/, che Drive sincronizza sul PC
+// (G:\Il mio Drive\HRV pazienti\<codice>\monitoraggio_24h\): il report lo legge da lì.
+// Stesso nome già presente → contenuto sostituito (il diario è cumulativo; una registrazione
+// rimandata è la stessa): niente doppioni "(1)". Dopo l'invio la pagina chiede con doGet
+// kind=mon24check quali file ci sono e con che dimensione, e segna come spediti solo quelli
+// arrivati interi. Nessuna modifica agli altri tipi di invio del Respiro Pacer.
+var RE_CODICE_24 = /^(MF|ATL)-[A-Z0-9]{4,8}$/;
+var RE_FILE_24 = /^(h10_HRVT_\d{8}_\d{4}\.csv|diario_\d{4}-\d{2}-\d{2}\.json)$/;
+
+function _cartella24(code, crea) {
+  var root = DriveApp.getFolderById(FOLDER_ID);
+  var it = root.getFoldersByName(code), paz;
+  if (it.hasNext()) paz = it.next(); else if (crea) paz = root.createFolder(code); else return null;
+  var it2 = paz.getFoldersByName('monitoraggio_24h');
+  if (it2.hasNext()) return it2.next();
+  return crea ? paz.createFolder('monitoraggio_24h') : null;
+}
+
+function _salva24(code, p) {
+  code = String(code || '').trim().toUpperCase();
+  var fname = String(p.fname || ''), data = p.data || '', ts = p.ts || new Date().toISOString();
+  if (!RE_CODICE_24.test(code)) return { ok: false, error: 'codice non valido' };
+  if (!RE_FILE_24.test(fname)) return { ok: false, error: 'nome file non valido' };
+  if (!data) return { ok: false, error: 'nessun dato' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {}
+  try {
+    var cart = _cartella24(code, true);
+    var it = cart.getFilesByName(fname), file;
+    if (it.hasNext()) {
+      file = it.next(); file.setContent(data);
+      while (it.hasNext()) it.next().setTrashed(true);          // eventuali doppioni vecchi
+    } else {
+      file = cart.createFile(Utilities.newBlob(data, /\.json$/.test(fname) ? 'application/json' : 'text/csv', fname));
+    }
+    file.setDescription('Monitoraggio 24h · paziente ' + code + ' · ' + ts);
+    _logRow(DriveApp.getFolderById(FOLDER_ID), [ts, code, 'monitoraggio_24h/' + fname, file.getId()]);
+    return { ok: true, fname: fname, size: file.getSize() };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+function _verifica24(code, nomi) {
+  code = String(code || '').trim().toUpperCase();
+  if (!RE_CODICE_24.test(code)) return { ok: false, error: 'codice non valido' };
+  var cart = _cartella24(code, false), files = {};
+  if (cart) String(nomi || '').split(',').forEach(function (n) {
+    n = n.trim(); if (!RE_FILE_24.test(n)) return;
+    var it = cart.getFilesByName(n); if (it.hasNext()) files[n] = it.next().getSize();
+  });
+  return { ok: true, files: files };
 }
 
 function _json(obj) {
