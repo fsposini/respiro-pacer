@@ -707,11 +707,12 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       log('Orologio della fascia impostato');
       await psftp.startRr(id);
       log('Registrazione RR avviata: ' + id);
+      annotaCambio({ ultimoAvvio: { id, t: d.getTime() }, statoLetto: { t: Date.now(), recording: true, id } });
       msg('recMsg', 'ok', 'Registrazione avviata (' + id + '). Ora puoi chiudere Bluefy. Tra 10–15 minuti riapri, collega, tocca "Leggi stato" e poi "Ferma registrazione".');
       await readStatus();
     } catch (e) {
       log('Avvio fallito: ' + e.message);
-      msg('recMsg', 'bad', 'Avvio non riuscito: ' + e.message + (e.code === 106 ? '. La memoria contiene già una registrazione: scaricala prima.' : ''));
+      msg('recMsg', 'bad', 'Avvio non riuscito: ' + e.message + (e.code === 106 ? '. Tocca "Elenca registrazioni": se c’è una registrazione, scaricala prima. Se la memoria è vuota, riavvia la fascia: stacca il sensore dalla cinghia per 2-3 minuti, riaggancialo, indossala e riprova (14/11: così è ripartita; la batteria letta prima del riavvio era falsa, 10% invece di 100%).' : ''));
     }
   };
 
@@ -719,10 +720,22 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     try {
       await psftp.stop();
       log('Registrazione fermata');
+      annotaCambio({ statoLetto: { t: Date.now(), recording: false, id: '' } });
       msg('recMsg', 'ok', 'Registrazione fermata. Ora tocca "Elenca registrazioni" e scaricala.');
       await readStatus();
     } catch (e) { log('Stop fallito: ' + e.message); msg('recMsg', 'bad', 'Stop non riuscito: ' + e.message); }
   };
+
+  // Annota partenza/stato nell'archivio della pagina "Cambio della fascia" (stesso sito, IndexedDB hrv24cambio), così quella
+  // pagina e il diario non danno una durata falsa quando la fascia è stata avviata o fermata da qui (14/11: "registra da 44 h").
+  // Lo schema creato è identico a quello della pagina del cambio.
+  function annotaCambio(voci) {
+    try {
+      const r = indexedDB.open('hrv24cambio', 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore('reg', { keyPath: 'id' }); r.result.createObjectStore('meta'); };
+      r.onsuccess = () => { try { const t = r.result.transaction('meta', 'readwrite'), s = t.objectStore('meta'); for (const k in voci) s.put(voci[k], k); t.oncomplete = () => { log('Annotato per la pagina del cambio: ' + Object.keys(voci).join(', ')); r.result.close(); }; } catch (e) { r.result.close(); } };
+    } catch (e) {}
+  }
 
   function showSaved() {
     let s = null;

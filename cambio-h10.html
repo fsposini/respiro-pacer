@@ -39,10 +39,13 @@
   .msg.bad{background:#fbeaea;color:#8e2019}
   .msg.warn{background:#fdf3df;color:#6b4a00}
   .note{font-size:13.5px;color:var(--grigio)}
-  .days div{display:flex;justify-content:space-between;border-top:1px solid var(--linea);padding:7px 0;font-size:14.5px}
+  .days div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--linea);padding:7px 0;font-size:14.5px}
+  .days div span:last-child{text-align:right}
   .days div:first-child{border-top:0}
   details{margin-top:10px}
   summary{color:var(--blu);font-weight:600;cursor:pointer}
+  .faq{padding-left:20px;margin:8px 0 0;font-size:15px;line-height:1.45}
+  .faq li{margin-bottom:9px}
   #log{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--grigio);max-height:280px;overflow:auto;background:#f3f5f6;border-radius:8px;padding:8px;margin-top:8px}
 </style>
 </head>
@@ -87,6 +90,19 @@
     <p class="note">Solo quando tutte le giornate hanno il segno ✓ (arrivate al medico), o se il medico ti conferma di averle ricevute.</p>
     <div style="margin-top:10px"><b>Registro tecnico</b> <button class="sec" id="bCopyLog" style="width:auto;padding:6px 12px;font-size:14px;margin-left:8px">Copia</button></div>
     <div id="log"></div>
+  </details>
+</div>
+
+<div class="card">
+  <details id="faq">
+    <summary>Se qualcosa non va</summary>
+    <ul class="faq">
+      <li><b>La fascia non riparte</b> («errore 106, operazione non permessa») <b>oppure dice batteria bassa con la pila nuova.</b> È un blocco della fascia: <b>stacca il sensore dai bottoni della cinghia e aspetta 2-3 minuti</b>, così si riavvia. Poi riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo «Fai il cambio». I dati già salvati non si perdono.</li>
+      <li><b>Dopo il riavvio la batteria è ancora bassa.</b> Cambia la pila (CR2025, dietro al sensore) e rifai «Fai il cambio».</li>
+      <li><b>Hai tolto la fascia</b> (doccia, bagno, sauna, nuoto o altro). La registrazione può essersi fermata da sola: appena la rimetti, fai «Fai il cambio» e poi «Manda tutto al medico».</li>
+      <li><b>La pagina non trova la fascia.</b> Usa l'app Bluefy, con il Bluetooth acceso. La fascia deve essere indossata con gli elettrodi bagnati: si accende solo quando sente il battito. A volte servono alcuni tentativi.</li>
+      <li><b>«Manda tutto al medico» dice che qualcosa non è arrivato.</b> Controlla di avere internet e toccalo di nuovo: rimanda solo quello che manca. Se continua a non funzionare, in «Altre opzioni» c'è «Condividi i file in un altro modo».</li>
+    </ul>
   </details>
 </div>
 
@@ -335,7 +351,10 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   const $ = id => document.getElementById(id);
   const DIARY_KEY = 'hrv24.diarioTelefono.v1';
   const MAX_BYTES_PER_BEAT = 2.5; // misurato: 162.283 B per 81.135 battiti = 2,0 B/battito
-  let device = null, psftp = null, wakeLock = null, busy = false, endArmed = false, wipeArmed = false;
+  let device = null, psftp = null, wakeLock = null, busy = false, endArmed = false, wipeArmed = false, battLetta = null;
+  // A questo livello o sotto non si fa ripartire. 14/11: la fascia, bloccata dopo che la registrazione si era chiusa da sola, diceva 10% con la pila
+  // nuova e rifiutava l'avvio (106); staccato il sensore 2 minuti (riavvio) segnava 100% ed è partita. Quindi prima il riavvio, poi la pila.
+  const BATT_MIN = 10;
 
   /* ---------- registro tecnico ---------- */
   const logLines = [];
@@ -368,6 +387,8 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   const p2 = n => String(n).padStart(2, '0');
   const fmtWhen = t => { const d = new Date(t), o = new Date(); const same = d.toDateString() === o.toDateString(); const y = new Date(o.getTime() - 864e5).toDateString() === d.toDateString(); return (same ? 'oggi' : y ? 'ieri' : d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })) + ' alle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); };
   const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60); return h ? h + ' h ' + p2(min % 60) + ' min' : min + ' min'; };
+  // ora di partenza scritta nell'identificativo (HRVT_AAAAMMGG_HHMM, ora locale del telefono che ha avviato la registrazione)
+  const startFromId = id => { const x = /^HRVT_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/.exec(id || ''); return x ? new Date(+x[1], +x[2] - 1, +x[3], +x[4], +x[5]).getTime() : null; };
   function buildCsv(r) {
     const head = ['# HRV Tool · cambio della fascia', '# identificativo: ' + r.id, '# tipo: ' + r.type];
     if (r.startedAt) head.push('# avvio: ' + new Date(r.startedAt).toISOString());
@@ -383,15 +404,26 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
 
   async function renderState() {
-    const m = (await getMeta('ultimoAvvio')) || null;
-    const regs = (await allRegs()).sort((a, b) => (a.startedAt || a.savedAt) - (b.startedAt || b.savedAt));
+    const m = (await getMeta('ultimoAvvio')) || null, sl = (await getMeta('statoLetto')) || null, bat = (await getMeta('batteria')) || null;
+    const inizio = r => r.startedAt || startFromId(r.id);
+    const regs = (await allRegs()).sort((a, b) => (inizio(a) || a.savedAt) - (inizio(b) || b.savedAt));
     const ended = await getMeta('fine');
-    $('state').innerHTML = m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span><b>Stato</b><span>${ended && ended > m.t ? 'monitoraggio concluso' : 'la fascia sta registrando da ' + fmtDur((Date.now() - m.t) / 60000)}</span>` : '<b>Stato</b><span>Nessun cambio fatto da questo telefono.</span>';
+    // Lo stato qui è DEDOTTO (la pagina non è collegata alla fascia): vale solo se nessuna notizia più recente lo smentisce
+    // (14/11: la fascia era stata fatta ripartire da un'altra pagina e questa diceva "registra da 44 h").
+    const tUltimaSalvata = Math.max(0, ...regs.map(r => inizio(r) || 0));
+    let stato, registra = false;
+    if (!m) stato = sl && !sl.recording ? `la fascia era <b>ferma</b> quando l'hai collegata (${fmtWhen(sl.t)})` : 'Nessun cambio fatto da questo telefono.';
+    else if (ended && ended > m.t) stato = 'monitoraggio concluso';
+    else if (sl && sl.t > m.t && !sl.recording) stato = `la fascia era <b>ferma</b> quando l'hai collegata (${fmtWhen(sl.t)}): tocca «Fai il cambio» per farla ripartire`;
+    else if (tUltimaSalvata >= m.t) stato = 'non noto: l\'ultima registrazione partita è già salvata qui, quindi la fascia potrebbe essere ferma o essere ripartita da un\'altra pagina. Tocca «Fai il cambio»: collegandola si vede lo stato vero.';
+    else { stato = 'la fascia sta registrando da ' + fmtDur((Date.now() - m.t) / 60000) + ' <span class="note">(dedotto dall\'ultima partenza: lo stato vero si vede collegando la fascia)</span>'; registra = true; }
+    $('state').innerHTML = (m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span>` : '') + `<b>Stato</b><span>${stato}</span>` +
+      (bat ? `<b>Batteria</b><span>${bat.v}% <span class="note">(letta ${fmtWhen(bat.t)})</span>${bat.v <= 15 ? ' · <b style="color:var(--warn)">cambia la pila al prossimo cambio</b>' : ''}</span>` : '');
     const tot = regs.reduce((s, r) => s + r.durMin, 0);
     const inviati = (await getMeta('inviati')) || {};
-    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${r.startedAt ? fmtWhen(r.startedAt) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${inviati['h10_' + r.id + '.csv'] ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${inviati['h10_' + r.id + '.csv'] ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
     $('bSend').disabled = !regs.length;
-    if (m && !(ended && ended > m.t)) {
+    if (registra) {
       // quando si riempie la memoria: FC media delle registrazioni già salvate (battiti per minuto), altrimenti 68 bpm
       const rr = regs.filter(r => r.type === 'rr' && r.durMin > 60), nTot = rr.reduce((a, r) => a + r.n, 0), mTot = rr.reduce((a, r) => a + r.durMin, 0);
       const fc = mTot ? nTot / mTot : 68;
@@ -418,7 +450,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     }
     if (psftp && device.gatt.connected) return;
     const server = await withTimeout(device.gatt.connect(), 15000, 'Collegamento');
-    try { const bs = await server.getPrimaryService('battery_service'); const bc = await bs.getCharacteristic('battery_level'); log('Batteria fascia ' + (await bc.readValue()).getUint8(0) + '%'); } catch (e) {}
+    try { const bs = await server.getPrimaryService('battery_service'); const bc = await bs.getCharacteristic('battery_level'); battLetta = (await bc.readValue()).getUint8(0); log('Batteria fascia ' + battLetta + '%'); await setMeta('batteria', { v: battLetta, t: Date.now() }); } catch (e) {}
     const svc = await server.getPrimaryService(PolarCore.PSFTP_SERVICE);
     const ch = await svc.getCharacteristic(PolarCore.PSFTP_MTU_CHAR);
     const pr = ch.properties || {};
@@ -448,14 +480,17 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     $('bGo').disabled = true; resetSteps(); keepAwake();
     let cur = 'conn';
     try {
-      step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok');
+      step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok', battLetta != null ? 'batteria ' + battLetta + '%' : '');
 
       cur = 'stop'; step('stop', 'wait');
       const s = await retry('Stato', () => psftp.status());
       log('Stato: registrando=' + s.recording + ', identificativo="' + s.id + '"');
+      // la partenza vera la dice la fascia (anche se è stata avviata da un'altra pagina): si corregge quella ricordata qui
+      if (s.recording && startFromId(s.id)) { const m0 = await getMeta('ultimoAvvio'); if (!m0 || m0.id !== s.id) { await setMeta('ultimoAvvio', { id: s.id, t: startFromId(s.id) }); log('Partenza letta dalla fascia: ' + s.id); } }
       const stoppedAt = Date.now();
       if (s.recording) { await retry('Stop', () => psftp.stop()); step('stop', 'ok'); log('Registrazione fermata'); }
       else step('stop', 'skip', 'non stava registrando');
+      await setMeta('statoLetto', { t: Date.now(), recording: false, id: s.id || '' });
 
       cur = 'dl'; step('dl', 'wait');
       const seen = [];
@@ -483,7 +518,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
 
           cur = 'save'; step('save', 'wait');
           const durMin = data.type === 'rr' ? data.samples.reduce((a, b) => a + b, 0) / 60000 : data.samples.length * (data.interval || 1) / 60;
-          const startedAt = meta && meta.id === rec.id ? meta.t : null;
+          const startedAt = meta && meta.id === rec.id ? meta.t : startFromId(rec.id);
           const r = { id: rec.id, size: rec.size, type: data.type, n: data.samples.length, samples: data.samples, durMin, startedAt, stoppedAt: s.recording && s.id === rec.id ? stoppedAt : null, savedAt: Date.now() };
           await putReg(r);
           const back = await getReg(rec.id);
@@ -498,6 +533,12 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       }
       if (!recs.length) { step('save', 'skip'); step('del', 'skip'); }
 
+      if (restart && battLetta != null && battLetta <= BATT_MIN) {
+        step('start', 'no', 'batteria ' + battLetta + '%');
+        out('warn', `<b>La fascia dice batteria al ${battLetta}%: non la faccio ripartire.</b> I dati sono salvati nel telefono.<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo <b>«Fai il cambio»</b>.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`);
+        try { device.gatt.disconnect(); } catch (e) {}
+        return;
+      }
       if (restart) {
         cur = 'start'; step('start', 'wait');
         const d = new Date();
@@ -507,9 +548,12 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
         const s2 = await retry('Controllo', () => psftp.status());
         if (!s2.recording) throw new Error('la fascia non risulta in registrazione dopo l\'avvio');
         await setMeta('ultimoAvvio', { id, t: d.getTime() });
+        await setMeta('statoLetto', { t: Date.now(), recording: true, id });
         log('Registrazione avviata: ' + id);
         step('start', 'ok', 'dalle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
-        out('ok', '<b>Fatto.</b> La fascia sta registrando di nuovo. Puoi chiudere la pagina e allontanarti dal telefono. Prossimo cambio stasera o domattina.');
+        out('ok', '<b>Fatto.</b> La fascia sta registrando di nuovo. Puoi chiudere la pagina e allontanarti dal telefono. Prossimo cambio stasera o domattina.' +
+          (battLetta != null && battLetta <= 15 ? `<br><b>Batteria al ${battLetta}%:</b> al prossimo cambio sostituisci la pila (CR2025).` : '') +
+          '<br>Ora tocca <b>«Manda tutto al medico»</b>.');
       } else {
         await setMeta('fine', Date.now());
         out('ok', '<b>Monitoraggio concluso.</b> La fascia non registra più. Ora tocca <b>"Manda tutto al medico"</b>.');
@@ -520,7 +564,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       step(cur, 'no');
       $('prog').innerHTML = '';
       const safe = cur === 'dl' || cur === 'conn' || cur === 'stop' || cur === 'save';
-      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${safe ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.' : cur === 'start' ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'I dati sono salvati nel telefono.'}<br>Avvicina il telefono alla fascia e tocca di nuovo <b>"Fai il cambio"</b>: riprende da dove si era fermato.<br><span class="note">Dettaglio: ${e.message}</span>`);
+      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${safe ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.' : cur === 'start' ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'I dati sono salvati nel telefono.'}<br>${cur === 'start' ? (e.code === 209 ? '<b>La pila è scarica:</b> cambiala (CR2025), poi ' : e.code === 106 ? 'La fascia ha rifiutato l’avvio: di solito si sblocca <b>riavviandola</b>. Stacca il sensore dalla cinghia, aspetta 2-3 minuti, riaggancialo, bagna gli elettrodi, indossa la fascia, poi ' : 'Controlla di avere <b>la fascia indossata</b>, con il sensore agganciato e gli elettrodi bagnati, aspetta un minuto, poi ') : ''}${cur === 'start' ? 'avvicina' : 'Avvicina'} il telefono alla fascia e tocca di nuovo <b>"Fai il cambio"</b>: riprende da dove si era fermato.<br><span class="note">Dettaglio: ${e.message}</span>`);
     } finally {
       busy = false; $('bGo').disabled = false; renderState();
     }
@@ -612,7 +656,12 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       const ok = items.filter(i => arr[i.fname] === i.len), ko = items.filter(i => arr[i.fname] !== i.len);
       const inviati = (await getMeta('inviati')) || {}; for (const i of ok) inviati[i.fname] = i.len; await setMeta('inviati', inviati);
       log(`Arrivati ${ok.length}, non confermati ${ko.length}` + (ko.length ? ': ' + ko.map(i => i.fname).join(', ') : ''));
-      if (!ko.length) sendOut('ok', `<b>Arrivato tutto al medico.</b> ${nuovi.length ? nuovi.length + (nuovi.length === 1 ? ' file spedito ora' : ' file spediti ora') : 'Niente di nuovo da spedire'}${items.length - nuovi.length ? ', ' + (items.length - nuovi.length) + ' c\'erano già' : ''}.`);
+      // messaggio in parole: quante registrazioni e se il diario (14/11: "2 spediti, 2 c'erano già" non si capiva)
+      const quali = arr => { const nr = arr.filter(i => /\.csv$/.test(i.fname)).length, dd = arr.some(i => /\.json$/.test(i.fname)), p = []; if (nr) p.push(nr === 1 ? '1 registrazione' : nr + ' registrazioni'); if (dd) p.push('il diario'); return p.join(' e '); };
+      const giaR = items.filter(i => !nuovi.includes(i) && /\.csv$/.test(i.fname)).length;
+      if (!ko.length) sendOut('ok', nuovi.length
+        ? `<b>Arrivato tutto al medico.</b> Spediti ora: ${quali(nuovi)}.${giaR ? ' ' + (giaR === 1 ? 'L\'altra registrazione l\'aveva già.' : 'Le altre ' + giaR + ' registrazioni le aveva già.') : ''}`
+        : `<b>Il medico ha già tutto</b> (${quali(items)}): niente di nuovo da spedire.`);
       else sendOut('bad', `<b>${ok.length} file arrivati, ${ko.length} non ancora.</b> Controlla di avere internet e tocca di nuovo «Manda tutto al medico»: rimanda solo quelli mancanti. Se continua a non funzionare, in «Altre opzioni» c'è «Condividi i file in un altro modo».`);
     } catch (e) { log('Invio: ' + e.message); sendOut('bad', 'Invio interrotto: ' + e.message + '. Tocca di nuovo «Manda tutto al medico».'); }
     finally { sending = false; $('bSend').disabled = false; renderState().catch(() => {}); }
