@@ -164,7 +164,7 @@ function doGet(e) {
   //    browser (anche Bluefy su iPhone) legge la risposta senza problemi.
   if (p.kind === 'activate') {
     var result = _activate(p.code || '', p.device || '');
-    if (p.callback) {
+    if (p.callback && /^[A-Za-z0-9_$.]+$/.test(p.callback)) {   // callback filtrata come in mon24check (l'app usa act_<numeri>_<numeri>)
       return ContentService
         .createTextOutput(p.callback + '(' + JSON.stringify(result) + ')')
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -321,7 +321,9 @@ function _logRow(folder, row) {
       ss.getActiveSheet().appendRow(['timestamp', 'codice', 'file', 'fileId']);
     }
     ss.getActiveSheet().appendRow(row);
-  } catch (_) {}
+  } catch (e) {   // il registro non deve mai far fallire un invio, ma l'errore resta visibile nelle esecuzioni di Apps Script
+    try { Logger.log('registro_invii_hrv non aggiornato: ' + e); } catch (_) {}
+  }
 }
 
 // Avvisa il medico su Telegram che un atleta ha la readiness in calo. Un solo avviso
@@ -425,56 +427,146 @@ function _foglioInCsv(sheet) {
 // (CSV dei battiti) e il diario della giornata (JSON), con il SOLO codice del paziente.
 // Ogni file va in HRV pazienti/<codice>/monitoraggio_24h/, che Drive sincronizza sul PC
 // (G:\Il mio Drive\HRV pazienti\<codice>\monitoraggio_24h\): il report lo legge da lì.
-// Stesso nome già presente → contenuto sostituito (il diario è cumulativo; una registrazione
-// rimandata è la stessa): niente doppioni "(1)". Dopo l'invio la pagina chiede con doGet
-// kind=mon24check quali file ci sono e con che dimensione, e segna come spediti solo quelli
-// arrivati interi. Nessuna modifica agli altri tipi di invio del Respiro Pacer.
+// REGOLA (Federico, 16/11/2026): MAI SOSTITUIRE, MAI CANCELLARE. Un file con un nome già presente:
+//  - identico (stessa dimensione e stesso MD5) → non si salva niente (è già lì);
+//  - diverso → si salva come nuova versione "nome_v2", "nome_v3"… e le precedenti restano intatte.
+// Dopo l'invio la pagina chiede con doGet kind=mon24check quali file ci sono e con che dimensione
+// (di tutte le versioni), e segna come spediti solo quelli arrivati interi. Il diario ha un nome unico
+// per ogni invio (diario_AAAA-MM-GG_HHMM.json); FINE.json è il segno di chiusura del monitoraggio.
+// Nessuna modifica agli altri tipi di invio del Respiro Pacer.
+//
+// COME SI CONTANO LE VERSIONI (correzioni del 16/11/2026, dopo la revisione indipendente):
+//  - la cartella del paziente si legge con UN SOLO elenco per richiesta (prima: una ricerca per nome per ogni file
+//    e per ogni sua versione, che con 15-20 registrazioni rischiava di far scadere la verifica);
+//  - contano tutti i file VIVI (non nel cestino) che si chiamano «nome» oppure «nome_vN»: una versione cestinata in
+//    mezzo (nome, _v2 nel cestino, _v3) non nasconde più quelle dopo, e non c'è più un tetto al numero di versioni;
+//  - se due file vivi hanno lo stesso nome (es. un doppione messo a mano), contano tutti e due: un invio identico
+//    a uno qualsiasi dei due non crea niente;
+//  - FINE.json: se ce n'è già uno vivo (anche un FINE_vN creato prima di questa correzione) il monitoraggio è già
+//    chiuso e non si crea un'altra versione (dentro c'è l'ora della chiusura, che cambia a ogni tocco). Per riaprire
+//    un monitoraggio chiuso si sposta a mano FINE.json nel cestino del Drive;
+//  - il registro degli invii (foglio registro_invii_hrv) si scrive DOPO aver liberato il blocco; se non riesce,
+//    l'errore finisce nel registro di esecuzione di Apps Script (Logger) invece di sparire.
+// LIMITI NOTI, NON CORRETTI QUI (revisione 16/11/2026):
+//  - A5: la pagina VECCHIA cambio-h10.html legge solo «files» (dimensione dell'ultima versione). Se un file ha più
+//    versioni e sul telefono c'è il contenuto di una versione precedente, quella pagina dirà «non ancora arrivato»
+//    per sempre (rimanda; il server risponde «già presente» e non crea nulla). La pagina nuova (app-24h.html) legge
+//    «versioni» e non ha questo problema.
+//  - A9: se nelle note del diario c'è un carattere spezzato (es. un'emoji tagliata a metà), la lunghezza contata dal
+//    telefono e quella del file salvato sul Drive possono non coincidere: possibile falso «non arrivato» (il file c'è).
+//  - A2: «arrivato» si decide dalla sola lunghezza; lo corregge la pagina, non questo script.
 var RE_CODICE_24 = /^(MF|ATL)-[A-Z0-9]{4,8}$/;
-var RE_FILE_24 = /^(h10_HRVT_\d{8}_\d{4}\.csv|diario_\d{4}-\d{2}-\d{2}\.json)$/;
+var RE_FILE_24 = /^(h10_HRVT_\d{8}_\d{4}\.csv|diario_\d{4}-\d{2}-\d{2}(_\d{4})?\.json|FINE\.json)$/;
+
+// Primo elemento NON nel cestino di un iteratore di CARTELLE (la ricerca per nome di Drive può restituire anche il cestinato).
+// Per i FILE non si usa più: vedi _elenco24, che li considera tutti.
+function _primoVivo(it) {
+  while (it.hasNext()) { var x = it.next(); if (!x.isTrashed()) return x; }
+  return null;
+}
 
 function _cartella24(code, crea) {
   var root = DriveApp.getFolderById(FOLDER_ID);
-  var it = root.getFoldersByName(code), paz;
-  if (it.hasNext()) paz = it.next(); else if (crea) paz = root.createFolder(code); else return null;
-  var it2 = paz.getFoldersByName('monitoraggio_24h');
-  if (it2.hasNext()) return it2.next();
+  var paz = _primoVivo(root.getFoldersByName(code));
+  if (!paz) { if (crea) paz = root.createFolder(code); else return null; }
+  var sub = _primoVivo(paz.getFoldersByName('monitoraggio_24h'));
+  if (sub) return sub;
   return crea ? paz.createFolder('monitoraggio_24h') : null;
 }
 
 function _salva24(code, p) {
   code = String(code || '').trim().toUpperCase();
-  var fname = String(p.fname || ''), data = p.data || '', ts = p.ts || new Date().toISOString();
+  var fname = String(p.fname || ''), data = p.data || '';
+  // ts arriva dal telefono: si accetta solo se è una data ISO, altrimenti ora del server (evita formule nel foglio del registro)
+  var ts = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(String(p.ts || '')) ? String(p.ts) : new Date().toISOString();
   if (!RE_CODICE_24.test(code)) return { ok: false, error: 'codice non valido' };
   if (!RE_FILE_24.test(fname)) return { ok: false, error: 'nome file non valido' };
   if (!data) return { ok: false, error: 'nessun dato' };
   var lock = LockService.getScriptLock();
-  try { lock.waitLock(20000); } catch (e) {}
+  // se il blocco non arriva in 20 s NON si salva senza protezione: la pagina non vedrà il file e dirà «non ancora arrivato, riprova»
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'occupato, riprova' }; }
+  var esito, registro = null;
   try {
     var cart = _cartella24(code, true);
-    var it = cart.getFilesByName(fname), file;
-    if (it.hasNext()) {
-      file = it.next(); file.setContent(data);
-      while (it.hasNext()) it.next().setTrashed(true);          // eventuali doppioni vecchi
-    } else {
-      file = cart.createFile(Utilities.newBlob(data, /\.json$/.test(fname) ? 'application/json' : 'text/csv', fname));
+    var blob = Utilities.newBlob(data, /\.json$/.test(fname) ? 'application/json' : 'text/csv', fname);
+    var bytes = blob.getBytes(), h = _md5(bytes), esistenti = _versioni24(_elenco24(cart), fname);   // UN solo elenco della cartella
+    for (var i = 0; i < esistenti.length; i++) {                  // identico a una QUALSIASI versione viva (anche a un doppione)? non si salva niente
+      var e = esistenti[i].file;
+      if (e.getSize() === bytes.length && _md5(e.getBlob().getBytes()) === h) return { ok: true, fname: esistenti[i].nome, size: e.getSize(), gia: true };
     }
+    // FINE.json: se c'è già un segno di chiusura vivo (FINE.json o FINE_vN), il monitoraggio è già chiuso → nessuna versione nuova
+    if (fname === 'FINE.json' && esistenti.length) return { ok: true, fname: esistenti[0].nome, size: esistenti[0].file.getSize(), gia: true };
+    var k = _prossimaVersione24(esistenti);                         // 1 = nome originale; altrimenti una in più della più alta viva
+    var nome = k === 1 ? fname : _nomeVersione24(fname, k);
+    var file = cart.createFile(Utilities.newBlob(data, blob.getContentType(), nome));
     file.setDescription('Monitoraggio 24h · paziente ' + code + ' · ' + ts);
-    _logRow(DriveApp.getFolderById(FOLDER_ID), [ts, code, 'monitoraggio_24h/' + fname, file.getId()]);
-    return { ok: true, fname: fname, size: file.getSize() };
+    registro = [ts, code, 'monitoraggio_24h/' + nome, file.getId()];
+    esito = { ok: true, fname: nome, size: file.getSize(), versione: k };
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
+  // il registro degli invii si scrive DOPO aver liberato il blocco: chi aspetta per salvare non deve attendere anche il foglio
+  if (registro) {
+    try { _logRow(DriveApp.getFolderById(FOLDER_ID), registro); }
+    catch (err) { try { Logger.log('mon24: registro_invii_hrv non aggiornato: ' + err); } catch (_) {} }
+  }
+  return esito;
 }
 
 function _verifica24(code, nomi) {
   code = String(code || '').trim().toUpperCase();
   if (!RE_CODICE_24.test(code)) return { ok: false, error: 'codice non valido' };
-  var cart = _cartella24(code, false), files = {};
+  var cart = _cartella24(code, false), files = {}, versioni = {}, elenco = null;
   if (cart) String(nomi || '').split(',').forEach(function (n) {
     n = n.trim(); if (!RE_FILE_24.test(n)) return;
-    var it = cart.getFilesByName(n); if (it.hasNext()) files[n] = it.next().getSize();
+    if (!elenco) elenco = _elenco24(cart);                        // la cartella si legge UNA volta sola, per tutti i nomi chiesti
+    var v = _versioni24(elenco, n); if (!v.length) return;
+    files[n] = v[v.length - 1].file.getSize();                    // compatibile con le pagine di prima: dimensione dell'ultima versione
+    versioni[n] = v.map(function (x) { return x.file.getSize(); }); // la pagina nuova: «arrivato» se una qualsiasi versione ha la dimensione giusta
   });
-  return { ok: true, files: files };
+  return { ok: true, files: files, versioni: versioni };
+}
+
+// Tutti i file VIVI (non nel cestino) della cartella del paziente, con UN solo elenco (niente ricerche per nome).
+function _elenco24(cart) {
+  var out = [], it = cart.getFiles();
+  while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) out.push({ nome: f.getName(), file: f }); }
+  return out;
+}
+// Numero di versione di «nome» rispetto al file «fname»: 1 = stesso nome; N = «base_vN.ext» con N ≥ 2; 0 = non è una sua versione.
+// Il confronto è fatto a pezzi di testo, senza espressioni costruite dal nome: punti e trattini contano come lettere qualsiasi.
+function _numVersione24(nome, fname) {
+  if (nome === fname) return 1;
+  var p = fname.lastIndexOf('.'), pre = fname.slice(0, p) + '_v', ext = fname.slice(p);
+  if (nome.length <= pre.length + ext.length) return 0;
+  if (nome.slice(0, pre.length) !== pre || nome.slice(nome.length - ext.length) !== ext) return 0;
+  var n = nome.slice(pre.length, nome.length - ext.length);
+  if (!/^[1-9]\d*$/.test(n)) return 0;                           // solo cifre, senza zeri davanti (espressione fissa)
+  return +n >= 2 ? +n : 0;
+}
+// Versioni vive di un file, in ordine: nome, nome_v2, nome_v3… Valgono anche con buchi (una versione cestinata in mezzo),
+// senza tetto, e con più file vivi dallo stesso nome (compaiono tutti, nell'ordine in cui Drive li elenca).
+function _versioni24(elenco, fname) {
+  var out = [];
+  for (var i = 0; i < elenco.length; i++) {
+    var k = _numVersione24(elenco[i].nome, fname);
+    if (k) out.push({ nome: elenco[i].nome, file: elenco[i].file, k: k, pos: i });
+  }
+  out.sort(function (a, b) { return a.k - b.k || a.pos - b.pos; });
+  return out;
+}
+// Numero della prossima versione: 1 se non c'è niente di vivo, altrimenti la più alta viva + 1 (mai riusare un numero vivo).
+function _prossimaVersione24(esistenti) {
+  var max = 0;
+  for (var i = 0; i < esistenti.length; i++) if (esistenti[i].k > max) max = esistenti[i].k;
+  return max ? max + 1 : 1;
+}
+function _nomeVersione24(fname, k) {
+  var p = fname.lastIndexOf('.');
+  return fname.slice(0, p) + '_v' + k + fname.slice(p);
+}
+function _md5(bytes) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, bytes).map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
 }
 
 function _json(obj) {
