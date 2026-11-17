@@ -218,6 +218,12 @@
   <div class="row"><button class="plain" id="rimessaDopo">Più tardi</button><button class="main" id="rimessaVai" style="width:auto;flex:1">Cambia ora</button></div>
 </dialog>
 
+<dialog id="dlgCodice">
+  <b>Quale codice uso?</b>
+  <p style="font-size:15px;margin:10px 0 0" id="codTesto"></p>
+  <div class="row"><button class="plain" id="codTieni" style="flex:1"></button><button class="main" id="codUsa" style="width:auto;flex:1"></button></div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script id="voce">
@@ -390,9 +396,122 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
   CAT['Telefono / social'] = CAT['Telefono / tablet / social']; // nome della prima versione, per i diari già iniziati
 
-  let D = load();
-  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || { voci: [] }; } catch (e) { return { voci: [] }; } }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); } }
+  // ---- memoria del diario (17/11/2026): due pagine o due schede aperte sullo stesso telefono (anche il diario vecchio, che usa
+  // la stessa chiave) non devono più cancellarsi le voci a vicenda. Ogni voce ha un identificativo interno ("id", mai mandato al
+  // medico) e PRIMA di ogni scrittura il diario si rilegge dal telefono e si unisce a tre vie: com'era l'ultima volta che questa
+  // pagina l'ha letto ("base"), com'è qui, com'è sul telefono. Le voci tolte apposta da questa app sono annotate in
+  // "cancellate" (con data e impronta, per 30 giorni): una pagina vecchia che riscrive il diario come l'aveva letto non le fa
+  // risorgere, e una voce che manca solo perché un'altra pagina non la conosceva NON viene cancellata.
+  let seqId = 0;
+  const nuovoId = () => 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + (seqId++).toString(36);
+  const J = v => JSON.stringify(v, Object.keys(v).sort());          // forma canonica di una voce, per i confronti
+  const senzaId = v => { const o = Object.assign({}, v); delete o.id; return J(o); };
+  const impronta = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(16); };
+  const GIORNI_CANCELLATE = 30;
+  let D = { voci: [], cancellate: {} };
+  let base = new Map();     // id -> forma canonica, com'era l'ultima volta che questa pagina ha letto o scritto il diario
+  let ultimoLetto = null;   // testo esatto dell'ultimo diario letto o scritto da questa pagina
+  const fissaBase = () => { base = new Map(D.voci.map(v => [v.id, J(v)])); };
+  // { s, d } oppure null se il telefono non si legge: in quel caso NON si unisce niente (meglio non toccare che cancellare)
+  function leggiTelefono() {
+    let s; try { s = localStorage.getItem(KEY); } catch (e) { return null; }
+    if (s == null) return { s, d: { voci: [] } };
+    try { const d = JSON.parse(s); if (!d || !Array.isArray(d.voci)) return null; d.voci = d.voci.filter(v => v && typeof v === 'object'); return { s, d }; } catch (e) { return null; }
+  }
+  // dà l'id alle voci che non l'hanno (scritte dal diario vecchio): se coincidono con una voce già nota ne prendono l'id
+  // Senza corrispondenza l'id si ricava dal contenuto: due pagine aperte insieme danno lo STESSO id alla stessa voce vecchia
+  // (con un id a caso ognuna avrebbe il suo, e l'unione la raddoppierebbe).
+  function daiId(voci, note, tomba) {
+    const usati = new Set();
+    for (const v of voci) if (v.id) { let id = String(v.id); while (usati.has(id)) id += '~'; v.id = id; usati.add(id); }   // id doppio: il secondo ne riceve uno derivato
+    const liberi = [...new Map(note.filter(n => n && n.id && !usati.has(n.id)).map(n => [n.id, n])).values()];
+    const tombe = Object.keys(tomba || {}).filter(id => !usati.has(id) && tomba[id] && tomba[id].k);
+    for (const v of voci) if (!v.id) {
+      const c = senzaId(v), k0 = v.label + '|' + v.inizio;
+      let k = liberi.findIndex(n => senzaId(n) === c);
+      if (k < 0) k = liberi.findIndex(n => n.label + '|' + n.inizio === k0);
+      if (k >= 0) v.id = liberi.splice(k, 1)[0].id;
+      else { const j = tombe.findIndex(id => tomba[id].k === k0); if (j >= 0) v.id = tombe.splice(j, 1)[0]; else { let id = 'h' + impronta(c); while (usati.has(id)) id += '~'; v.id = id; } }
+      usati.add(v.id);
+    }
+    return voci;
+  }
+  function sostituisci(m, t) { for (const k of Object.keys(m)) delete m[k]; Object.assign(m, t); }   // stesso oggetto, contenuto nuovo
+  // unione a tre vie tra le voci di questa pagina (mine) e il diario letto dal telefono (theirs)
+  function unisciTre(mine, theirsD) {
+    const tomba = Object.assign({}, theirsD.cancellate || {}, D.cancellate || {});
+    const note = [...base.values()].map(s => JSON.parse(s)).concat(mine);
+    const theirs = daiId(theirsD.voci, note, tomba);
+    // rete di sicurezza: stessa voce (contenuto identico) con id diversi qui e sul telefono → prende l'id del telefono
+    { const tIds = new Set(theirs.map(v => v.id)), mIds = new Set(mine.map(v => v.id));
+      const orfaneT = theirs.filter(t => !mIds.has(t.id) && !base.has(t.id));
+      for (const m of mine) if (!tIds.has(m.id)) { const c = senzaId(m), k = orfaneT.findIndex(t => senzaId(t) === c); if (k >= 0) { const t = orfaneT.splice(k, 1)[0], vecchio = m.id, intatta = base.get(vecchio) === J(m); m.id = t.id; base.delete(vecchio); if (intatta) base.set(m.id, J(m)); } } }
+    const mMap = new Map(mine.map(v => [v.id, v])), tMap = new Map(theirs.map(v => [v.id, v])), out = [];
+    for (const m of mine) {
+      const b = base.get(m.id), t = tMap.get(m.id), mCambiata = b === undefined || J(m) !== b;
+      if (t) { if (!mCambiata && J(t) !== b) sostituisci(m, t); out.push(m); }   // cambiata solo altrove: vince l'altra; altrimenti questa
+      else if (b === undefined) out.push(m);                                    // nuova di questa pagina
+      else if (tomba[m.id] && !mCambiata) {}                                    // tolta apposta altrove, qui non toccata: via
+      else { delete tomba[m.id]; out.push(m); }                                 // sparita senza cancellazione voluta, o cambiata qui: resta
+    }
+    for (const t of theirs) {
+      if (mMap.has(t.id)) continue;
+      const b = base.get(t.id);
+      if (b === undefined) { const tb = tomba[t.id]; if (!tb || tb.h !== impronta(J(t))) { delete tomba[t.id]; out.push(t); } }   // nuova di un'altra pagina (una voce tolta qui e riscritta uguale da una pagina vecchia resta tolta)
+      else if (J(t) !== b) { delete tomba[t.id]; out.push(t); }                // tolta qui ma cambiata altrove nel frattempo: resta
+    }
+    return { voci: out, tomba };
+  }
+  function potaTomba(t) { const lim = Date.now() - GIORNI_CANCELLATE * 864e5; for (const id of Object.keys(t)) if (!t[id] || !(t[id].t >= lim)) delete t[id]; return t; }
+  const firma = d => JSON.stringify([d.voci.map(J).sort(), Object.keys(d.cancellate || {}).sort()]);
+  function caricaIniziale() {
+    const L = leggiTelefono(); if (!L) return;
+    D = L.d; D.cancellate = D.cancellate && typeof D.cancellate === 'object' ? D.cancellate : {};
+    daiId(D.voci, [], {}); ultimoLetto = L.s; fissaBase();
+  }
+  // porta in questa pagina quello che altre pagine hanno scritto; riscrive solo se serve (niente rimbalzi tra schede). true = cambiato
+  function sincronizza() {
+    const L = leggiTelefono(); if (!L || L.s === ultimoLetto) return false;
+    daiId(D.voci, [], {});
+    const r = unisciTre(D.voci, L.d);
+    D.voci = r.voci; D.cancellate = potaTomba(r.tomba);
+    if (firma(D) !== firma(L.d)) { try { const s = JSON.stringify(D); localStorage.setItem(KEY, s); ultimoLetto = s; } catch (e) { ultimoLetto = L.s; } }
+    else ultimoLetto = L.s;
+    fissaBase();
+    return true;
+  }
+  function save() {
+    try {
+      const ora = Date.now();
+      daiId(D.voci, [], {});
+      D.cancellate = D.cancellate || {};
+      const qui = new Set(D.voci.map(v => v.id));
+      for (const [id, s] of base) if (!qui.has(id)) { const b = JSON.parse(s); D.cancellate[id] = { t: ora, k: b.label + '|' + b.inizio, h: impronta(s) }; }
+      const L = leggiTelefono();
+      if (L && L.s !== ultimoLetto) { const r = unisciTre(D.voci, L.d); D.voci = r.voci; D.cancellate = r.tomba; }   // un'altra pagina ha scritto nel frattempo
+      potaTomba(D.cancellate);
+      const s = JSON.stringify(D); localStorage.setItem(KEY, s); ultimoLetto = s; fissaBase();
+    } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); }
+  }
+  caricaIniziale();
+  const trova = id => D.voci.find(v => v.id === id);
+  // «Annulla» che tocca SOLO quello che l'azione ha cambiato (17/11/2026): prima rimetteva il diario intero com'era,
+  // cancellando quello che nel frattempo era arrivato da un'altra pagina o era stato ripristinato
+  const foto = () => new Map(D.voci.filter(v => v.id).map(v => [v.id, J(v)]));
+  function cambiamenti(prima) {   // da chiamare dopo l'azione e PRIMA di save()
+    return { nuove: D.voci.filter(v => !v.id), cambiate: D.voci.filter(v => v.id && prima.has(v.id) && prima.get(v.id) !== J(v)).map(v => ({ id: v.id, prima: prima.get(v.id), dopo: J(v) })) };
+  }
+  function annullaCambiamenti(c) {   // dopo save(): le voci nuove hanno ormai il loro id
+    sincronizza();
+    const via = new Set(c.nuove.map(v => v.id));
+    D.voci = D.voci.filter(v => !via.has(v.id));
+    for (const x of c.cambiate) { const v = trova(x.id); if (v && J(v) === x.dopo) sostituisci(v, JSON.parse(x.prima)); }   // solo se nessuno l'ha cambiata dopo
+    save(); render();
+  }
+  function togliAnnulla() {   // a ogni azzeramento o ripristino il vecchio «Annulla» non ha più senso
+    if ($('voiceUndo')) $('voiceOut').innerHTML = '';
+    const t = $('toast'); if (t.classList.contains('act')) { t.classList.remove('show', 'act'); clearTimeout(t._h); }
+  }
   const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
   function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
@@ -467,10 +586,10 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
   }
   // dopo una correzione d'orario nell'elenco: 8 secondi per tornare indietro
-  function toastAnnulla(s, prima) {
+  function toastAnnulla(s, c) {
     const t = $('toast'); t.textContent = s;
     const b = document.createElement('button'); b.textContent = 'Annulla';
-    b.onclick = () => { D = JSON.parse(prima); save(); render(); t.classList.remove('act'); toast('Orario ripristinato'); };
+    b.onclick = () => { annullaCambiamenti(c); t.classList.remove('act'); toast('Orario ripristinato'); };
     t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
   }
   function cambiaOra(v) {
@@ -480,6 +599,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     $('oraCancel').onclick = () => dlg.close();
     $('oraOk').onclick = () => {
       if (!inp.value) return;
+      sincronizza();
       const now = Date.now(), [h, m] = inp.value.split(':').map(Number), d = new Date(now);
       d.setHours(h, m, 0, 0);
       if (d.getTime() > now + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri
@@ -501,6 +621,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
 
   function chiudi(v, t) { v.fine = Math.max(t, v.inizio + 60000); }
   function tocca(label) {
+    sincronizza();
     const c = CAT[label], t = Date.now();
     if (c.tipo === 'puntuale') {
       if (label === 'Mi sento sotto stress') return chiediLivello();
@@ -523,6 +644,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   }
   // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
   function digiuno() {
+    sincronizza();
     const t = Date.now(), cur = apertaLabel('Digiuno');
     if (cur) {
       chiudi(cur, t);
@@ -532,6 +654,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     save(); render();
   }
   function sfondo(label) {
+    sincronizza();
     const t = Date.now(), cur = apertaLabel(label);
     if (cur) { chiudi(cur, t); toast(label === 'Sonno' ? 'Buongiorno: sveglia alle ' + hhmm(t) : 'Fine lavoro alle ' + hhmm(t)); }
     else {
@@ -542,12 +665,14 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   }
   // "Mi sono svegliato" funziona anche se la sera non è stato toccato "Vado a dormire"
   function sveglia() {
+    sincronizza();
     const sl = apertaLabel('Sonno');
     if (sl) return sfondo('Sonno');
     const dlg = $('dlgWake');
     $('wakeCancel').onclick = () => dlg.close();
     $('wakeOk').onclick = () => {
       const v = $('bedTime').value; if (!v) return;
+      sincronizza();
       const now = Date.now(), [h, m] = v.split(':').map(Number), d = new Date(now);
       d.setHours(h, m, 0, 0);
       if (d.getTime() >= now) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri sera
@@ -573,6 +698,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     sel.onchange = aggiorna; aggiorna();
     $('pastCancel').onclick = () => dlg.close();
     $('pastOk').onclick = () => {
+      sincronizza();
       const label = sel.value, c = CAT[label], nowMs = Date.now();
       const at = v => { const [h, m] = v.split(':').map(Number), d = new Date(nowMs); d.setHours(h, m, 0, 0); return d.getTime(); };
       if (!$('pastTo').value) return;
@@ -597,7 +723,8 @@ if (typeof module !== 'undefined') module.exports = VOCE;
 
   /* ---------- dettatura: la frase diventa un'azione, con "Annulla" ---------- */
   function applicaVoce(r) {
-    const prima = JSON.stringify(D), t = r.t;
+    sincronizza();
+    const prima = foto(), t = r.t;
     let rimessa = null; // voce senza fascia appena chiusa: alla fine si consiglia il cambio
     const chiudiTutto = () => { const a = aperta('durata'); if (a) { chiudi(a, t); if (TOGLIE_FASCIA.test(a.label)) rimessa = a.label; } };
     let txt;
@@ -640,9 +767,10 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       case 'fascia': D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`; rimessa = 'fascia'; break;
       default: D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`;
     }
+    const fatti = cambiamenti(prima);
     save(); render();
     $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
-    $('voiceUndo').onclick = () => { D = JSON.parse(prima); save(); render(); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
+    $('voiceUndo').onclick = () => { annullaCambiamenti(fatti); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
     const iniziaSenzaFascia = (r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label);
     const finitaDaPoco = r.azione === 'intervallo' && !r.inCorso && TOGLIE_FASCIA.test(r.label) && r.to > Date.now() - 2 * 3600000; // "ho fatto la doccia"
     if (iniziaSenzaFascia) avvisoFascia();
@@ -661,6 +789,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
     box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
     box.querySelectorAll('button').forEach(b => b.onclick = () => {
+      sincronizza();
       const t = Date.now();
       D.voci.push({ label: 'Mi sento sotto stress', inizio: t, fine: t + 15 * 60000, puntuale: true, livello: +b.dataset.n });
       save(); render(); dlg.close(); toast('Stress ' + b.dataset.n + '/5 segnato alle ' + hhmm(t));
@@ -679,7 +808,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
       ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
       ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
-    const bf = $('bFine'); if (bf) bf.onclick = () => { chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); if (TOGLIE_FASCIA.test(cur.label)) avvisoRimessa(cur.label); };
+    const bf = $('bFine'); if (bf) bf.onclick = () => { sincronizza(); chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); if (TOGLIE_FASCIA.test(cur.label)) avvisoRimessa(cur.label); };
 
     $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
@@ -701,12 +830,13 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     $('groups').insertAdjacentHTML('afterbegin', '<button class="plain" id="bPast" style="width:100%;margin-top:4px;padding:13px">＋ Segna qualcosa fatto prima, con l\'orario</button>');
     $('bPast').onclick = () => passato();
 
-    const items = D.voci.map((v, i) => ({ v, i })).sort((a, b) => b.v.inizio - a.v.inizio);
+    daiId(D.voci, [], {});
+    const items = D.voci.map(v => ({ v, i: v.id })).sort((a, b) => b.v.inizio - a.v.inizio);
     $('log').innerHTML = items.length ? items.map(({ v, i }) => `<div class="it">
         <span class="dot" style="background:${CAT[v.label] ? CAT[v.label].col : '#999'}"></span>
         <input type="time" value="${hhmm(v.inizio)}" data-i="${i}">
         ${!v.puntuale && v.fine ? `<span class="note">→</span><input type="time" value="${hhmm(v.fine)}" data-f="${i}" title="ora di fine">` : ''}
-        <span class="t">${v.nota ? 'Nota: “' + v.nota.replace(/[<>&]/g, '') + '”' : v.label}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
+        <span class="t">${v.nota ? 'Nota: “' + String(v.nota).replace(/[<>&]/g, '') + '”' : String(v.label).replace(/[<>&]/g, '')}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
         <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
     // 11/11/2026: l'orario si salva solo quando la rotella si chiude (spunta), non mentre gira. Prima si salvava a ogni
     // "change", che l'iPhone manda a ogni scatto della rotella: il diario ridisegnava l'elenco, la rotella si chiudeva e
@@ -715,53 +845,93 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       inp.dataset.orig = inp.value;
       inp.onblur = () => {
         if (!inp.value || inp.value === inp.dataset.orig) return;
-        const prima = JSON.stringify(D), [h, m] = inp.value.split(':').map(Number);
+        sincronizza();
+        const prima = foto(), [h, m] = inp.value.split(':').map(Number);
         if (inp.dataset.f != null) {
-          const v = D.voci[+inp.dataset.f], d = new Date(v.inizio);
+          const v = trova(inp.dataset.f); if (!v) { render(); return; }   // tolta nel frattempo da un'altra pagina
+          const d = new Date(v.inizio);
           d.setHours(h, m, 0, 0);
           if (d.getTime() <= v.inizio) d.setDate(d.getDate() + 1); // la fine dopo mezzanotte cade il giorno dopo
           v.fine = Math.min(d.getTime(), Date.now() + 60000);
-          save(); render(); toastAnnulla('Fine corretta: ' + hhmm(v.fine), prima);
+          const c = cambiamenti(prima); save(); render(); toastAnnulla('Fine corretta: ' + hhmm(v.fine), c);
         } else {
-          const v = D.voci[+inp.dataset.i], d = new Date(v.inizio);
+          const v = trova(inp.dataset.i); if (!v) { render(); return; }
+          const d = new Date(v.inizio);
           d.setHours(h, m, 0, 0);
           if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = riferito a ieri sera
           const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
           if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
-          save(); render(); toastAnnulla('Orario corretto: ' + hhmm(v.inizio), prima);
+          const c = cambiamenti(prima); save(); render(); toastAnnulla('Orario corretto: ' + hhmm(v.inizio), c);
         }
       };
     });
-    document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { D.voci.splice(+b.dataset.del, 1); save(); render(); });
+    document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { sincronizza(); D.voci = D.voci.filter(v => v.id !== b.dataset.del); save(); render(); });
   }
 
   // ---- punti di contatto per il processo unico (APP24): niente accede a D dall'esterno, tutto passa da qui ----
   const chiaveVoce = v => v.label + '|' + v.inizio;
+  // diario cambiato da un'altra pagina o scheda: si rilegge e si ridisegna (non mentre si sta cambiando un orario)
+  function ricarica() {
+    if (!sincronizza()) return false;
+    const a = document.activeElement; if (!(a && a.matches && a.matches('#log input[type=time]'))) render();
+    return true;
+  }
   window.DIARIO24 = {
     // il diario nel formato dei file mandati al medico (stesso formato delle condivisioni del diario di prima).
     // Le voci ancora aperte hanno fine = ora dell'invio e il segno "aperta": il report prende la versione più recente.
+    // "inviate": impronta esatta di ogni voce chiusa esportata (per toglierla dopo l'invio solo se è ancora identica)
     esporta(t) {
+      sincronizza();
       t = t || Date.now();
+      daiId(D.voci, [], {});
       const out = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(),
         voci: D.voci.map(v => { const o = { label: v.nota ? 'Nota: ' + v.nota : v.label, categoria: CAT[v.label] ? CAT[v.label].cat : 'altro', inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null };
           if (v.fine == null && !v.puntuale) o.aperta = true; return o; }) };
-      return { out, n: D.voci.length, chiuse: D.voci.filter(v => v.fine != null).map(chiaveVoce) };
+      return { out, n: D.voci.length, t, inviate: D.voci.filter(v => v.fine != null).map(v => [v.id, J(v)]) };
     },
-    raw() { return JSON.parse(JSON.stringify(D)); },        // copia completa, nella forma interna (per le copie di sicurezza)
+    raw() { sincronizza(); daiId(D.voci, [], {}); return JSON.parse(JSON.stringify(D)); },   // copia completa del diario RILETTO dal telefono
     conta() { return D.voci.length; },
-    // toglie dal diario le sole voci già CHIUSE e già spedite (per chiave); le aperte e quelle nuove restano
-    rimuoviInviate(chiavi) { const s = new Set(chiavi), prima = D.voci.length; D.voci = D.voci.filter(v => !(v.fine != null && s.has(chiaveVoce(v)))); save(); render(); return prima - D.voci.length; },
-    // ripristino non distruttivo: aggiunge le voci che mancano (stessa etichetta e stessa ora = già presente)
-    unisci(voci) { const s = new Set(D.voci.map(chiaveVoce)); let n = 0; for (const v of voci || []) { if (v && v.label && isFinite(v.inizio) && !s.has(chiaveVoce(v))) { D.voci.push(v); s.add(chiaveVoce(v)); n++; } } D.voci.sort((a, b) => a.inizio - b.inizio); save(); render(); return n; },
-    ricarica() { D = load(); render(); },
-    tieniSoloAperte() { const prima = D.voci.length; D.voci = D.voci.filter(v => v.fine == null); save(); render(); return prima - D.voci.length; },
+    // dopo l'invio confermato toglie le sole voci CHIUSE ancora IDENTICHE a quelle spedite (anche fine, livello, nota):
+    // una correzione fatta durante l'invio resta nel diario e parte con l'invio successivo. Le aperte e le nuove restano.
+    rimuoviInviate(inviate) {
+      sincronizza();
+      const m = new Map(inviate || []), prima = D.voci.length;
+      D.voci = D.voci.filter(v => !(v.fine != null && m.has(v.id) && m.get(v.id) === J(v)));
+      save(); render(); togliAnnulla(); return prima - D.voci.length;
+    },
+    // ripristino non distruttivo: aggiunge le voci che mancano (stessa etichetta e stessa ora = già presente), sempre con un id
+    // nuovo; una voce che nella copia era ancora aperta torna CHIUSA all'ora della copia (non riapre attività già finite)
+    unisci(voci, tCopia) {
+      sincronizza();
+      const s = new Set(D.voci.map(chiaveVoce)); let n = 0, chiuse = 0;
+      for (const v0 of voci || []) {
+        if (!v0 || !v0.label || !isFinite(v0.inizio) || s.has(chiaveVoce(v0))) continue;
+        const v = JSON.parse(JSON.stringify(v0)); v.id = nuovoId();
+        if (v.fine == null) { v.fine = Math.max(tCopia || Date.now(), v.inizio + 60000); chiuse++; }
+        D.voci.push(v); s.add(chiaveVoce(v)); n++;
+      }
+      D.voci.sort((a, b) => a.inizio - b.inizio); save(); render(); togliAnnulla(); return { n, chiuse };
+    },
+    ricarica,
+    // azzeramento manuale: toglie le voci chiuse IDENTICHE a quelle della copia appena fatta (una voce arrivata nel frattempo
+    // da un'altra pagina non è nella copia, quindi resta)
+    tieniSoloAperte(copia) {
+      sincronizza();
+      const nella = new Set((copia || []).map(J)), prima = D.voci.length;
+      D.voci = D.voci.filter(v => v.fine == null || !nella.has(J(v)));
+      save(); render(); togliAnnulla(); return prima - D.voci.length;
+    },
   };
+  // doppio tocco: il secondo vale solo dopo almeno 600 ms (un tocco doppio involontario non azzera) e entro 3 secondi
   $('bReset').onclick = () => {
-    const b = $('bReset');
-    if (!b.dataset.arm) { b.dataset.arm = '1'; b.textContent = 'Tocca di nuovo per azzerare'; setTimeout(() => { delete b.dataset.arm; b.textContent = 'Azzera il diario (con copia di sicurezza)'; }, 3000); return; }
-    delete b.dataset.arm; b.textContent = 'Azzera il diario (con copia di sicurezza)';
+    const b = $('bReset'), testo = 'Azzera il diario (con copia di sicurezza)';
+    if (!b.dataset.arm) { b.dataset.arm = String(Date.now()); b.textContent = 'Tocca di nuovo per azzerare'; clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 3000); return; }
+    if (Date.now() - +b.dataset.arm < 600) return;
+    clearTimeout(b._t); delete b.dataset.arm; b.textContent = testo;
     if (window.APP24) APP24.azzeraConCopia(); else toast('Funzione non disponibile');
   };
+  window.addEventListener('storage', e => { if (e.key === KEY || e.key == null) ricarica(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) ricarica(); });
 
   render();
   // ogni minuto si aggiornano le durate, ma non mentre si sta cambiando un orario: ridisegnare chiuderebbe la rotella
@@ -1013,7 +1183,11 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
    NON cambiare versione) e localStorage del diario; copie di sicurezza in un database a parte, "hrv24diario". */
 (() => {
   const $ = id => document.getElementById(id);
-  const FINTA = new URLSearchParams(location.search).has('finta');   // solo per le prove automatiche: niente Bluetooth vero
+  // solo per le prove automatiche: niente Bluetooth vero. Vale SOLO se la pagina di prova ha messo la fascia finta prima del
+  // caricamento: un «?finta=1» scritto a mano da chiunque altro viene ignorato (17/11/2026)
+  const FINTA = new URLSearchParams(location.search).has('finta') && !!window.__psftpFinta && typeof window.__psftpFinta.status === 'function';
+  const ATTESA_MIN = 120000;     // tra un avvio e il processo successivo: almeno 2 minuti (stesso minuto = stesso identificativo)
+  const NOME_OK = /^h10_HRVT_\d{8}_\d{4}\.csv$/;   // nomi delle registrazioni che l'Apps Script accetta (RE_FILE_24)
   const CAPIENZA = 94626;        // misurata: 4 registrazioni fermate a 94.626 battiti
   const MAX_BYTES_PER_BEAT = 2.5; // misurato: 2,0 byte per battito
   const BATT_MIN = 10;           // a questo livello o sotto non si fa ripartire (prima il riavvio del sensore, poi la pila)
@@ -1091,16 +1265,44 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     return head.concat([r.type === 'rr' ? 'rr_ms' : 'fc_bpm'], r.samples.map(String)).join('\n') + '\n';
   }
   const oggiLocale = () => { const d = new Date(); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); };
+  const hm = t => p2(new Date(t).getHours()) + ':' + p2(new Date(t).getMinutes());
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const idDa = d => 'HRVT_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes());
+  // lunghezza in byte del file che si manda per una registrazione (con memoria: il CSV di 24 ore è grande)
+  const cacheLen = new Map();
+  const lenCsv = r => { const k = [r.id, r.type, r.n, r.startedAt, r.stoppedAt, r.savedAt].join('|'); if (!cacheLen.has(k)) { let n = -1; try { n = nByte(buildCsv(r)); } catch (e) {} cacheLen.set(k, n); } return cacheLen.get(k); };   // -1 = registrazione malformata: mai «arrivata»
+  // ✓ «arrivata al medico» solo se è arrivata la versione di ADESSO (stessa lunghezza), non una più vecchia o più corta
+  const arrivataReg = (r, inviati) => (inviati || {})['h10_' + r.id + '.csv'] === lenCsv(r);
+  const quante = n => n === 1 ? '1 registrazione non risulta ancora arrivata' : n + ' registrazioni non risultano ancora arrivate';
+  async function regsNonArrivate() { const regs = await allRegs(), inv = (await getMeta('inviati')) || {}; return regs.filter(r => !arrivataReg(r, inv)); }
+  // la frase della fascia ferma (stessa nella barra e nei messaggi di errore)
+  const fraseFerma = (t, finale) => finale
+    ? `<b>La fascia è FERMA dalle ${hm(t)}</b> (fine del monitoraggio): tocca «Completa la fine del monitoraggio» in alto per completare.`
+    : `<b>La fascia è FERMA dalle ${hm(t)}: tocca per completare</b> (pulsante «Invia dati e continua il monitoraggio» in alto, con la fascia addosso).`;
 
   /* ---------- codice del paziente ---------- */
   function codiceSalvato() { try { const c = (localStorage.getItem(CODE_KEY) || '').trim().toUpperCase(); return RE_COD.test(c) ? c : ''; } catch (e) { return ''; } }
   function codiceIniziale() {
     try {
-      const q = new URLSearchParams(location.search).get('codice'); if (q && RE_COD.test(q.trim().toUpperCase())) { localStorage.setItem(CODE_KEY, q.trim().toUpperCase()); return q.trim().toUpperCase(); }
-      const c = codiceSalvato(); if (c) return c;
+      const q = (new URLSearchParams(location.search).get('codice') || '').trim().toUpperCase(), c = codiceSalvato();
+      if (RE_COD.test(q)) {
+        if (!c) { localStorage.setItem(CODE_KEY, q); return q; }
+        if (q !== c) setTimeout(() => chiediCodiceDaLink(c, q), 0);   // codice diverso da quello salvato: si chiede, non si cambia da solo
+        return c;
+      }
+      if (c) return c;
       const L = JSON.parse(localStorage.getItem('respiroPacer.license.v1') || 'null'); if (L && L.code && RE_COD.test(String(L.code).trim().toUpperCase())) return String(L.code).trim().toUpperCase();   // già attivato nel Respiro Pacer
     } catch (e) {}
     return '';
+  }
+  function chiediCodiceDaLink(c, q) {
+    const dlg = $('dlgCodice');
+    $('codTesto').innerHTML = `Il collegamento che hai aperto contiene il codice <b>${esc(q)}</b>, ma su questo telefono è salvato <b>${esc(c)}</b>. I dati vengono mandati al medico con il codice che scegli.`;
+    $('codTieni').textContent = 'Tieni ' + c; $('codUsa').textContent = 'Usa ' + q;
+    $('codTieni').onclick = () => { dlg.close(); log('Codice del collegamento (' + q + ') non usato: resta ' + c); };
+    $('codUsa').onclick = () => { try { localStorage.setItem(CODE_KEY, q); } catch (e) {} $('inCodice').value = q; $('inCodice2').value = q; dlg.close(); log('Codice cambiato dal collegamento: ' + q + ' (prima ' + c + ')'); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function leggiCodice() { const a = ($('inCodice').value || '').trim().toUpperCase(), b = ($('inCodice2').value || '').trim().toUpperCase(); return RE_COD.test(a) ? a : RE_COD.test(b) ? b : (a || b); }
   function sincronizzaCodice(da, a) { const v = ($(da).value || '').trim().toUpperCase(); $(a).value = v; if (RE_COD.test(v)) { try { localStorage.setItem(CODE_KEY, v); } catch (e) {} } }
@@ -1109,14 +1311,17 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   $('inCodice2').addEventListener('input', () => sincronizzaCodice('inCodice2', 'inCodice'));
 
   /* ---------- passi, messaggi ---------- */
-  const STEPS = [['conn', 'Collego la fascia'], ['stop', 'Fermo la registrazione'], ['dl', 'Scarico i dati'], ['save', 'Salvo nel telefono'], ['del', 'Libero la memoria della fascia'], ['start', 'Faccio ripartire la registrazione'], ['send', 'Invio al medico'], ['check', 'Controllo che sia arrivato'], ['reset', 'Faccio ripartire il diario']];
+  const STEPS = [['conn', 'Collego la fascia'], ['stop', 'Fermo la registrazione'], ['dl', 'Scarico i dati'], ['save', 'Salvo nel telefono'], ['del', 'Libero la memoria della fascia'], ['start', 'Faccio ripartire la registrazione'], ['send', 'Invio al medico'], ['check', 'Controllo che sia arrivato'], ['reset', 'Faccio ripartire il diario'], ['chiudi', 'Registro la fine del monitoraggio']];
   const st = {};
   function step(k, s, extra) { st[k] = [s, extra]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
   function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; $('retryRow').style.display = 'none'; }
   const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
   const mostraPannello = () => $('procPanel').classList.add('on');
-  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bFineBarra']) { const el = $(id); if (el) el.disabled = b; } for (const id of ['bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare']) { const el = $(id); if (el) el.disabled = b; } }
-  async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { log('Schermo sempre acceso non disponibile: ' + e.message); } }
+  // durante il processo nessun altro pulsante che tocchi fascia, registrazioni o diario (anche «Cancella» e «Azzera»)
+  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } }
+  async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) { const w = await navigator.wakeLock.request('screen'); wakeLock = w; w.addEventListener('release', () => { if (wakeLock === w) wakeLock = null; }); if (!busy) releaseAwake(); } } catch (e) { log('Schermo sempre acceso non disponibile: ' + e.message); } }
+  // a processo finito lo schermo torna a spegnersi da solo (prima restava acceso finché non si chiudeva la pagina)
+  async function releaseAwake() { const w = wakeLock; wakeLock = null; try { if (w) await w.release(); } catch (e) {} }
 
   /* ---------- Bluetooth ---------- */
   const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ': tempo scaduto')), ms))]);
@@ -1160,53 +1365,69 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   }
 
   /* ---------- la parte della fascia: ferma, scarica, salva, cancella, riparte ---------- */
-  // Ritorna { avviato, nota }. Se qualcosa non va scrive il messaggio e lancia { gestito: true }.
-  async function parteFascia(restart) {
-    let cur = 'conn', nota = null, avviato = false;
+  // Ritorna { avviato, nota, fermaDal }. Se qualcosa non va scrive il messaggio e lancia { gestito: true }.
+  async function parteFascia(restart, finale) {
+    let cur = 'conn', nota = null, avviato = false, fermaDal = null, salvate = 0;
     try {
       step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok', battLetta != null ? 'batteria ' + battLetta + '%' : '');
       cur = 'stop'; step('stop', 'wait');
       const s = await retry('Stato', () => psftp.status());
       log('Stato: registrando=' + s.recording + ', identificativo="' + s.id + '"');
       if (s.recording && startFromId(s.id)) { const m0 = await getMeta('ultimoAvvio'); if (!m0 || m0.id !== s.id) { await setMeta('ultimoAvvio', { id: s.id, t: startFromId(s.id) }); log('Partenza letta dalla fascia: ' + s.id); } }
+      // ora dello stop salvata al primo tentativo: se il processo si interrompe e si riprende, il "# fine" del file resta quello vero
+      const stopPrec = await getMeta('ultimoStop');
       const stoppedAt = Date.now();
-      if (s.recording) { await retry('Stop', () => psftp.stop()); step('stop', 'ok'); log('Registrazione fermata'); }
+      if (s.recording) { await retry('Stop', () => psftp.stop()); await setMeta('ultimoStop', { id: s.id, t: stoppedAt }); step('stop', 'ok'); log('Registrazione fermata'); }
       else step('stop', 'skip', 'non stava registrando');
-      await setMeta('statoLetto', { t: Date.now(), recording: false, id: s.id || '' });
+      fermaDal = s.recording ? stoppedAt : Date.now();
+      await setMeta('statoLetto', { t: fermaDal, recording: false, id: s.id || '' });
 
       cur = 'dl'; step('dl', 'wait');
       const seen = [];
       const recs = await retry('Elenco', () => psftp.listRecordings('/', 0, seen));
       seen.forEach(x => log('Cartella ' + x));
       const meta = await getMeta('ultimoAvvio');
+      const inviati = (await getMeta('inviati')) || {};
       if (!recs.length) step('dl', 'skip', 'memoria vuota');
-      for (const rec of recs) {
+      for (let k = 0; k < recs.length; k++) {
+        const rec = recs[k];
+        cur = 'dl'; step('dl', 'wait', recs.length > 1 ? (k + 1) + ' di ' + recs.length : '');
         const prev = await getReg(rec.id);
-        if (prev && prev.size === rec.size) { log('Già salvata in precedenza: ' + rec.id); step('dl', 'ok', 'già nel telefono'); }
-        else {
-          const t0 = performance.now();
-          $('prog').innerHTML = `<progress id="pg" max="${Math.max(1, rec.size)}" value="0" style="width:100%"></progress><div class="note" id="pgT"></div>`;
-          const data = await psftp.fetchRecording(rec.path, n => {
-            const pg = $('pg'); if (pg) pg.value = n;
-            const el = (performance.now() - t0) / 1000, rate = n / Math.max(1, el), left = (rec.size - n) / Math.max(1, rate);
-            const t = $('pgT'); if (t) t.textContent = Math.round(n / rec.size * 100) + '% · ' + (n > 2000 ? 'mancano circa ' + Math.max(1, Math.ceil(left / 60)) + ' min' : 'calcolo il tempo…');
-          });
-          log('Scaricata ' + rec.id + ': ' + data.type + ', ' + data.samples.length + ' valori in ' + Math.round((performance.now() - t0) / 1000) + ' s');
-          $('prog').innerHTML = '';
-          // controllo di completezza prima di qualsiasi cancellazione: ogni RR occupa ~2 byte
-          if (data.type === 'rr' && rec.size > 2000 && data.samples.length < rec.size / MAX_BYTES_PER_BEAT) throw Object.assign(new Error('scarico incompleto (' + data.samples.length + ' battiti per ' + rec.size + ' byte)'), { retryable: true });
+        const t0 = performance.now();
+        $('prog').innerHTML = `<progress id="pg" max="${Math.max(1, rec.size)}" value="0" style="width:100%"></progress><div class="note" id="pgT"></div>`;
+        const data = await psftp.fetchRecording(rec.path, n => {
+          const pg = $('pg'); if (pg) pg.value = n;
+          const el = (performance.now() - t0) / 1000, rate = n / Math.max(1, el), left = (rec.size - n) / Math.max(1, rate);
+          const t = $('pgT'); if (t) t.textContent = Math.round(n / rec.size * 100) + '% · ' + (n > 2000 ? 'mancano circa ' + Math.max(1, Math.ceil(left / 60)) + ' min' : 'calcolo il tempo…');
+        });
+        log('Scaricata ' + rec.id + ': ' + data.type + ', ' + data.samples.length + ' valori in ' + Math.round((performance.now() - t0) / 1000) + ' s');
+        $('prog').innerHTML = '';
+        // controllo di completezza prima di qualsiasi cancellazione: ogni RR occupa ~2 byte
+        if (data.type === 'rr' && rec.size > 2000 && data.samples.length < rec.size / MAX_BYTES_PER_BEAT) throw Object.assign(new Error('scarico incompleto (' + data.samples.length + ' battiti per ' + rec.size + ' byte)'), { retryable: true });
+        // già nel telefono? Solo se i BATTITI coincidono (17/11/2026): stesso nome e stessa dimensione non bastano
+        let salva = true;
+        if (prev) {
+          const ps = Array.isArray(prev.samples) ? prev.samples : [];
+          const inizioUguale = ps.length <= data.samples.length && prev.type === data.type && ps.every((x, i) => x === data.samples[i]);
+          if (inizioUguale && ps.length === data.samples.length) { salva = false; log('Già salvata in precedenza, con gli stessi battiti: ' + rec.id); step('dl', 'ok', 'già nel telefono'); step('save', 'ok', 'già nel telefono'); }
+          else if (inizioUguale) log('Nel telefono c\'era una parte di ' + rec.id + ': la sostituisco con quella completa');
+          else if (arrivataReg(prev, inviati)) log('Stesso nome ' + rec.id + ' di una registrazione già arrivata al medico, ma battiti diversi: la sostituisco nel telefono (sul Drive diventa una nuova versione)');
+          else throw Object.assign(new Error('nel telefono c\'è già una registrazione «' + rec.id + '» con battiti diversi, non ancora arrivata al medico'), { conflitto: rec.id });
+        }
+        if (salva) {
           step('dl', 'ok', data.samples.length.toLocaleString('it-IT') + ' battiti');
-
           cur = 'save'; step('save', 'wait');
           const durMin = data.type === 'rr' ? data.samples.reduce((a, b) => a + b, 0) / 60000 : data.samples.length * (data.interval || 1) / 60;
           const startedAt = meta && meta.id === rec.id ? meta.t : startFromId(rec.id);
-          const r = { id: rec.id, size: rec.size, type: data.type, n: data.samples.length, samples: data.samples, durMin, startedAt, stoppedAt: s.recording && s.id === rec.id ? stoppedAt : null, savedAt: Date.now() };
+          const stopVero = s.recording && s.id === rec.id ? stoppedAt : stopPrec && stopPrec.id === rec.id ? stopPrec.t : null;
+          const r = { id: rec.id, size: rec.size, type: data.type, n: data.samples.length, samples: data.samples, durMin, startedAt, stoppedAt: stopVero, savedAt: Date.now() };
           await putReg(r);
-          const back = await getReg(rec.id);
-          if (!back || back.n !== r.n) throw new Error('salvataggio nel telefono non verificato');
+          const back = await getReg(rec.id), bs = back && back.samples;
+          if (!back || back.n !== r.n || !Array.isArray(bs) || bs.length !== r.samples.length || bs[0] !== r.samples[0] || bs[bs.length - 1] !== r.samples[r.samples.length - 1]) throw new Error('salvataggio nel telefono non verificato');
           step('save', 'ok', fmtDur(durMin));
           if (data.type !== 'rr') log('ATTENZIONE: la registrazione contiene solo la frequenza, non i battiti');
         }
+        salvate++;
         cur = 'del'; step('del', 'wait');
         await retry('Cancellazione', () => psftp.remove(rec.path));
         log('Cancellata dalla fascia: ' + rec.path);
@@ -1216,14 +1437,16 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
 
       if (restart && battLetta != null && battLetta <= BATT_MIN) {
         step('start', 'no', 'batteria ' + battLetta + '%');
-        nota = `<b>La fascia dice batteria al ${battLetta}%: non l'ho fatta ripartire.</b> I dati sono salvati nel telefono.<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo il pulsante in alto.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`;
+        nota = `${fraseFerma(fermaDal)}<br><b>La fascia dice batteria al ${battLetta}%: non l'ho fatta ripartire.</b> I dati sono salvati nel telefono.<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo il pulsante in alto.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`;
         try { device.gatt.disconnect(); } catch (e) {}
-        return { avviato: false, nota };
+        return { avviato: false, nota, fermaDal };
       }
       if (restart) {
         cur = 'start'; step('start', 'wait');
-        const d = new Date();
-        const id = 'HRVT_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes());
+        // mai due registrazioni con lo stesso identificativo (minuto): se il nome è già usato si aspetta il minuto dopo
+        let d = new Date(), id = idDa(d);
+        for (let k = 0; k < 2 && (id === s.id || await getReg(id)); k++) { log('Identificativo ' + id + ' già usato: aspetto il minuto successivo'); step('start', 'wait', 'aspetto un minuto'); await sleep(60500 - Date.now() % 60000); d = new Date(); id = idDa(d); }
+        if (id === s.id || await getReg(id)) throw new Error('identificativo ' + id + ' già usato');
         await retry('Orologio', () => psftp.setLocalTime(d));
         await retry('Avvio', () => psftp.startRr(id));
         const s2 = await retry('Controllo', () => psftp.status());
@@ -1231,23 +1454,29 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
         await setMeta('ultimoAvvio', { id, t: d.getTime() });
         await setMeta('statoLetto', { t: Date.now(), recording: true, id });
         await setMeta('fine', null);
+        await setMeta('chiusura', null);   // ripartita: una «Fine» rimasta a metà non vale più
         log('Registrazione avviata: ' + id);
         step('start', 'ok', 'dalle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
-        avviato = true;
+        avviato = true; fermaDal = null;
         if (battLetta != null && battLetta <= 15) nota = `<b>Batteria al ${battLetta}%:</b> al prossimo cambio sostituisci la pila (CR2025).`;
       } else {
-        await setMeta('fine', Date.now());
-        step('start', 'skip', 'monitoraggio concluso');
+        step('start', 'skip', 'fine del monitoraggio');   // "fine" si scrive solo quando FINE.json è confermato sul Drive
       }
       try { device.gatt.disconnect(); } catch (e) {}
-      return { avviato, nota };
+      return { avviato, nota, fermaDal };
     } catch (e) {
       if (e && e.gestito) throw e;
       log('Errore in "' + cur + '": ' + (e.name || '') + ' ' + e.message);
       step(cur, 'no');
       $('prog').innerHTML = '';
-      const safe = cur === 'dl' || cur === 'conn' || cur === 'stop' || cur === 'save';
-      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${safe ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.' : cur === 'start' ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'I dati sono salvati nel telefono.'}<br>${cur === 'start' ? (e.code === 209 ? '<b>La pila è scarica:</b> cambiala (CR2025), poi ' : e.code === 106 ? 'La fascia ha rifiutato l’avvio: di solito si sblocca <b>riavviandola</b>. Stacca il sensore dalla cinghia, aspetta 2-3 minuti, riaggancialo, bagna gli elettrodi, indossa la fascia, poi ' : 'Controlla di avere <b>la fascia indossata</b>, con il sensore agganciato e gli elettrodi bagnati, aspetta un minuto, poi ') : ''}${cur === 'start' ? 'avvicina' : 'Avvicina'} il telefono alla fascia e tocca di nuovo il pulsante in alto: riprende da dove si era fermato.<br><span class="note">Dettaglio: ${e.message}</span>`);
+      const gia = salvate ? (salvate === 1 ? ' La registrazione già scaricata è salvata nel telefono.' : ' Le ' + salvate + ' registrazioni già scaricate sono salvate nel telefono.') : '';
+      const dati = e.conflitto ? `<b>Non ho cancellato niente dalla fascia.</b> Nel telefono c'è già una registrazione con lo stesso nome (${esc(e.conflitto)}), non ancora arrivata al medico, e i battiti sono diversi: per non perdere niente non la sostituisco. Prima tocca <b>«Riprova solo l'invio»</b> qui sotto; quando è arrivata, tocca di nuovo il pulsante in alto.${gia}`
+        : cur === 'conn' || cur === 'stop' ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.'
+        : cur === 'dl' || cur === 'save' ? 'Nessun dato è andato perso: la registrazione che stavo scaricando è ancora nella fascia.' + gia
+        : cur === 'del' ? 'Le registrazioni scaricate sono salvate nel telefono (questa è anche ancora nella fascia).'
+        : 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.';
+      const ferma = fermaDal != null ? '<br>' + fraseFerma(fermaDal, finale) : '';
+      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${dati}${ferma}<br>${cur === 'start' ? (e.code === 209 ? '<b>La pila è scarica:</b> cambiala (CR2025), poi ' : e.code === 106 ? 'La fascia ha rifiutato l’avvio: di solito si sblocca <b>riavviandola</b>. Stacca il sensore dalla cinghia, aspetta 2-3 minuti, riaggancialo, bagna gli elettrodi, indossa la fascia, poi ' : 'Controlla di avere <b>la fascia indossata</b>, con il sensore agganciato e gli elettrodi bagnati, aspetta un minuto, poi ') : ''}${e.conflitto ? '' : (cur === 'start' ? 'avvicina' : 'Avvicina') + ' il telefono alla fascia e tocca di nuovo il pulsante in alto: riprende da dove si era fermato.'}<br><span class="note">Dettaglio: ${esc(e.message)}</span>`);
       $('retryRow').style.display = '';   // i dati già salvati si possono comunque mandare
       throw Object.assign(new Error('fascia'), { gestito: true });
     }
@@ -1264,59 +1493,87 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       s.src = url + '&callback=' + cb; document.head.appendChild(s);
     });
   }
+  // errore con "rifiuto": il Drive ha risposto ma ha detto di no (per esempio codice non valido); senza: rete
   async function suDrive(code, nomi) {
     const r = await jsonp(UPLOAD_URL + '?kind=mon24check&code=' + encodeURIComponent(code) + '&files=' + encodeURIComponent(nomi.join(',')));
-    if (!r || !r.ok) throw new Error((r && r.error) || 'verifica non riuscita');
+    if (!r || !r.ok) throw Object.assign(new Error((r && r.error) || 'verifica non riuscita'), { rifiuto: !!r });
     return r;
   }
   // arrivato = una qualsiasi versione del file sul Drive ha esattamente la nostra lunghezza (le versioni _v2, _v3… le crea il server)
-  const arrivato = (it, r) => (r.versioni && Array.isArray(r.versioni[it.fname])) ? r.versioni[it.fname].includes(it.len) : (r.files || {})[it.fname] === it.len;
+  const arrivato = (it, r) => !!r && ((r.versioni && Array.isArray(r.versioni[it.fname])) ? r.versioni[it.fname].includes(it.len) : (r.files || {})[it.fname] === it.len);
+  const lunghezze = (r, fname) => r && r.versioni && Array.isArray(r.versioni[fname]) ? r.versioni[fname] : r && r.files && fname in r.files ? [r.files[fname]] : [];
+  // Il Drive conferma l'arrivo solo dalla lunghezza. Se con lo stesso nome c'è già un file della stessa lunghezza (stesso minuto,
+  // oppure FINE.json di un monitoraggio precedente) la conferma sarebbe ambigua: il nostro si allunga di poco con il campo
+  // "controllo" finché la lunghezza è unica. Il NOME non cambia (l'Apps Script accetta solo i nomi previsti).
+  function lunghezzaUnica(obj, lens, spazi) {
+    const o = Object.assign({}, obj); let k = 0, s;
+    do { if (k) o.controllo = 'x'.repeat(k); s = JSON.stringify(o, null, spazi || undefined); k++; } while (lens.includes(nByte(s)) && k < 300);
+    return s;
+  }
   async function elementiDaInviare() {
     const regs = (await allRegs()).sort((a, b) => (a.startedAt || startFromId(a.id) || a.savedAt) - (b.startedAt || startFromId(b.id) || b.savedAt));
     const its = regs.map(r => ({ tipo: 'csv', fname: 'h10_' + r.id + '.csv', data: buildCsv(r), type: 'text/csv' }));
-    const ex = DIARIO24.esporta(Date.now());
-    if (ex.n) { const d = new Date(); its.push({ tipo: 'diario', fname: 'diario_' + oggiLocale() + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '.json', data: JSON.stringify(ex.out, null, 1), type: 'application/json', chiuse: ex.chiuse }); }
+    // una sola ora per il nome del diario e per il suo contenuto (a cavallo della mezzanotte prima potevano non coincidere)
+    const t = Date.now(), d = new Date(t), ex = DIARIO24.esporta(t);
+    if (ex.n) its.push({ tipo: 'diario', fname: 'diario_' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '.json', obj: ex.out, data: JSON.stringify(ex.out, null, 1), type: 'application/json', inviate: ex.inviate });
     for (const it of its) it.len = nByte(it.data);
     return its;
   }
-  async function postFile(code, it) {
+  async function postFile(code, it) {   // true = la richiesta è partita; false = errore di rete (il contenuto della risposta non si legge)
     const body = new URLSearchParams({ kind: 'mon24', code, fname: it.fname, data: it.data, consent: '1', ts: new Date().toISOString() });
-    try { await fetch(UPLOAD_URL, { method: 'POST', mode: 'no-cors', body }); } catch (e) { log('Invio ' + it.fname + ': ' + e.message); }
+    try { await fetch(UPLOAD_URL, { method: 'POST', mode: 'no-cors', body }); return true; } catch (e) { log('Invio ' + it.fname + ': ' + e.message); return false; }
   }
-  // Ritorna { tutto, diarioArrivato, motivo }. Non lancia: scrive i passi e restituisce l'esito.
+  // Ritorna { tutto, diarioArrivato, motivo, vecchio, scartati, … }. Non lancia: scrive i passi e restituisce l'esito.
   async function invio(code) {
     const items = await elementiDaInviare();
-    if (!items.length) { step('send', 'skip', 'niente da mandare'); return { tutto: true, vuoto: true, diarioArrivato: false }; }
+    // una registrazione con un nome che l'Apps Script non accetta non si manda (verrebbe rifiutata per sempre) e non blocca il resto
+    const scartati = items.filter(i => i.tipo === 'csv' && !NOME_OK.test(i.fname)), validi = items.filter(i => !scartati.includes(i));
+    if (scartati.length) log('Nomi che il Drive non accetta, non mandati: ' + scartati.map(i => i.fname).join(', '));
+    if (!validi.length) { step('send', 'skip', 'niente da mandare'); return { tutto: true, vuoto: true, diarioArrivato: false, scartati }; }
     step('send', 'wait', 'controllo cosa ha già il medico');
     let r0;
-    try { r0 = await suDrive(code, items.map(i => i.fname)); }
-    catch (e) { log('Verifica iniziale: ' + e.message); step('send', 'no', 'non raggiungo il Drive'); return { tutto: false, motivo: 'rete' }; }
-    const nuovi = items.filter(i => i.tipo === 'diario' || !arrivato(i, r0));
-    log(`Invio al Drive: ${items.length} file, già presenti ${items.length - nuovi.length}, da mandare ${nuovi.length}`);
-    for (let i = 0; i < nuovi.length; i++) { step('send', 'wait', `${i + 1} di ${nuovi.length}`); await postFile(code, nuovi[i]); }
+    try { r0 = await suDrive(code, validi.map(i => i.fname)); }
+    catch (e) { log('Verifica iniziale: ' + e.message); step('send', 'no', e.rifiuto ? 'il Drive ha rifiutato la richiesta' : 'non raggiungo il Drive'); return { tutto: false, motivo: e.rifiuto ? 'rifiutato' : 'rete', dettaglio: e.rifiuto ? e.message : '', ko: validi, scartati }; }
+    for (const it of validi) if (it.tipo === 'diario') { const lens = lunghezze(r0, it.fname); if (lens.includes(it.len)) { it.data = lunghezzaUnica(it.obj, lens, 1); it.len = nByte(it.data); log('Diario: lunghezza resa unica (' + it.len + ' byte)'); } }
+    // si manda SEMPRE ciò che non è segnato come arrivato con la lunghezza di adesso, anche se sul Drive c'è un file di uguale
+    // lunghezza (potrebbe essere diverso): il server non salva due volte un file identico
+    const inviati0 = (await getMeta('inviati')) || {};
+    const nuovi = validi.filter(i => i.tipo === 'diario' || inviati0[i.fname] !== i.len || !arrivato(i, r0));
+    log(`Invio al Drive: ${validi.length} file, già confermati ${validi.length - nuovi.length}, da mandare ${nuovi.length}`);
+    for (let i = 0; i < nuovi.length; i++) { step('send', 'wait', `${i + 1} di ${nuovi.length}`); nuovi[i].postOk = await postFile(code, nuovi[i]); }
     step('send', 'ok', nuovi.length ? 'spedito' : 'niente di nuovo'); step('check', 'wait');
-    let arr = {};
+    let arr = null;
     for (let tent = 0; tent < 3; tent++) {
-      try { arr = await suDrive(code, items.map(i => i.fname)); } catch (e) { log('Verifica finale: ' + e.message); }
-      if (items.every(i => arrivato(i, arr))) break;
-      await new Promise(r => setTimeout(r, FINTA ? 5 : 4000));
+      try { arr = await suDrive(code, validi.map(i => i.fname)); } catch (e) { log('Verifica finale: ' + e.message); }
+      if (arr && validi.every(i => arrivato(i, arr))) break;
+      await sleep(FINTA ? 5 : 4000);
     }
-    const ok = items.filter(i => arrivato(i, arr)), ko = items.filter(i => !arrivato(i, arr));
+    const ok = validi.filter(i => arrivato(i, arr)), ko = validi.filter(i => !ok.includes(i));
     const inviati = (await getMeta('inviati')) || {}; for (const i of ok) if (i.tipo === 'csv') inviati[i.fname] = i.len; await setMeta('inviati', inviati);
     log(`Arrivati ${ok.length}, non confermati ${ko.length}` + (ko.length ? ': ' + ko.map(i => i.fname).join(', ') : ''));
     step('check', ko.length ? 'no' : 'ok', ko.length ? `${ko.length} non ancora` : 'tutto arrivato');
-    const dia = items.find(i => i.tipo === 'diario');
-    return { tutto: !ko.length, diarioArrivato: !!(dia && arrivato(dia, arr)), dia, ok, ko };
+    const dia = validi.find(i => i.tipo === 'diario');
+    // rete = il Drive non si raggiunge (o la spedizione stessa è fallita); rifiutato = il Drive risponde ma il file non c'è
+    const motivo = !ko.length ? null : (!arr || ko.some(i => i.postOk === false)) ? 'rete' : 'rifiutato';
+    return { tutto: !ko.length, diarioArrivato: !!(dia && ok.includes(dia)), dia, ok, ko, motivo, vecchio: !!arr && !arr.versioni, scartati };
   }
   // Azzera il diario solo dopo la conferma di arrivo e con una copia di sicurezza verificata. Ritorna una frase o lancia.
   async function azzeraDopoInvio(dia) {
     step('reset', 'wait');
     await faiCopia('prima dell\'azzeramento dopo l\'invio');
-    const n = DIARIO24.rimuoviInviate(dia.chiuse);
+    const n = DIARIO24.rimuoviInviate(dia.inviate);
     step('reset', 'ok', n ? n + ' voci spostate nella copia di sicurezza' : 'niente da togliere');
     return n;
   }
-  const FRASE_NON_ARRIVATO = '<b>Non tutto è arrivato al medico.</b> Controlla di avere internet e tocca <b>«Riprova solo l\'invio»</b>: rimanda quello che manca. Il diario <b>non è stato azzerato</b>, quindi non si perde niente.';
+  function fraseNonArrivato(es) {
+    const coda = ' Il diario <b>non è stato azzerato</b>, quindi non si perde niente.';
+    if (es.motivo !== 'rifiutato') return '<b>Non tutto è arrivato al medico: non riesco a raggiungere il Drive.</b> Controlla di avere internet e tocca <b>«Riprova solo l\'invio»</b>: rimanda quello che manca.' + coda;
+    const cosa = (es.ko || []).map(i => i.tipo === 'diario' ? 'il diario' : 'la registrazione ' + esc(i.fname.replace(/^h10_|\.csv$/g, ''))).join(', ');
+    const diarioNonRiconosciuto = es.vecchio && (es.ko || []).some(i => i.tipo === 'diario');
+    return `<b>Non tutto è arrivato al medico.</b> Il Drive del medico risponde (non è un problema di connessione), ma ${es.dettaglio ? 'ha rifiutato l\'invio: ' + esc(es.dettaglio) : 'non ha accettato ' + (cosa || 'i file')}.` +
+      (diarioNonRiconosciuto ? ' Il programma del medico che riceve i file <b>non riconosce ancora il nome nuovo del diario</b>: avvisa il medico, deve aggiornarlo.' : ' <b>Avvisa il medico</b>; intanto puoi riprovare con «Riprova solo l\'invio».') + coda;
+  }
+  const avvisoScartati = es => es && es.scartati && es.scartati.length ? `<br><b>Attenzione:</b> ${es.scartati.length === 1 ? 'una registrazione ha' : es.scartati.length + ' registrazioni hanno'} un nome che il Drive del medico non accetta (${es.scartati.map(i => esc(i.fname)).join(', ')}): non si può mandare da qui e resta sul telefono. Usa «Condividi registrazioni e diario in un altro modo» in «Altre opzioni» e avvisa il medico.` : '';
 
   /* ---------- il processo unico ---------- */
   async function processo(opts = {}) {
@@ -1326,37 +1583,64 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const code = leggiCodice();
     if (!RE_COD.test(code)) { resetSteps(); $('codeRow').style.display = 'block'; out('warn', 'Scrivi il tuo <b>codice</b> (te l\'ha dato il medico, per esempio MF-AB12CD) e tocca di nuovo il pulsante in alto.'); $('inCodice').focus(); window.scrollTo(0, 0); return; }
     try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
-    setBusy(true); resetSteps(); keepAwake();
-    let esito = null, fascia = null;
+    setBusy(true); resetSteps();
+    let esito = null, fascia = null, ch = null;
     try {
-      try { fascia = await parteFascia(restart); }
+      // due avvii nello stesso minuto darebbero lo stesso identificativo a due registrazioni diverse: almeno 2 minuti tra un avvio e il processo dopo
+      const m0 = await getMeta('ultimoAvvio').catch(() => null), dt = m0 && m0.t > 0 ? Date.now() - m0.t : null;
+      if (dt != null && dt > -60000 && dt < ATTESA_MIN) {
+        out('warn', `La registrazione è ripartita alle <b>${hm(m0.t)}</b>, meno di 2 minuti fa: non serve un altro cambio adesso. Se qualcosa non è arrivato al medico usa <b>«Riprova solo l'invio»</b>; altrimenti aspetta ancora ${Math.max(1, Math.ceil((ATTESA_MIN - dt) / 1000))} secondi e tocca di nuovo.`);
+        $('retryRow').style.display = ''; window.scrollTo(0, 0); return;
+      }
+      keepAwake();
+      if (finale) {   // la chiusura si ricorda nel telefono finché FINE.json non è confermato sul Drive (anche dopo «Riprova solo l'invio»)
+        ch = await getMeta('chiusura');
+        if (!ch || ch.codice !== code) ch = { t: Date.now(), codice: code, data: JSON.stringify({ chiuso: new Date().toISOString(), codice: code }) };
+        ch.fase = 'fascia'; await setMeta('chiusura', ch);
+      }
+      try { fascia = await parteFascia(restart, finale); }
       catch (e) { if (e && e.gestito) return; throw e; }
+      if (finale) { ch.fase = 'invio'; await setMeta('chiusura', ch); }
       esito = await invio(code);
       let diarioFatto = false, diarioNota = '';
       if (esito.tutto && esito.diarioArrivato) {
         try { await azzeraDopoInvio(esito.dia); diarioFatto = true; }
-        catch (e) { log('Azzeramento del diario non riuscito: ' + e.message); step('reset', 'no'); diarioNota = '<br><b>Il diario non è stato azzerato</b> (' + e.message + '): non si è perso niente.'; }
+        catch (e) { log('Azzeramento del diario non riuscito: ' + e.message); step('reset', 'no'); diarioNota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + '): non si è perso niente.'; }
       } else if (esito.tutto && esito.vuoto) { step('reset', 'skip'); }
       else step('reset', 'skip', 'in attesa dell\'invio');
-      if (finale && esito.tutto) await chiudiMonitoraggio(code);
-      const concluso = finale && esito.tutto;
-      if (esito.tutto) {
-        out('ok', concluso ? '<b>Monitoraggio concluso.</b> La fascia non registra più e tutti i dati sono arrivati al medico.' + diarioNota
-          : `<b>Fatto.</b> ${fascia.avviato ? 'La fascia sta registrando di nuovo.' : '<b>La fascia non è ripartita</b> (vedi sotto).'} Tutto è arrivato al medico${diarioFatto ? ' e il diario riparte da capo (con una copia di sicurezza)' : ''}.${diarioNota} ${fascia.avviato ? 'Puoi chiudere la pagina e allontanarti dal telefono.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}`);
+      // ordine: fascia → invio → diario → FINE.json. «Concluso» SOLO se FINE.json è confermato dal Drive
+      const chiusa = finale && esito.tutto ? await chiudiMonitoraggio(code, ch) : false;
+      const tuttoTxt = esito.scartati && esito.scartati.length ? 'Tutto il resto è arrivato al medico' : 'Tutto è arrivato al medico';
+      if (esito.tutto && finale) {
+        out(chiusa ? 'ok' : 'bad', chiusa ? '<b>Monitoraggio concluso.</b> La fascia non registra più e tutti i dati sono arrivati al medico.' + diarioNota + avvisoScartati(esito)
+          : `<b>I dati sono arrivati al medico, ma la fine del monitoraggio non è ancora confermata.</b> La fascia è ferma (non registra più). Tocca <b>«Completa la fine del monitoraggio»</b> in alto quando hai internet: manda solo il segno di chiusura.${diarioNota}${avvisoScartati(esito)}`);
+        if (!chiusa) $('retryRow').style.display = '';
+      } else if (esito.tutto) {
+        out(fascia.avviato ? 'ok' : 'warn', `<b>Fatto.</b> ${fascia.avviato ? 'La fascia sta registrando di nuovo.' : '<b>La fascia non è ripartita</b> (vedi sotto).'} ${tuttoTxt}${diarioFatto ? ' e il diario riparte da capo (con una copia di sicurezza)' : ''}.${diarioNota} ${fascia.avviato ? 'Puoi chiudere la pagina e allontanarti dal telefono.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
       } else {
-        out('bad', `${fascia.avviato ? 'La fascia è ripartita e i dati sono salvati sul telefono. ' : (finale ? 'I dati sono salvati sul telefono. ' : 'I dati sono salvati sul telefono. ')}${FRASE_NON_ARRIVATO}${fascia.nota ? '<br>' + fascia.nota : ''}`);
+        out('bad', `${fascia.avviato ? 'La fascia è ripartita e i dati sono salvati sul telefono. ' : 'I dati sono salvati sul telefono. '}${fraseNonArrivato(esito)}${finale ? ' La fine del monitoraggio verrà registrata con il prossimo invio riuscito.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
         $('retryRow').style.display = '';
       }
     } catch (e) {
-      log('Errore imprevisto: ' + e.message); out('bad', 'Qualcosa non ha funzionato: ' + e.message + '. I dati già salvati sul telefono non si perdono.'); $('retryRow').style.display = '';
-    } finally { setBusy(false); aggiorna(); }
+      log('Errore imprevisto: ' + e.message); out('bad', 'Qualcosa non ha funzionato: ' + esc(e.message) + '. I dati già salvati sul telefono non si perdono.'); $('retryRow').style.display = '';
+    } finally { setBusy(false); releaseAwake(); aggiorna(); }
   }
-  // la chiusura vera: un piccolo file "FINE.json" nella cartella del paziente (il server non lo sostituisce mai)
-  async function chiudiMonitoraggio(code) {
-    const it = { tipo: 'fine', fname: 'FINE.json', data: JSON.stringify({ chiuso: new Date().toISOString(), codice: code }), type: 'application/json' }; it.len = nByte(it.data);
+  // la chiusura vera: un piccolo file "FINE.json" nella cartella del paziente (il server non lo sostituisce mai).
+  // Il contenuto resta lo stesso a ogni tentativo (salvato nel telefono): rimandato uguale, il server non ne fa una copia.
+  async function chiudiMonitoraggio(code, ch) {
+    step('chiudi', 'wait');
+    const nome = 'FINE.json';
+    try {
+      const r0 = await suDrive(code, [nome]);
+      if (!ch.unico) { ch.data = lunghezzaUnica(JSON.parse(ch.data), lunghezze(r0, nome), 0); ch.unico = true; await setMeta('chiusura', ch); }
+    } catch (e) { log('Chiusura: ' + e.message); step('chiudi', 'no', 'non raggiungo il Drive'); return false; }
+    const it = { tipo: 'fine', fname: nome, data: ch.data, type: 'application/json' }; it.len = nByte(it.data);
     await postFile(code, it);
-    for (let t = 0; t < 3; t++) { try { const r = await suDrive(code, [it.fname]); if (arrivato(it, r)) { log('Chiusura registrata sul Drive'); return true; } } catch (e) {} await new Promise(r => setTimeout(r, FINTA ? 5 : 3000)); }
-    log('Chiusura NON confermata dal Drive'); return false;
+    for (let t = 0; t < 3; t++) {
+      try { const r = await suDrive(code, [nome]); if (arrivato(it, r)) { await setMeta('fine', ch.t); await setMeta('chiusura', null); log('Chiusura registrata sul Drive'); step('chiudi', 'ok'); return true; } } catch (e) {}
+      await sleep(FINTA ? 5 : 3000);
+    }
+    log('Chiusura NON confermata dal Drive'); step('chiudi', 'no', 'non confermata'); return false;
   }
   async function soloInvio() {
     if (busy) return;
@@ -1366,37 +1650,62 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
     setBusy(true); resetSteps(); keepAwake();
     try {
+      const ch = await getMeta('chiusura');
       const esito = await invio(code);
       if (esito.tutto) {
         let fatto = false, nota = '';
-        if (esito.diarioArrivato) { try { await azzeraDopoInvio(esito.dia); fatto = true; } catch (e) { step('reset', 'no'); nota = '<br><b>Il diario non è stato azzerato</b> (' + e.message + ').'; } }
-        out('ok', `<b>Arrivato tutto al medico.</b>${fatto ? ' Il diario riparte da capo (con una copia di sicurezza).' : ''}${nota}`);
-      } else { out('bad', FRASE_NON_ARRIVATO); $('retryRow').style.display = ''; }
-    } catch (e) { out('bad', 'Invio interrotto: ' + e.message + '. Tocca di nuovo.'); $('retryRow').style.display = ''; }
-    finally { setBusy(false); aggiorna(); }
+        if (esito.diarioArrivato) { try { await azzeraDopoInvio(esito.dia); fatto = true; } catch (e) { step('reset', 'no'); nota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + ').'; } }
+        // una «Fine del monitoraggio» rimasta in sospeso si completa anche da qui
+        let fine = '', kind = 'ok';
+        if (ch && ch.fase === 'invio') { if (await chiudiMonitoraggio(code, ch)) fine = ' <b>Monitoraggio concluso.</b>'; else { kind = 'warn'; fine = ' <b>La fine del monitoraggio non è ancora confermata:</b> tocca di nuovo quando hai internet.'; } }
+        else if (ch) { kind = 'warn'; fine = ' <b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito): tocca «Completa la fine del monitoraggio» in alto, con la fascia vicina.'; }
+        out(kind, `<b>Arrivato tutto al medico.</b>${fatto ? ' Il diario riparte da capo (con una copia di sicurezza).' : ''}${nota}${fine}${avvisoScartati(esito)}`);
+        if (kind !== 'ok') $('retryRow').style.display = '';
+      } else { out('bad', fraseNonArrivato(esito) + avvisoScartati(esito)); $('retryRow').style.display = ''; }
+    } catch (e) { out('bad', 'Invio interrotto: ' + esc(e.message) + '. Tocca di nuovo.'); $('retryRow').style.display = ''; }
+    finally { setBusy(false); releaseAwake(); aggiorna(); }
   }
   async function azzeraConCopia() {
-    mostraPannello(); resetSteps();
+    if (busy) return;
+    mostraPannello(); resetSteps(); window.scrollTo(0, 0);
     try {
+      // il diario si azzera solo quando le registrazioni sono arrivate al medico: serve per leggerle
+      const na = await regsNonArrivate();
+      if (na.length) { out('bad', `<b>Non ho azzerato il diario.</b> ${quante(na.length)} al medico (manca il segno ✓) e il diario serve per leggerle. Prima tocca <b>«Invia senza toccare la fascia»</b> in «Altre opzioni»: quando è arrivato tutto, il diario riparte da solo.`); return; }
       const snap = await faiCopia('azzeramento manuale');
       if (!snap) { out('warn', 'Il diario è già vuoto.'); return; }
-      const n = DIARIO24.tieniSoloAperte();
+      const n = DIARIO24.tieniSoloAperte(snap.voci);
       out('ok', `<b>Diario azzerato.</b> ${n} voci sono nella copia di sicurezza (si conserva ${GIORNI_COPIE} giorni): in «Altre opzioni» c'è il ripristino. Le attività ancora aperte sono rimaste.`);
-    } catch (e) { out('bad', 'Non ho azzerato il diario: ' + e.message + '. Il diario è com\'era.'); }
+    } catch (e) { out('bad', 'Non ho azzerato il diario: ' + esc(e.message) + '. Il diario è com\'era.'); }
     finally { aggiorna(); }
   }
 
   /* ---------- pulsanti ---------- */
-  let endArmed = false, wipeArmed = false;
-  const dueTocchi = (btn, testo, armato, azione) => () => {
-    const b = $(btn);
-    if (!b.dataset.arm) { b.dataset.arm = '1'; b.textContent = armato; setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 4000); return; }
-    delete b.dataset.arm; b.textContent = testo; azione();
-  };
+  // doppio tocco (17/11/2026): il secondo tocco vale solo dopo almeno 600 ms dal primo (un tocco doppio involontario non
+  // conferma niente) ed entro 4 secondi; la scadenza vecchia non disarma un tocco nuovo
+  const INTERVALLO_MIN = 600;
+  function dueTocchiSu(b, testo, armato, azione, avviso) {
+    if (!b.dataset.arm) { b.dataset.arm = String(Date.now()); b.textContent = armato; clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 4000); if (avviso) avviso(); return; }
+    if (Date.now() - +b.dataset.arm < INTERVALLO_MIN) return;
+    clearTimeout(b._t); delete b.dataset.arm; b.textContent = testo; azione();
+  }
+  const dueTocchi = (btn, testo, armato, azione) => () => dueTocchiSu($(btn), testo, armato, azione);
+  function dueTocchi2(b, testo, armato, azione, avviso) { return () => dueTocchiSu(b, testo, armato, azione, avviso); }
   $('bEnd').onclick = dueTocchi('bEnd', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => { window.scrollTo(0, 0); processo({ restart: false, finale: true }); });
   $('bSoloInvio').onclick = () => soloInvio();
   $('bSoloInvio2').onclick = () => { window.scrollTo(0, 0); soloInvio(); };
-  $('bWipe').onclick = dueTocchi('bWipe', 'Cancella le registrazioni da questo telefono', 'Tocca di nuovo per cancellare', async () => { await clearAll(); aggiorna(); mostraPannello(); out('ok', 'Registrazioni cancellate da questo telefono.'); });
+  // si cancella solo ciò che è arrivato al medico nella versione di adesso, e mai durante il processo
+  $('bWipe').onclick = dueTocchi('bWipe', 'Cancella le registrazioni da questo telefono', 'Tocca di nuovo per cancellare', async () => {
+    if (busy) return;
+    mostraPannello(); resetSteps(); window.scrollTo(0, 0);
+    try {
+      const na = await regsNonArrivate(), ch = await getMeta('chiusura');
+      if (na.length) { out('bad', `<b>Non ho cancellato niente.</b> ${quante(na.length)} al medico (manca il segno ✓). Prima tocca <b>«Invia senza toccare la fascia»</b>; quando hanno tutte il segno ✓ le puoi cancellare.`); return; }
+      if (ch) { out('bad', '<b>Non ho cancellato niente.</b> La fine del monitoraggio non è ancora confermata dal Drive del medico: prima tocca «Completa la fine del monitoraggio» in alto.'); return; }
+      await clearAll(); out('ok', 'Registrazioni cancellate da questo telefono.');
+    } catch (e) { out('bad', 'Non ho cancellato niente: ' + esc(e.message)); }
+    finally { aggiorna(); }
+  });
   $('bShare').onclick = async () => {
     const files = (await elementiDaInviare()).map(i => new File([i.data], i.fname, { type: i.type }));
     if (!files.length) return;
@@ -1407,17 +1716,21 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   };
   $('bSnapNow').onclick = async () => {
     try { const s = await faiCopia('copia manuale'); $('snapOut').innerHTML = s ? `<div class="msg ok">Copia fatta: ${s.n} voci.</div>` : '<div class="msg warn">Il diario è vuoto.</div>'; renderCopie(); }
-    catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Non sono riuscito a fare la copia: ${e.message}</div>`; }
+    catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Non sono riuscito a fare la copia: ${esc(e.message)}</div>`; }
   };
 
   /* ---------- copie e ripristino ---------- */
   async function renderCopie() {
     let lista = []; try { lista = await tutteLeCopie(); } catch (e) { $('snapList').innerHTML = '<div class="note">Copie non disponibili su questo telefono.</div>'; return; }
-    $('snapList').innerHTML = lista.length ? lista.map(s => `<div><span>${fmtWhen(s.t)} · ${s.n} voci<br><span class="note">${s.motivo || ''}</span></span><span><button class="plain" data-rip="${s.t}" style="margin:0 4px 0 0">Ripristina</button><button class="plain" data-exp="${s.t}" style="margin:0">Salva</button></span></div>`).join('') : '<div class="note">Ancora nessuna copia.</div>';
-    document.querySelectorAll('[data-rip]').forEach(b => b.onclick = dueTocchi2(b, 'Ripristina', 'Tocca di nuovo', async () => {
-      try { const s = await stx('readonly', st2 => st2.get(+b.dataset.rip)); const n = DIARIO24.unisci(s.voci); $('snapOut').innerHTML = `<div class="msg ok">Ripristino fatto: ${n} voci rimesse nel diario${n < s.n ? ` (le altre ${s.n - n} c'erano già)` : ''}. Il diario di adesso non è stato toccato.</div>`; }
-      catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Ripristino non riuscito: ${e.message}</div>`; }
-    }));
+    $('snapList').innerHTML = lista.length ? lista.map(s => `<div><span>${fmtWhen(s.t)} · ${s.n} voci<br><span class="note">${esc(s.motivo || '')}</span></span><span><button class="plain" data-rip="${s.t}" style="margin:0 4px 0 0">Ripristina</button><button class="plain" data-exp="${s.t}" style="margin:0">Salva</button></span></div>`).join('') : '<div class="note">Ancora nessuna copia.</div>';
+    // primo tocco: si dice cosa succede (le voci rimesse ripartono verso il medico); secondo tocco: si ripristina
+    document.querySelectorAll('[data-rip]').forEach(b => b.onclick = dueTocchi2(b, 'Ripristina', 'Conferma', async () => {
+      try {
+        const s = await stx('readonly', st2 => st2.get(+b.dataset.rip));
+        const r = DIARIO24.unisci(s.voci, s.t);
+        $('snapOut').innerHTML = `<div class="msg ok">Ripristino fatto: ${r.n} voci rimesse nel diario${r.n < s.n ? ` (le altre ${s.n - r.n} c'erano già)` : ''}.${r.chiuse ? ` ${r.chiuse === 1 ? 'Un\'attività che nella copia era ancora in corso è stata rimessa chiusa' : r.chiuse + ' attività che nella copia erano ancora in corso sono state rimesse chiuse'} alle ${hm(s.t)}.` : ''} Le voci che c'erano già non sono state cambiate.${r.n ? ' Quelle rimesse verranno mandate di nuovo al medico con il prossimo invio.' : ''}</div>`;
+      } catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Ripristino non riuscito: ${esc(e.message)}</div>`; }
+    }, () => { $('snapOut').innerHTML = '<div class="msg warn"><b>Prima di ripristinare:</b> le voci della copia che mancano nel diario verranno rimesse e <b>mandate di nuovo al medico</b> con il prossimo invio (anche se le aveva già ricevute); le attività che nella copia erano ancora in corso tornano <b>chiuse</b> all\'ora della copia. Tocca <b>«Conferma»</b> per ripristinare.</div>'; }));
     document.querySelectorAll('[data-exp]').forEach(b => b.onclick = async () => {
       const s = await stx('readonly', st2 => st2.get(+b.dataset.exp)); if (!s) return;
       const name = 'copia_diario_' + new Date(s.t).toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json', text = JSON.stringify({ formato: 'copia-diario-24h', versione: 1, t: s.t, voci: s.voci }, null, 1);
@@ -1425,21 +1738,28 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click();
     });
   }
-  function dueTocchi2(b, testo, armato, azione) { return () => { if (!b.dataset.arm) { b.dataset.arm = '1'; b.textContent = armato; setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 4000); return; } delete b.dataset.arm; b.textContent = testo; azione(); }; }
 
   /* ---------- barra fissa e promemoria ---------- */
   async function aggiornaBarra() {
-    let m = null, ended = null, regs = [], inviati = {};
-    try { m = await getMeta('ultimoAvvio'); ended = await getMeta('fine'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; } catch (e) { log('Archivio non disponibile: ' + e.message); }
-    const concluso = !!(m && ended && ended > m.t);
-    let stato = '', livello = null, testo = '';
-    if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; livello = 'grigio'; testo = 'Non trovo l’ora dell’ultimo cambio. Appena puoi, tocca <b>«Invia dati e continua il monitoraggio»</b>: così la fascia è sotto controllo.'; }
-    else if (concluso) { stato = 'Monitoraggio concluso.'; }
+    let m = null, ended = null, regs = [], inviati = {}, sl = null, ch = null;
+    try { m = await getMeta('ultimoAvvio'); ended = await getMeta('fine'); sl = await getMeta('statoLetto'); ch = await getMeta('chiusura'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; } catch (e) { log('Archivio non disponibile: ' + e.message); }
+    const concluso = !!(ended && (!m || ended > m.t));
+    // fascia fermata da un processo (o trovata ferma) e non fatta ripartire: l'ultimo collegamento è più recente dell'ultimo avvio
+    const ferma = !concluso && !ch && !!sl && sl.recording === false && sl.t > 0 && (!m || sl.t > m.t);
+    let stato = '', livello = null, testo = '', tocca = false;
+    if (concluso) { stato = 'Monitoraggio concluso.'; }
+    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; livello = 'rosso'; testo = ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.'; }
+    else if (ferma) {
+      stato = `Registrazione <b>FERMA</b> dalle ${hm(sl.t)} (${fmtWhen(sl.t).split(' alle ')[0]}).`;
+      livello = 'rosso'; tocca = true;
+      testo = `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione: tocca qui (o «Invia dati e continua il monitoraggio») con la fascia addosso.`;
+    }
+    else if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; livello = 'grigio'; testo = 'Non trovo l’ora dell’ultimo cambio. Appena puoi, tocca <b>«Invia dati e continua il monitoraggio»</b>: così la fascia è sotto controllo.'; }
     else {
-      const h = (Date.now() - m.t) / 3600000;
+      const h = (Date.now() - m.t) / 3600000, minTot = Math.round(h * 60);   // ore e minuti dai minuti totali (mai «5 h 60 min»)
       const rr = regs.filter(r => r.type === 'rr' && r.durMin > 60), n = rr.reduce((a, r) => a + r.n, 0), mm = rr.reduce((a, r) => a + r.durMin, 0), fc = mm ? n / mm : 68;
       let restanoMin = null; try { const s = PolarCore.stimaResiduo({ id: m.id, fcMedia: fc, capienza: CAPIENZA }); if (s) restanoMin = s.restanoMin; } catch (e) {}
-      stato = `In registrazione dalle ${p2(new Date(m.t).getHours())}:${p2(new Date(m.t).getMinutes())} (${fmtWhen(m.t).split(' alle ')[0]}) · ${Math.floor(h)} h ${p2(Math.round((h % 1) * 60))} min <span style="opacity:.8">(stima: lo stato vero si vede collegando la fascia)</span>`;
+      stato = `In registrazione dalle ${hm(m.t)} (${fmtWhen(m.t).split(' alle ')[0]}) · ${Math.floor(minTot / 60)} h ${p2(minTot % 60)} min <span style="opacity:.8">(stima: lo stato vero si vede collegando la fascia)</span>`;
       const entro = restanoMin == null ? null : Math.max(0, restanoMin - 60);   // un'ora di margine
       if (h >= 22 || (restanoMin != null && restanoMin <= 90)) livello = 'rosso'; else if (h >= 19 || (restanoMin != null && restanoMin <= 240)) livello = 'giallo';
       if (livello) {
@@ -1447,15 +1767,17 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
         testo = `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`;
       }
     }
-    const daInviare = regs.filter(r => !inviati['h10_' + r.id + '.csv']).length;
+    const daInviare = regs.filter(r => !arrivataReg(r, inviati)).length;
     if (daInviare && !livello) { livello = 'grigio'; testo = `${daInviare === 1 ? '1 registrazione non è' : daInviare + ' registrazioni non sono'} ancora ${daInviare === 1 ? 'arrivata' : 'arrivate'} al medico: tocca <b>«Invia dati e continua il monitoraggio»</b> (o «Riprova solo l’invio» in «Altre opzioni»).`; }
     const fino = (() => { try { return localStorage.getItem(FINO_KEY) || ''; } catch (e) { return ''; } })();
-    const mostraFine = !!fino && oggiLocale() >= fino && !concluso;   // il pulsante compare dall'ultimo giorno del pacchetto, finché non si usa
-    $('barra').innerHTML = `<div class="stato">${stato}</div>${livello ? `<div class="promemoria ${livello}">${testo}</div>` : ''}
+    const mostraFine = !!fino && oggiLocale() >= fino && !concluso && !ch;   // il pulsante compare dall'ultimo giorno del pacchetto, finché non si usa
+    $('barra').innerHTML = `<div class="stato">${stato}</div>${livello ? `<div class="promemoria ${livello}"${tocca ? ' id="promTocca" role="button" style="cursor:pointer"' : ''}>${testo}</div>` : ''}
       <div class="azioni"><button class="primario" id="bInvia"${busy ? ' disabled' : ''}>Invia dati e continua il monitoraggio</button><button class="secondario" id="bCambia"${busy ? ' disabled' : ''}>Cambia<br><span style="font-weight:500;font-size:11.5px">ho tolto la fascia</span></button></div>
-      ${mostraFine ? `<button class="fine" id="bFineBarra"${busy ? ' disabled' : ''}>Fine del monitoraggio</button>` : ''}`;
+      ${ch ? `<button class="fine" id="bCompleta"${busy ? ' disabled' : ''}>Completa la fine del monitoraggio</button>` : mostraFine ? `<button class="fine" id="bFineBarra"${busy ? ' disabled' : ''}>Fine del monitoraggio</button>` : ''}`;
     $('bInvia').onclick = () => processo({ restart: true });
     $('bCambia').onclick = () => processo({ restart: true });
+    if (tocca) $('promTocca').onclick = () => processo({ restart: true });
+    const bc = $('bCompleta'); if (bc) bc.onclick = () => ch.fase === 'invio' ? soloInvio() : processo({ restart: false, finale: true });
     const bf = $('bFineBarra'); if (bf) bf.onclick = dueTocchi('bFineBarra', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => processo({ restart: false, finale: true }));
   }
   async function aggiornaStato() {
@@ -1466,7 +1788,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     $('state').innerHTML = (m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span>` : '') + (sl ? `<b>Ultimo collegamento</b><span>${fmtWhen(sl.t)}: la fascia ${sl.recording ? 'registrava' : 'era ferma'}</span>` : '') +
       (bat ? `<b>Batteria</b><span>${bat.v}% <span class="note">(letta ${fmtWhen(bat.t)})</span>${bat.v <= 15 ? ' · <b style="color:#a35b00">cambia la pila al prossimo cambio</b>' : ''}</span>` : '') || '<span class="note">Nessun dato.</span>';
     const tot = regs.reduce((s, r) => s + r.durMin, 0);
-    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : r.id}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${inviati['h10_' + r.id + '.csv'] ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : esc(r.id)}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${arrivataReg(r, inviati) ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
   }
   function aggiorna() { aggiornaBarra().catch(e => log('Barra: ' + e.message)); aggiornaStato().catch(() => {}); renderCopie().catch(() => {}); }
 
@@ -1475,13 +1797,15 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     invia() { processo({ restart: true }); },
     fine() { processo({ restart: false, finale: true }); },
     soloInvio, azzeraConCopia, aggiorna,
-    _prova: { faiCopia, tutteLeCopie, elementiDaInviare, arrivato },
+    _prova: { faiCopia, tutteLeCopie, elementiDaInviare, arrivato, lunghezzaUnica, lenCsv },
   };
 
   pulisciCopie().catch(e => log('Pulizia copie: ' + e.message));
   aggiorna();
   setInterval(() => { if (!busy) aggiorna(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !busy) aggiorna(); });
+  // al ritorno in primo piano: durante il processo si richiede di nuovo lo schermo acceso (il telefono lo toglie quando la pagina va
+  // in secondo piano), altrimenti si aggiornano barra e diario (il diario si rilegge da solo)
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; if (busy) keepAwake(); else aggiorna(); });
 })();
 </script>
 </body>
