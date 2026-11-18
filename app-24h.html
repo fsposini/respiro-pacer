@@ -51,6 +51,22 @@
   #barra .promemoria.giallo{background:#ffe9a8}
   #barra .promemoria.rosso{background:#ffb4ac}
   #barra .promemoria.grigio{background:rgba(255,255,255,.18);color:#fff}
+  /* riquadro di stato (18/11/2026): sempre presente, un solo posto per invio e fascia; la prima voce è la più importante */
+  #barra .promemoria.verde{background:#cdeec0;color:#1d4d12}
+  #barra .promemoria .voce+.voce{margin-top:7px}
+  #barra .promemoria .voce:first-child{font-size:15.5px}
+  #barra .promemoria.multi .voce{border-left:4px solid transparent;padding-left:8px}
+  #barra .promemoria.multi .v-rosso{border-left-color:#b3261e}
+  #barra .promemoria.multi .v-giallo{border-left-color:#b07a00}
+  #barra .promemoria.multi .v-verde{border-left-color:#2b7a1f}
+  #barra .promemoria.multi .v-grigio{border-left-color:#7d878b}
+  #barra .promemoria .nota{font-size:12.5px;opacity:.85;font-weight:400}
+  #barra .promemoria .azione{display:block;width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px 10px;font-weight:700;font-size:16px;font-family:inherit;line-height:1.2;background:#b3261e;color:#fff;cursor:pointer}
+  #barra .promemoria .azione:disabled{opacity:.55}
+  #barra .controlla{display:block;width:100%;margin-top:8px;border:2px solid rgba(255,255,255,.9);border-radius:10px;padding:9px 8px;background:rgba(255,255,255,.08);color:#fff;font-weight:700;font-size:15px;font-family:inherit;line-height:1.2;cursor:pointer}
+  #barra .controlla span{display:block;font-weight:500;font-size:11.5px;opacity:.9}
+  #barra .controlla:disabled{opacity:.55}
+  #ctrlOut .msg{margin-top:8px}
   #barra .azioni{display:flex;gap:8px;margin-top:8px}
   #barra .azioni button{border:0;border-radius:10px;padding:11px 8px;font:700 14.5px/1.2 inherit;cursor:pointer}
   #barra .azioni .primario{flex:2.2;background:#fff;color:var(--blu)}
@@ -798,7 +814,33 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
 
+  // ---- scudo contro i tocchi sbagliati sugli orari (18/11/2026) ----
+  // Segnalato da Federico: cambiando un'ora con la rotella dell'iPhone si segnava un'attività sottostante (per esempio
+  // «Respirazione di coerenza»). Cause probabili (DEDOTTE, non riprodotte su iPhone): il tocco che chiude la rotella cade sul
+  // pulsante sotto il dito, e l'elenco ridisegnato alla chiusura cambia i pulsanti sotto il dito. Rimedi: (a) mentre un orario
+  // è aperto e per 600 ms dopo la sua chiusura (o la chiusura di una finestra) i tocchi sui pulsanti delle attività, della
+  // giornata, su «Fine …» e sulla × dell'elenco si ignorano in silenzio; i pulsanti delle finestre («Annulla», «Correggi»,
+  // «Registra»…) e dei messaggi in basso restano attivi. (b) Niente si ridisegna mentre un orario è aperto: si rimanda.
+  const SCUDO_MS = 600, PROTETTI = '#groups button, #bFine, #log [data-del]';
+  let scudoFino = 0, renderRimandato = false;
+  const eOra = el => !!(el && el.matches && el.matches('input[type=time]'));
+  function oraAperta() { const a = document.activeElement; if (!eOra(a)) return false; const d = a.closest('dialog'); return !d || d.open; }   // un orario in una finestra chiusa non conta
+  const scudoAttivo = () => oraAperta() || Date.now() < scudoFino;
+  function rendiRimandato() { setTimeout(() => { if (renderRimandato && !oraAperta()) render(); }, 0); }
+  document.addEventListener('focusin', e => { if (eOra(e.target)) scudoFino = Math.max(scudoFino, Date.now() + SCUDO_MS); }, true);
+  document.addEventListener('focusout', e => { if (eOra(e.target)) { scudoFino = Date.now() + SCUDO_MS; rendiRimandato(); } }, true);
+  document.addEventListener('close', e => { if (e.target && e.target.tagName === 'DIALOG') { scudoFino = Date.now() + SCUDO_MS; rendiRimandato(); } }, true);   // «close» non risale: si prende in cattura
+  window.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest(PROTETTI) : null;
+    if (!b || !scudoAttivo()) return;
+    e.preventDefault(); e.stopImmediatePropagation();   // in silenzio: nessun messaggio al paziente
+    if (window.APP24 && APP24.log) APP24.log('Tocco ignorato su «' + (b.dataset.l || b.dataset.s || (b.dataset.del ? 'togli voce' : '') || b.textContent.trim().slice(0, 40)) + '» (subito dopo un orario o una finestra)');
+  }, true);
+
   function render() {
+    // mai ridisegnare mentre è aperta la rotella di un orario: la chiuderebbe e cambierebbe i pulsanti sotto il dito
+    if (oraAperta()) { renderRimandato = true; return; }
+    renderRimandato = false;
     const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro'), dg = apertaLabel('Digiuno');
     // attività con durata già detta ("5 minuti di respirazione"), ancora in corso
     const plan = !cur && !sl && D.voci.filter(v => !v.puntuale && v.fine && v.inizio <= Date.now() && v.fine > Date.now() && CAT[v.label] && CAT[v.label].tipo === 'durata').sort((a, b) => b.inizio - a.inizio)[0];
@@ -873,7 +915,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   // diario cambiato da un'altra pagina o scheda: si rilegge e si ridisegna (non mentre si sta cambiando un orario)
   function ricarica() {
     if (!sincronizza()) return false;
-    const a = document.activeElement; if (!(a && a.matches && a.matches('#log input[type=time]'))) render();
+    render();   // con un orario aperto render() si rimanda da solo alla chiusura (18/11/2026)
     return true;
   }
   window.DIARIO24 = {
@@ -935,7 +977,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
 
   render();
   // ogni minuto si aggiornano le durate, ma non mentre si sta cambiando un orario: ridisegnare chiuderebbe la rotella
-  setInterval(() => { const a = document.activeElement; if (a && a.matches && a.matches('#log input[type=time]')) return; render(); }, 60000);
+  setInterval(() => render(), 60000);   // render() stesso aspetta se un orario è aperto (18/11/2026)
 })();
 </script>
 
@@ -1313,12 +1355,26 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   /* ---------- passi, messaggi ---------- */
   const STEPS = [['conn', 'Collego la fascia'], ['stop', 'Fermo la registrazione'], ['dl', 'Scarico i dati'], ['save', 'Salvo nel telefono'], ['del', 'Libero la memoria della fascia'], ['start', 'Faccio ripartire la registrazione'], ['send', 'Invio al medico'], ['check', 'Controllo che sia arrivato'], ['reset', 'Faccio ripartire il diario'], ['chiudi', 'Registro la fine del monitoraggio']];
   const st = {};
-  function step(k, s, extra) { st[k] = [s, extra]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
+  // "testo" (facoltativo) sostituisce il nome del passo, per esempio «Diario: nessuna voce nuova da inviare»
+  function step(k, s, extra, testo) { st[k] = [s, extra, testo]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${st[id][2] || l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
+  const DIARIO_VUOTO = 'Diario: nessuna voce nuova da inviare';
   function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; $('retryRow').style.display = 'none'; }
   const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
   const mostraPannello = () => $('procPanel').classList.add('on');
   // durante il processo nessun altro pulsante che tocchi fascia, registrazioni o diario (anche «Cancella» e «Azzera»)
-  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } }
+  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bControlla', 'bRinvia', 'promTocca', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } }
+
+  /* ---------- segno dell'invio in sospeso (18/11/2026) ----------
+     Scritto nel telefono PRIMA di ogni invio al Drive (processo e «Invia senza toccare la fascia») e tolto SOLO quando il Drive
+     conferma l'arrivo di tutto con la lunghezza giusta (mon24check). Se la pagina si chiude a metà, alla riapertura il segno
+     c'è ancora e il riquadro in alto è rosso. Il diario con voci nuove non ancora inviate è normale e NON accende il rosso. */
+  const SOSPESO_KEY = 'hrv24.invioInSospeso.v1', CONFERMATO_KEY = 'hrv24.ultimoInvioConfermato.v1';
+  function leggiSospeso() { try { const o = JSON.parse(localStorage.getItem(SOSPESO_KEY) || 'null'); return o && typeof o === 'object' && o.t > 0 ? o : null; } catch (e) { return null; } }
+  function leggiConfermato() { try { const t = +localStorage.getItem(CONFERMATO_KEY); return t > 0 ? t : null; } catch (e) { return null; } }
+  function segnaSospeso(cosa, n) { try { localStorage.setItem(SOSPESO_KEY, JSON.stringify({ t: Date.now(), cosa, file: n })); } catch (e) { log('Segno dell\'invio in sospeso non salvato: ' + e.message); } }
+  function togliSospeso(confermato) {
+    try { localStorage.removeItem(SOSPESO_KEY); if (confermato) localStorage.setItem(CONFERMATO_KEY, String(Date.now())); } catch (e) { log('Segno dell\'invio non aggiornato: ' + e.message); }
+  }
   async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) { const w = await navigator.wakeLock.request('screen'); wakeLock = w; w.addEventListener('release', () => { if (wakeLock === w) wakeLock = null; }); if (!busy) releaseAwake(); } } catch (e) { log('Schermo sempre acceso non disponibile: ' + e.message); } }
   // a processo finito lo schermo torna a spegnersi da solo (prima restava acceso finché non si chiudeva la pagina)
   async function releaseAwake() { const w = wakeLock; wakeLock = null; try { if (w) await w.release(); } catch (e) {} }
@@ -1335,7 +1391,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     if (!device) {
       const opt = ['heart_rate', 'battery_service', PolarCore.PSFTP_SERVICE];
       try { device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }], optionalServices: opt }); }
-      catch (e) { if (e && e.name === 'NotFoundError') throw Object.assign(new Error('Nessuna fascia scelta. Tocca di nuovo il pulsante in alto e scegli "Polar H10" dall\'elenco.'), { user: true }); throw e; }
+      catch (e) { if (e && e.name === 'NotFoundError') throw Object.assign(new Error('Nessuna fascia scelta. Tocca di nuovo il pulsante in alto e scegli "Polar H10" dall\'elenco.'), { user: true, nonScelta: true }); throw e; }
       device.addEventListener('gattserverdisconnected', () => { log('Fascia scollegata'); if (psftp) psftp.fail(new Error('la fascia si è scollegata')); psftp = null; });
       log('Fascia: ' + (device.name || '(senza nome)'));
     }
@@ -1524,16 +1580,19 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     try { await fetch(UPLOAD_URL, { method: 'POST', mode: 'no-cors', body }); return true; } catch (e) { log('Invio ' + it.fname + ': ' + e.message); return false; }
   }
   // Ritorna { tutto, diarioArrivato, motivo, vecchio, scartati, … }. Non lancia: scrive i passi e restituisce l'esito.
-  async function invio(code) {
+  async function invio(code, cosa) {
     const items = await elementiDaInviare();
     // una registrazione con un nome che l'Apps Script non accetta non si manda (verrebbe rifiutata per sempre) e non blocca il resto
     const scartati = items.filter(i => i.tipo === 'csv' && !NOME_OK.test(i.fname)), validi = items.filter(i => !scartati.includes(i));
+    const dia = validi.find(i => i.tipo === 'diario');   // assente = nel diario non c'è nessuna voce da mandare
     if (scartati.length) log('Nomi che il Drive non accetta, non mandati: ' + scartati.map(i => i.fname).join(', '));
-    if (!validi.length) { step('send', 'skip', 'niente da mandare'); return { tutto: true, vuoto: true, diarioArrivato: false, scartati }; }
+    // niente da mandare: niente può essere in sospeso (si toglie anche un segno rimasto da prima, altrimenti il rosso non si spegnerebbe mai)
+    if (!validi.length) { step('send', 'skip', 'niente da mandare'); togliSospeso(false); return { tutto: true, vuoto: true, diarioArrivato: false, scartati }; }
+    segnaSospeso(cosa || 'invio', validi.length);   // PRIMA di qualsiasi richiesta al Drive
     step('send', 'wait', 'controllo cosa ha già il medico');
     let r0;
     try { r0 = await suDrive(code, validi.map(i => i.fname)); }
-    catch (e) { log('Verifica iniziale: ' + e.message); step('send', 'no', e.rifiuto ? 'il Drive ha rifiutato la richiesta' : 'non raggiungo il Drive'); return { tutto: false, motivo: e.rifiuto ? 'rifiutato' : 'rete', dettaglio: e.rifiuto ? e.message : '', ko: validi, scartati }; }
+    catch (e) { log('Verifica iniziale: ' + e.message); step('send', 'no', e.rifiuto ? 'il Drive ha rifiutato la richiesta' : 'non raggiungo il Drive'); return { tutto: false, motivo: e.rifiuto ? 'rifiutato' : 'rete', dettaglio: e.rifiuto ? e.message : '', ko: validi, dia, scartati }; }
     for (const it of validi) if (it.tipo === 'diario') { const lens = lunghezze(r0, it.fname); if (lens.includes(it.len)) { it.data = lunghezzaUnica(it.obj, lens, 1); it.len = nByte(it.data); log('Diario: lunghezza resa unica (' + it.len + ' byte)'); } }
     // si manda SEMPRE ciò che non è segnato come arrivato con la lunghezza di adesso, anche se sul Drive c'è un file di uguale
     // lunghezza (potrebbe essere diverso): il server non salva due volte un file identico
@@ -1552,7 +1611,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const inviati = (await getMeta('inviati')) || {}; for (const i of ok) if (i.tipo === 'csv') inviati[i.fname] = i.len; await setMeta('inviati', inviati);
     log(`Arrivati ${ok.length}, non confermati ${ko.length}` + (ko.length ? ': ' + ko.map(i => i.fname).join(', ') : ''));
     step('check', ko.length ? 'no' : 'ok', ko.length ? `${ko.length} non ancora` : 'tutto arrivato');
-    const dia = validi.find(i => i.tipo === 'diario');
+    if (!ko.length) { togliSospeso(true); log('Invio confermato dal Drive: segno «in sospeso» tolto'); }   // SOLO con la conferma di tutto
     // rete = il Drive non si raggiunge (o la spedizione stessa è fallita); rifiutato = il Drive risponde ma il file non c'è
     const motivo = !ko.length ? null : (!arr || ko.some(i => i.postOk === false)) ? 'rete' : 'rifiutato';
     return { tutto: !ko.length, diarioArrivato: !!(dia && ok.includes(dia)), dia, ok, ko, motivo, vecchio: !!arr && !arr.versioni, scartati };
@@ -1583,7 +1642,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const code = leggiCodice();
     if (!RE_COD.test(code)) { resetSteps(); $('codeRow').style.display = 'block'; out('warn', 'Scrivi il tuo <b>codice</b> (te l\'ha dato il medico, per esempio MF-AB12CD) e tocca di nuovo il pulsante in alto.'); $('inCodice').focus(); window.scrollTo(0, 0); return; }
     try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
-    setBusy(true); resetSteps();
+    setBusy(true); resetSteps(); mostraCtrl(null);
     let esito = null, fascia = null, ch = null;
     try {
       // due avvii nello stesso minuto darebbero lo stesso identificativo a due registrazioni diverse: almeno 2 minuti tra un avvio e il processo dopo
@@ -1601,12 +1660,12 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       try { fascia = await parteFascia(restart, finale); }
       catch (e) { if (e && e.gestito) return; throw e; }
       if (finale) { ch.fase = 'invio'; await setMeta('chiusura', ch); }
-      esito = await invio(code);
+      esito = await invio(code, finale ? 'Fine del monitoraggio' : 'Invia dati e continua il monitoraggio');
       let diarioFatto = false, diarioNota = '';
       if (esito.tutto && esito.diarioArrivato) {
         try { await azzeraDopoInvio(esito.dia); diarioFatto = true; }
         catch (e) { log('Azzeramento del diario non riuscito: ' + e.message); step('reset', 'no'); diarioNota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + '): non si è perso niente.'; }
-      } else if (esito.tutto && esito.vuoto) { step('reset', 'skip'); }
+      } else if (!esito.dia) step('reset', 'skip', '', DIARIO_VUOTO);   // nessuna voce nel diario: non c'è niente da aspettare (18/11/2026)
       else step('reset', 'skip', 'in attesa dell\'invio');
       // ordine: fascia → invio → diario → FINE.json. «Concluso» SOLO se FINE.json è confermato dal Drive
       const chiusa = finale && esito.tutto ? await chiudiMonitoraggio(code, ch) : false;
@@ -1648,13 +1707,14 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const code = leggiCodice();
     if (!RE_COD.test(code)) { resetSteps(); $('codeRow').style.display = 'block'; out('warn', 'Scrivi il tuo <b>codice</b> e tocca di nuovo.'); $('inCodice').focus(); return; }
     try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
-    setBusy(true); resetSteps(); keepAwake();
+    setBusy(true); resetSteps(); mostraCtrl(null); keepAwake();
     try {
       const ch = await getMeta('chiusura');
-      const esito = await invio(code);
+      const esito = await invio(code, 'Invia senza toccare la fascia');
       if (esito.tutto) {
         let fatto = false, nota = '';
         if (esito.diarioArrivato) { try { await azzeraDopoInvio(esito.dia); fatto = true; } catch (e) { step('reset', 'no'); nota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + ').'; } }
+        else if (!esito.dia) step('reset', 'skip', '', DIARIO_VUOTO);
         // una «Fine del monitoraggio» rimasta in sospeso si completa anche da qui
         let fine = '', kind = 'ok';
         if (ch && ch.fase === 'invio') { if (await chiudiMonitoraggio(code, ch)) fine = ' <b>Monitoraggio concluso.</b>'; else { kind = 'warn'; fine = ' <b>La fine del monitoraggio non è ancora confermata:</b> tocca di nuovo quando hai internet.'; } }
@@ -1678,6 +1738,55 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       out('ok', `<b>Diario azzerato.</b> ${n} voci sono nella copia di sicurezza (si conserva ${GIORNI_COPIE} giorni): in «Altre opzioni» c'è il ripristino. Le attività ancora aperte sono rimaste.`);
     } catch (e) { out('bad', 'Non ho azzerato il diario: ' + esc(e.message) + '. Il diario è com\'era.'); }
     finally { aggiorna(); }
+  }
+
+  /* ---------- «Controlla la fascia» (18/11/2026): SOLA LETTURA ----------
+     Stesso collegamento del primo passo del processo, poi legge soltanto lo stato (e la batteria, letta collegandosi): non ferma,
+     non scarica, non cancella, non fa ripartire niente. Annota l'esito nell'archivio come fa già il processo: statoLetto e, se
+     registra, ultimoAvvio letto dalla fascia. Così la barra non è più una stima. Il risultato compare nel riquadro in alto;
+     sotto il pulsante solo l'avanzamento e gli errori, in parole semplici (il dettaglio tecnico va nel registro). */
+  let ctrlMsg = null;   // { kind, html, t }: messaggio sotto «Controlla la fascia»; sparisce da solo dopo 3 minuti
+  const CTRL_MS = 180000;
+  const testoCtrl = () => ctrlMsg && Date.now() - ctrlMsg.t < CTRL_MS ? `<div class="msg ${ctrlMsg.kind}">${ctrlMsg.html}</div>` : '';
+  function mostraCtrl(kind, html) { ctrlMsg = kind ? { kind, html, t: Date.now() } : null; const el = $('ctrlOut'); if (el) el.innerHTML = testoCtrl(); }
+  function fraseErroreControllo(e) {
+    const msg = String((e && e.message) || ''), nulla = ' <b>Non ho toccato niente</b>: se stava registrando, continua.';
+    if (e && e.nonScelta) return 'Nessuna fascia scelta. Tocca di nuovo <b>«Controlla la fascia»</b> e scegli «Polar H10» dall\'elenco. Se non compare, avvicina il telefono alla fascia (deve essere indossata).';
+    if (e && e.user) return esc(msg);   // per esempio: browser senza Bluetooth (va aperta in Bluefy)
+    if (/in progress|already|busy|occupat/i.test(msg)) return '<b>La fascia è occupata in questo momento</b>, forse da un\'altra app o da un\'altra pagina (per esempio Polar Beat o il Respiro Pacer). Chiudile, aspetta un minuto e tocca di nuovo «Controlla la fascia».' + nulla;
+    return '<b>Non riesco a collegarmi alla fascia</b>: forse è lontana o non è indossata. Avvicina il telefono alla fascia (indossata, con gli elettrodi bagnati) e tocca di nuovo «Controlla la fascia».' + nulla;
+  }
+  async function controllaFascia() {
+    if (busy) return;   // durante il processo (o un altro controllo) non si tocca la fascia
+    setBusy(true);
+    mostraCtrl('warn', 'Mi collego alla fascia… <b>Leggo soltanto</b>: non fermo, non cancello e non faccio ripartire niente. Può volerci fino a un minuto.');
+    const t0 = Date.now();
+    try {
+      await retry('Collegamento', async () => {});   // come il primo passo del processo
+      const s = await retry('Stato', () => psftp.status());
+      log('Controllo (sola lettura): registrando=' + s.recording + ', identificativo="' + s.id + '"');
+      const ora = Date.now(), m0 = await getMeta('ultimoAvvio'), prev = await getMeta('statoLetto'), fine = await getMeta('fine'), ch = await getMeta('chiusura');
+      const bat = await getMeta('batteria'), batt = bat && bat.t >= t0 ? bat.v : null;
+      log('Batteria ' + (batt != null ? batt + '%' : 'non letta in questo controllo'));
+      if (s.recording) {
+        // partenza letta dalla fascia: identico al processo (parteFascia)
+        if (startFromId(s.id) && (!m0 || m0.id !== s.id)) { await setMeta('ultimoAvvio', { id: s.id, t: startFromId(s.id) }); log('Partenza letta dalla fascia: ' + s.id); }
+        await setMeta('statoLetto', { t: ora, recording: true, id: s.id || '', fonte: 'controllo' });
+        mostraCtrl(startFromId(s.id) ? null : 'warn', startFromId(s.id) ? '' : '<b>La fascia sta registrando</b>, ma non riconosco l\'ora di partenza (forse è stata avviata da un\'altra app). Avvisa il medico.');
+      } else {
+        // fermata da un cambio interrotto: si tiene l'ora dello stop (più utile) e si annota solo che è stata ricontrollata
+        const fermaProcesso = prev && prev.recording === false && !prev.fonte && prev.t > 0 && (!m0 || prev.t > m0.t);
+        await setMeta('statoLetto', fermaProcesso ? Object.assign({}, prev, { verificato: ora }) : { t: ora, recording: false, id: s.id || '', fonte: 'controllo' });
+        const concluso = !!(fine && (!m0 || fine > m0.t));
+        mostraCtrl(concluso || ch ? 'ok' : null, concluso ? 'La fascia non registra: il monitoraggio è <b>concluso</b>, va bene così.' : ch ? 'La fascia non registra: è normale dopo «Fine del monitoraggio». Tocca «Completa la fine del monitoraggio».' : '');
+      }
+    } catch (e) {
+      log('Controllo della fascia non riuscito: ' + (e.name || '') + ' ' + e.message);
+      mostraCtrl('bad', fraseErroreControllo(e));
+    } finally {
+      try { if (device && device.gatt && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
+      setBusy(false); releaseAwake(); aggiorna();
+    }
   }
 
   /* ---------- pulsanti ---------- */
@@ -1739,44 +1848,96 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     });
   }
 
-  /* ---------- barra fissa e promemoria ---------- */
+  /* ---------- barra fissa: stato, riquadro di stato e pulsanti ---------- */
+  // Riquadro di stato (18/11/2026): UN solo posto, sempre visibile in alto, per tutto ciò che riguarda fascia e invio
+  // (assorbe il promemoria delle 19/22 ore e l'avviso «FERMA»). Ogni problema è una voce; la più importante sta in cima e
+  // il colore del riquadro è quello della voce più grave. Verde solo se non c'è niente in sospeso e la fascia è verificata.
+  const alle = t => new Date(t).toDateString() === new Date().toDateString() ? 'alle ' + hm(t) : fmtWhen(t);   // «alle 14:05» o «ieri alle 14:05»
+  const durHM = min => { min = Math.max(0, Math.round(min)); return Math.floor(min / 60) + ' h ' + p2(min % 60) + ' min'; };
+  const VERIFICA_ORE = 2;        // oltre: «Non controllo la fascia da X ore» (Federico, 18/11/2026)
+  const APPENA_MS = 120000;      // per 2 minuti dopo «Controlla la fascia» il suo esito sta in cima al riquadro
+  const PRIO = { appena: 0, ch: 1, ferma: 2, invio: 3, ore: 4, scartate: 6, verifica: 7, avvio: 8, tuttoOk: 8.5, fascia: 9 };
+  const LIVELLI = ['rosso', 'giallo', 'grigio', 'verde'];
   async function aggiornaBarra() {
-    let m = null, ended = null, regs = [], inviati = {}, sl = null, ch = null;
-    try { m = await getMeta('ultimoAvvio'); ended = await getMeta('fine'); sl = await getMeta('statoLetto'); ch = await getMeta('chiusura'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; } catch (e) { log('Archivio non disponibile: ' + e.message); }
+    let m = null, ended = null, regs = [], inviati = {}, sl = null, ch = null, bat = null;
+    try { m = await getMeta('ultimoAvvio'); ended = await getMeta('fine'); sl = await getMeta('statoLetto'); ch = await getMeta('chiusura'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; bat = await getMeta('batteria'); } catch (e) { log('Archivio non disponibile: ' + e.message); }
+    const ora = Date.now();
     const concluso = !!(ended && (!m || ended > m.t));
     // fascia fermata da un processo (o trovata ferma) e non fatta ripartire: l'ultimo collegamento è più recente dell'ultimo avvio
     const ferma = !concluso && !ch && !!sl && sl.recording === false && sl.t > 0 && (!m || sl.t > m.t);
-    let stato = '', livello = null, testo = '', tocca = false;
+    const fermaVista = ferma && sl.fonte === 'controllo';   // trovata ferma da «Controlla la fascia», non da un cambio interrotto
+    // verificata = l'ultima lettura dalla fascia (controllo o riavvio del processo) dice che registra QUESTA registrazione
+    const verificata = !concluso && !ch && !!m && !!sl && sl.recording === true && sl.id === m.id && sl.t >= m.t;
+    const appena = !!sl && (sl.fonte === 'controllo' || sl.verificato) && ora - (sl.verificato || sl.t) < APPENA_MS;
+    const voci = [], voce = (prio, liv, html, extra) => voci.push(Object.assign({ prio, liv, html }, extra || {}));
+    const giorno = t => fmtWhen(t).split(' alle ')[0];
+    let stato = '';
     if (concluso) { stato = 'Monitoraggio concluso.'; }
-    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; livello = 'rosso'; testo = ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.'; }
-    else if (ferma) {
-      stato = `Registrazione <b>FERMA</b> dalle ${hm(sl.t)} (${fmtWhen(sl.t).split(' alle ')[0]}).`;
-      livello = 'rosso'; tocca = true;
-      testo = `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione: tocca qui (o «Invia dati e continua il monitoraggio») con la fascia addosso.`;
+    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; voce(PRIO.ch, 'rosso', ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.'); }
+    else if (fermaVista) {
+      stato = `Registrazione <b>FERMA</b> (controllata ${alle(sl.t)}).`;
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia NON sta registrando.</b> I dati che aveva sono ancora dentro: tocca «Invia dati e continua il monitoraggio» per scaricarli e farla ripartire. <span class="nota">(Controllata ${alle(sl.t)}.)</span>`, { tocca: 'Tocca qui per scaricarli e farla ripartire' });
     }
-    else if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; livello = 'grigio'; testo = 'Non trovo l’ora dell’ultimo cambio. Appena puoi, tocca <b>«Invia dati e continua il monitoraggio»</b>: così la fascia è sotto controllo.'; }
+    else if (ferma) {
+      stato = `Registrazione <b>FERMA</b> dalle ${hm(sl.t)} (${giorno(sl.t)}).`;
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione; i dati sono al sicuro (nel telefono o ancora nella fascia). Tocca qui sotto (o «Invia dati e continua il monitoraggio») con la fascia addosso.${sl.verificato ? ` <span class="nota">(Controllata ${alle(sl.verificato)}: è ancora ferma.)</span>` : ''}`, { tocca: 'Tocca qui per completare' });
+    }
+    else if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; voce(PRIO.avvio, 'grigio', 'Non trovo l’ora dell’ultimo cambio. Tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente) oppure «Invia dati e continua il monitoraggio».'); }
     else {
-      const h = (Date.now() - m.t) / 3600000, minTot = Math.round(h * 60);   // ore e minuti dai minuti totali (mai «5 h 60 min»)
+      const h = (ora - m.t) / 3600000, minTot = Math.round(h * 60);   // ore e minuti dai minuti totali (mai «5 h 60 min»)
       const rr = regs.filter(r => r.type === 'rr' && r.durMin > 60), n = rr.reduce((a, r) => a + r.n, 0), mm = rr.reduce((a, r) => a + r.durMin, 0), fc = mm ? n / mm : 68;
       let restanoMin = null; try { const s = PolarCore.stimaResiduo({ id: m.id, fcMedia: fc, capienza: CAPIENZA }); if (s) restanoMin = s.restanoMin; } catch (e) {}
-      stato = `In registrazione dalle ${hm(m.t)} (${fmtWhen(m.t).split(' alle ')[0]}) · ${Math.floor(minTot / 60)} h ${p2(minTot % 60)} min <span style="opacity:.8">(stima: lo stato vero si vede collegando la fascia)</span>`;
+      stato = `In registrazione dalle ${hm(m.t)} (${giorno(m.t)}) · ${Math.floor(minTot / 60)} h ${p2(minTot % 60)} min <span style="opacity:.8">(${verificata ? 'verificato ' + alle(sl.t) : 'stima: per saperlo davvero tocca «Controlla la fascia»'})</span>`;
       const entro = restanoMin == null ? null : Math.max(0, restanoMin - 60);   // un'ora di margine
-      if (h >= 22 || (restanoMin != null && restanoMin <= 90)) livello = 'rosso'; else if (h >= 19 || (restanoMin != null && restanoMin <= 240)) livello = 'giallo';
-      if (livello) {
+      const livOre = h >= 22 || (restanoMin != null && restanoMin <= 90) ? 'rosso' : h >= 19 || (restanoMin != null && restanoMin <= 240) ? 'giallo' : null;
+      if (livOre) {
         const quando = entro == null ? '' : entro <= 5 ? ' Stima: <b>fai l’invio subito</b>.' : ` Stima: fai l’invio entro ${entro >= 90 ? 'circa ' + Math.round(entro / 60) + ' ore' : 'circa ' + Math.round(entro) + ' minuti'}.`;
-        testo = `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`;
+        voce(PRIO.ore, livOre, `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`);
       }
+      if (verificata && ora - sl.t <= VERIFICA_ORE * 3600000) {
+        const b = bat && Math.abs(bat.t - sl.t) < 15 * 60000 ? bat.v : null;   // la batteria letta con lo stesso collegamento
+        const pila = b == null ? '' : b <= BATT_MIN ? `<br><b>Batteria molto bassa (${b}%).</b> La registrazione continua, ma al prossimo «Invia dati e continua il monitoraggio» la fascia potrebbe non ripartire: tieni pronta una pila nuova (CR2025).` : b <= 15 ? `<br>Batteria al ${b}%: al prossimo cambio sostituisci la pila (CR2025).` : '';
+        // per esteso solo subito dopo «Controlla la fascia» (la risposta, in grande) o con la pila quasi scarica; altrimenti basta
+        // la riga in alto «In registrazione … (verificato alle hh:mm)»: la barra fissa resta bassa e non ripete le stesse cose
+        if (appena || pila) voce(appena ? PRIO.appena : PRIO.fascia, 'verde', `<b>La fascia sta registrando dalle ${hm(m.t)}${giorno(m.t) === 'oggi' ? '' : ' (' + giorno(m.t) + ')'} (da ${durHM((ora - m.t) / 60000)})${b != null ? ' · batteria ' + b + '%' : ''}</b>${pila}`, { notaVer: `<span class="nota">(verificato ${alle(sl.t)})</span>` });
+      } else if (verificata || ora - m.t > VERIFICA_ORE * 3600000) {
+        const ore = Math.floor((ora - (verificata ? sl.t : m.t)) / 3600000);
+        voce(PRIO.verifica, 'giallo', `Non controllo la fascia da ${ore} ${ore === 1 ? 'ora' : 'ore'}: tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente).`);
+      } else voce(PRIO.verifica, 'giallo', 'La fascia non è ancora stata controllata: tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente).');
     }
-    const daInviare = regs.filter(r => !arrivataReg(r, inviati)).length;
-    if (daInviare && !livello) { livello = 'grigio'; testo = `${daInviare === 1 ? '1 registrazione non è' : daInviare + ' registrazioni non sono'} ancora ${daInviare === 1 ? 'arrivata' : 'arrivate'} al medico: tocca <b>«Invia dati e continua il monitoraggio»</b> (o «Riprova solo l’invio» in «Altre opzioni»).`; }
+    // invio al medico: rosso SOLO per un invio tentato e non confermato, o per registrazioni nel telefono senza conferma d'arrivo.
+    // Un diario con voci nuove non ancora inviate è normale e non conta.
+    const sosp = leggiSospeso();
+    const nomeOk = r => NOME_OK.test('h10_' + r.id + '.csv');
+    const naV = regs.filter(r => nomeOk(r) && !arrivataReg(r, inviati)).length, naS = regs.filter(r => !nomeOk(r)).length;
+    if (sosp || naV) {
+      const daFascia = voci.some(v => v.tocca);   // il pulsante della fascia (processo) manda anche quello che manca
+      const regTxt = naV === 1 ? '1 registrazione salvata nel telefono non è ancora arrivata al medico' : naV + ' registrazioni salvate nel telefono non sono ancora arrivate al medico';
+      const html = sosp ? `<b>Attenzione: l’invio al medico non è andato a buon fine.</b>${naV ? ' ' + regTxt + '.' : ''} <span class="nota">(tentato ${alle(sosp.t)} con «${esc(sosp.cosa || 'invio')}»)</span>` : `<b>Attenzione: ${regTxt}.</b>`;
+      voce(PRIO.invio, 'rosso', html + (daFascia ? ' Lo manda anche il pulsante qui sopra.' : ''), daFascia ? {} : { rinvia: true });
+    }
+    if (naS) voce(PRIO.scartate, 'giallo', `${naS === 1 ? 'Una registrazione ha' : naS + ' registrazioni hanno'} un nome che il Drive del medico non accetta: usa «Condividi registrazioni e diario in un altro modo» in «Altre opzioni» e avvisa il medico.`);
+    if (!voci.some(v => v.liv !== 'verde')) {   // niente in sospeso: «Tutto a posto»
+      const okT = leggiConfermato();
+      voce(PRIO.tuttoOk, 'verde', `<b>Tutto a posto:</b> ${okT ? 'ultimo invio confermato ' + alle(okT) : 'nessun invio in sospeso'}${concluso ? ' · monitoraggio concluso' : verificata ? ' · fascia verificata ' + alle(sl.t) : ''}.`);
+    }
+    voci.sort((a, b) => a.prio - b.prio);
+    const livello = LIVELLI.find(l => voci.some(v => v.liv === l));
+    const conTuttoOk = voci.some(v => v.prio === PRIO.tuttoOk);   // «fascia verificata alle…» c'è già: non si ripete
+    const dis = busy ? ' disabled' : '';
+    const riquadro = `<div class="promemoria ${livello}${voci.length > 1 ? ' multi' : ''}" id="riquadro">${voci.map(v => `<div class="voce v-${v.liv}">${v.html}${v.notaVer && !conTuttoOk ? ' ' + v.notaVer : ''}${v.tocca ? `<button class="azione" id="promTocca"${dis}>${v.tocca}</button>` : ''}${v.rinvia ? `<button class="azione" id="bRinvia"${dis}>Tocca qui per rinviare al medico</button>` : ''}</div>`).join('')}</div>`;
     const fino = (() => { try { return localStorage.getItem(FINO_KEY) || ''; } catch (e) { return ''; } })();
     const mostraFine = !!fino && oggiLocale() >= fino && !concluso && !ch;   // il pulsante compare dall'ultimo giorno del pacchetto, finché non si usa
-    $('barra').innerHTML = `<div class="stato">${stato}</div>${livello ? `<div class="promemoria ${livello}"${tocca ? ' id="promTocca" role="button" style="cursor:pointer"' : ''}>${testo}</div>` : ''}
-      <div class="azioni"><button class="primario" id="bInvia"${busy ? ' disabled' : ''}>Invia dati e continua il monitoraggio</button><button class="secondario" id="bCambia"${busy ? ' disabled' : ''}>Cambia<br><span style="font-weight:500;font-size:11.5px">ho tolto la fascia</span></button></div>
-      ${ch ? `<button class="fine" id="bCompleta"${busy ? ' disabled' : ''}>Completa la fine del monitoraggio</button>` : mostraFine ? `<button class="fine" id="bFineBarra"${busy ? ' disabled' : ''}>Fine del monitoraggio</button>` : ''}`;
+    $('barra').innerHTML = `<div class="stato">${stato}</div>${riquadro}
+      <div class="azioni"><button class="primario" id="bInvia"${dis}>Invia dati e continua il monitoraggio</button><button class="secondario" id="bCambia"${dis}>Cambia<br><span style="font-weight:500;font-size:11.5px">ho tolto la fascia</span></button></div>
+      <button class="controlla" id="bControlla"${dis}>Controlla la fascia<span>legge soltanto: non ferma e non cambia niente</span></button>
+      <div id="ctrlOut">${testoCtrl()}</div>
+      ${ch ? `<button class="fine" id="bCompleta"${dis}>Completa la fine del monitoraggio</button>` : mostraFine ? `<button class="fine" id="bFineBarra"${dis}>Fine del monitoraggio</button>` : ''}`;
     $('bInvia').onclick = () => processo({ restart: true });
     $('bCambia').onclick = () => processo({ restart: true });
-    if (tocca) $('promTocca').onclick = () => processo({ restart: true });
+    $('bControlla').onclick = () => controllaFascia();
+    const pt = $('promTocca'); if (pt) pt.onclick = () => processo({ restart: true });
+    const br = $('bRinvia'); if (br) br.onclick = () => { window.scrollTo(0, 0); soloInvio(); };
     const bc = $('bCompleta'); if (bc) bc.onclick = () => ch.fase === 'invio' ? soloInvio() : processo({ restart: false, finale: true });
     const bf = $('bFineBarra'); if (bf) bf.onclick = dueTocchi('bFineBarra', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => processo({ restart: false, finale: true }));
   }
@@ -1796,9 +1957,11 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     cambia() { processo({ restart: true }); },
     invia() { processo({ restart: true }); },
     fine() { processo({ restart: false, finale: true }); },
-    soloInvio, azzeraConCopia, aggiorna,
+    soloInvio, azzeraConCopia, aggiorna, controllaFascia, log,
     _prova: { faiCopia, tutteLeCopie, elementiDaInviare, arrivato, lunghezzaUnica, lenCsv },
   };
+  // un'altra scheda ha iniziato o confermato un invio: il riquadro si aggiorna subito
+  window.addEventListener('storage', e => { if (e.key === SOSPESO_KEY || e.key === CONFERMATO_KEY || e.key == null) aggiorna(); });
 
   pulisciCopie().catch(e => log('Pulizia copie: ' + e.message));
   aggiorna();
