@@ -1262,13 +1262,18 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     if (!dbp) dbp = new Promise((res, rej) => {
       const r = indexedDB.open('hrv24cambio', 1);
       r.onupgradeneeded = () => { r.result.createObjectStore('reg', { keyPath: 'id' }); r.result.createObjectStore('meta'); };
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      // iPhone può chiudere la connessione a pagina ferma in background: la si dimentica, così la prossima operazione la riapre
+      r.onsuccess = () => { const d = r.result; d.onclose = () => { if (dbp) dbp = null; }; d.onversionchange = () => { try { d.close(); } catch (e) {} dbp = null; }; res(d); };
+      r.onerror = () => { dbp = null; rej(r.error); };
     });
     return dbp;
   }
-  async function tx(store, mode, fn) {
+  async function tx(store, mode, fn, riprova = true) {
     const d = await db();
-    return new Promise((res, rej) => { const t = d.transaction(store, mode); const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
+    let t0;
+    try { t0 = d.transaction(store, mode); }   // se la connessione è stata chiusa dal telefono, qui lancia: si riapre e si rifà UNA volta (nulla è ancora stato scritto)
+    catch (e) { if (!riprova) throw e; log('Archivio chiuso dal telefono (' + e.message + '): lo riapro'); dbp = null; try { d.close(); } catch (e2) {} return tx(store, mode, fn, false); }
+    return new Promise((res, rej) => { const t = t0; const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
   }
   const putReg = r => tx('reg', 'readwrite', s => s.put(r));
   const getReg = id => tx('reg', 'readonly', s => s.get(id));
@@ -1283,13 +1288,17 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     if (!sdbp) sdbp = new Promise((res, rej) => {
       const r = indexedDB.open('hrv24diario', 1);
       r.onupgradeneeded = () => { r.result.createObjectStore('snap', { keyPath: 't' }); };
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      r.onsuccess = () => { const d = r.result; d.onclose = () => { if (sdbp) sdbp = null; }; d.onversionchange = () => { try { d.close(); } catch (e) {} sdbp = null; }; res(d); };
+      r.onerror = () => { sdbp = null; rej(r.error); };
     });
     return sdbp;
   }
-  async function stx(mode, fn) {
+  async function stx(mode, fn, riprova = true) {
     const d = await sdb();
-    return new Promise((res, rej) => { const t = d.transaction('snap', mode); const s = t.objectStore('snap'); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
+    let t0;
+    try { t0 = d.transaction('snap', mode); }
+    catch (e) { if (!riprova) throw e; log('Archivio copie chiuso dal telefono (' + e.message + '): lo riapro'); sdbp = null; try { d.close(); } catch (e2) {} return stx(mode, fn, false); }
+    return new Promise((res, rej) => { const t = t0; const s = t.objectStore('snap'); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
   }
   // la copia si rilegge dall'archivio e si confronta voce per voce: se qualcosa non torna, NON si azzera
   async function faiCopia(motivo) {
