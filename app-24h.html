@@ -95,14 +95,24 @@
   .days div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--linea);padding:7px 0;font-size:14px}
   .days div:first-child{border-top:0}
   button.danger{background:#fde9e7;color:#b3261e}
+  /* intestazione che scorre via (19/11/2026): in cima alla pagina è al suo posto («libera»: scorre via con il contenuto);
+     risalendo ricompare ferma in alto («agganciata», sticky). Solo transform: niente si sposta sotto il dito. */
+  header{transition:transform .22s ease-out}
+  header.libera{position:relative}
+  /* striscia rossa: solo con il riquadro ROSSO e l'intestazione scorsa via; toccandola si torna in cima */
+  .striscia{position:fixed;top:0;left:0;right:0;z-index:6;display:block;width:100%;height:calc(40px + env(safe-area-inset-top));margin:0;padding:env(safe-area-inset-top) 12px 0;border:0;border-radius:0;background:#b3261e;color:#fff;font:700 14.5px/40px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.25);visibility:hidden;transform:translateY(-100%);transition:transform .2s ease-out,visibility 0s linear .2s}
+  .striscia span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .striscia.on{visibility:visible;transform:none;transition:transform .2s ease-out,visibility 0s}
+  @media (prefers-reduced-motion:reduce){header,.striscia,.striscia.on{transition:none}}
 </style>
 </head>
 <body>
-<header>
+<header class="libera">
   <h1>Monitoraggio 24 ore</h1>
   <div class="sub">HRV TOOL · DIARIO E FASCIA</div>
   <div id="barra"></div>
 </header>
+<button type="button" id="striscia" class="striscia" aria-hidden="true" tabindex="-1"><span></span></button>
 <main>
   <!-- esito del processo unico: passi, avanzamento e messaggi -->
   <div class="now" id="procPanel">
@@ -114,6 +124,7 @@
       <div class="note" style="margin-top:4px">Scrivilo una volta sola: poi tocca di nuovo il pulsante in alto.</div>
     </div>
     <ul class="steps" id="steps"></ul>
+    <div id="perso"></div>
     <div id="prog"></div>
     <div id="out"></div>
     <div id="retryRow" style="display:none"><button class="plain" id="bSoloInvio" style="width:100%;margin-top:8px">Riprova solo l'invio (senza toccare la fascia)</button></div>
@@ -1322,6 +1333,19 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   const fraseFerma = (t, finale) => finale
     ? `<b>La fascia è FERMA dalle ${hm(t)}</b> (fine del monitoraggio): tocca «Completa la fine del monitoraggio» in alto per completare.`
     : `<b>La fascia è FERMA dalle ${hm(t)}: tocca per completare</b> (pulsante «Invia dati e continua il monitoraggio» in alto, con la fascia addosso).`;
+  // (19/11/2026) fascia trovata FERMA con la memoria VUOTA, mentre c'era una registrazione avviata da più di 10 minuti e non salvata
+  // nel telefono: quella registrazione è persa (successo davvero: «Scarico i dati — memoria vuota»). Lo si dice in rosso nel pannello
+  // dei passi e lo si scrive nel registro tecnico. Non scatta se l'ultimo avvio manca o è di pochi minuti fa, né se la
+  // registrazione partita a quell'ora è già nel telefono (per esempio scaricata da un cambio interrotto dopo lo scarico).
+  const PERSA_DOPO_MS = 10 * 60000;
+  async function avvisoRegistrazionePersa(s, m, tControllo) {
+    if (s.recording || !m || !(m.t > 0) || tControllo - m.t <= PERSA_DOPO_MS) return false;
+    if (m.id && await getReg(m.id).catch(() => null)) return false;
+    const quando = t => hm(t) + (new Date(t).toDateString() === new Date().toDateString() ? '' : ' (' + fmtWhen(t).split(' alle ')[0] + ')');
+    log(`ATTENZIONE: la fascia era ferma e la memoria vuota. La registrazione dalle ${quando(m.t)} (ultimo avvio, ${m.id || 'identificativo ignoto'}) alle ${quando(tControllo)} (ultimo controllo) NON è stata salvata`);
+    $('perso').innerHTML = `<div class="msg bad"><b>Attenzione: la fascia era ferma e la memoria vuota.</b> La registrazione dalle ${quando(m.t)} alle ${quando(tControllo)} <b>NON è stata salvata</b>. Annota l'ora e dimmelo.</div>`;
+    return true;
+  }
 
   /* ---------- codice del paziente ---------- */
   function codiceSalvato() { try { const c = (localStorage.getItem(CODE_KEY) || '').trim().toUpperCase(); return RE_COD.test(c) ? c : ''; } catch (e) { return ''; } }
@@ -1358,11 +1382,14 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   // "testo" (facoltativo) sostituisce il nome del passo, per esempio «Diario: nessuna voce nuova da inviare»
   function step(k, s, extra, testo) { st[k] = [s, extra, testo]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${st[id][2] || l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
   const DIARIO_VUOTO = 'Diario: nessuna voce nuova da inviare';
-  function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; $('retryRow').style.display = 'none'; }
+  function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('perso').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; $('retryRow').style.display = 'none'; }
   const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
-  const mostraPannello = () => $('procPanel').classList.add('on');
+  // (19/11/2026) si torna in cima: i passi stanno subito sotto l'intestazione e devono vedersi. I pulsanti in alto si possono
+  // toccare anche a metà pagina (l'intestazione ricompare risalendo): senza questo i passi resterebbero fuori dallo schermo.
+  const mostraPannello = () => { $('procPanel').classList.add('on'); if ((window.scrollY || 0) > 0) window.scrollTo(0, 0); };
   // durante il processo nessun altro pulsante che tocchi fascia, registrazioni o diario (anche «Cancella» e «Azzera»)
-  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bControlla', 'bRinvia', 'promTocca', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } }
+  // (19/11/2026) e l'intestazione resta in vista finché il processo (o il controllo) è in corso
+  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bControlla', 'bRinvia', 'promTocca', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } pianificaIntestazione(); }
 
   /* ---------- segno dell'invio in sospeso (18/11/2026) ----------
      Scritto nel telefono PRIMA di ogni invio al Drive (processo e «Invia senza toccare la fascia») e tolto SOLO quando il Drive
@@ -1423,7 +1450,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   /* ---------- la parte della fascia: ferma, scarica, salva, cancella, riparte ---------- */
   // Ritorna { avviato, nota, fermaDal }. Se qualcosa non va scrive il messaggio e lancia { gestito: true }.
   async function parteFascia(restart, finale) {
-    let cur = 'conn', nota = null, avviato = false, fermaDal = null, salvate = 0;
+    let cur = 'conn', nota = null, avviato = false, fermaDal = null, salvate = 0, inScarico = false;
     try {
       step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok', battLetta != null ? 'batteria ' + battLetta + '%' : '');
       cur = 'stop'; step('stop', 'wait');
@@ -1444,10 +1471,10 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       seen.forEach(x => log('Cartella ' + x));
       const meta = await getMeta('ultimoAvvio');
       const inviati = (await getMeta('inviati')) || {};
-      if (!recs.length) step('dl', 'skip', 'memoria vuota');
+      if (!recs.length) { step('dl', 'skip', 'memoria vuota'); await avvisoRegistrazionePersa(s, meta, fermaDal); }
       for (let k = 0; k < recs.length; k++) {
         const rec = recs[k];
-        cur = 'dl'; step('dl', 'wait', recs.length > 1 ? (k + 1) + ' di ' + recs.length : '');
+        cur = 'dl'; inScarico = true; step('dl', 'wait', recs.length > 1 ? (k + 1) + ' di ' + recs.length : '');
         const prev = await getReg(rec.id);
         const t0 = performance.now();
         $('prog').innerHTML = `<progress id="pg" max="${Math.max(1, rec.size)}" value="0" style="width:100%"></progress><div class="note" id="pgT"></div>`;
@@ -1493,7 +1520,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
 
       if (restart && battLetta != null && battLetta <= BATT_MIN) {
         step('start', 'no', 'batteria ' + battLetta + '%');
-        nota = `${fraseFerma(fermaDal)}<br><b>La fascia dice batteria al ${battLetta}%: non l'ho fatta ripartire.</b> I dati sono salvati nel telefono.<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo il pulsante in alto.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`;
+        nota = `${fraseFerma(fermaDal)}<br><b>La fascia dice batteria al ${battLetta}%: non l'ho fatta ripartire.</b> ${salvate ? 'I dati sono salvati nel telefono.' : 'Nella fascia non c\'era niente di nuovo da scaricare.'}<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo il pulsante in alto.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`;
         try { device.gatt.disconnect(); } catch (e) {}
         return { avviato: false, nota, fermaDal };
       }
@@ -1527,10 +1554,11 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       $('prog').innerHTML = '';
       const gia = salvate ? (salvate === 1 ? ' La registrazione già scaricata è salvata nel telefono.' : ' Le ' + salvate + ' registrazioni già scaricate sono salvate nel telefono.') : '';
       const dati = e.conflitto ? `<b>Non ho cancellato niente dalla fascia.</b> Nel telefono c'è già una registrazione con lo stesso nome (${esc(e.conflitto)}), non ancora arrivata al medico, e i battiti sono diversi: per non perdere niente non la sostituisco. Prima tocca <b>«Riprova solo l'invio»</b> qui sotto; quando è arrivata, tocca di nuovo il pulsante in alto.${gia}`
-        : cur === 'conn' || cur === 'stop' ? 'Nessun dato è andato perso: la registrazione è ancora nella fascia.'
+        // (19/11/2026) dove non si sa se la fascia abbia registrato qualcosa non si afferma che i dati ci sono
+        : cur === 'conn' || cur === 'stop' || ((cur === 'dl' || cur === 'save') && !inScarico) ? 'Non ho cancellato niente: se la fascia ha registrato qualcosa, è ancora dentro.' + gia
         : cur === 'dl' || cur === 'save' ? 'Nessun dato è andato perso: la registrazione che stavo scaricando è ancora nella fascia.' + gia
         : cur === 'del' ? 'Le registrazioni scaricate sono salvate nel telefono (questa è anche ancora nella fascia).'
-        : 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.';
+        : salvate ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'Nella fascia non c\'era niente di nuovo da scaricare, e <b>la fascia non è ripartita</b>.';
       const ferma = fermaDal != null ? '<br>' + fraseFerma(fermaDal, finale) : '';
       out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${dati}${ferma}<br>${cur === 'start' ? (e.code === 209 ? '<b>La pila è scarica:</b> cambiala (CR2025), poi ' : e.code === 106 ? 'La fascia ha rifiutato l’avvio: di solito si sblocca <b>riavviandola</b>. Stacca il sensore dalla cinghia, aspetta 2-3 minuti, riaggancialo, bagna gli elettrodi, indossa la fascia, poi ' : 'Controlla di avere <b>la fascia indossata</b>, con il sensore agganciato e gli elettrodi bagnati, aspetta un minuto, poi ') : ''}${e.conflitto ? '' : (cur === 'start' ? 'avvicina' : 'Avvicina') + ' il telefono alla fascia e tocca di nuovo il pulsante in alto: riprende da dove si era fermato.'}<br><span class="note">Dettaglio: ${esc(e.message)}</span>`);
       $('retryRow').style.display = '';   // i dati già salvati si possono comunque mandare
@@ -1675,7 +1703,8 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
           : `<b>I dati sono arrivati al medico, ma la fine del monitoraggio non è ancora confermata.</b> La fascia è ferma (non registra più). Tocca <b>«Completa la fine del monitoraggio»</b> in alto quando hai internet: manda solo il segno di chiusura.${diarioNota}${avvisoScartati(esito)}`);
         if (!chiusa) $('retryRow').style.display = '';
       } else if (esito.tutto) {
-        out(fascia.avviato ? 'ok' : 'warn', `<b>Fatto.</b> ${fascia.avviato ? 'La fascia sta registrando di nuovo.' : '<b>La fascia non è ripartita</b> (vedi sotto).'} ${tuttoTxt}${diarioFatto ? ' e il diario riparte da capo (con una copia di sicurezza)' : ''}.${diarioNota} ${fascia.avviato ? 'Puoi chiudere la pagina e allontanarti dal telefono.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
+        const persa = !!$('perso').innerHTML;   // 19/11/2026: con l'avviso «registrazione NON salvata» il messaggio non può essere un verde rassicurante
+        out(fascia.avviato && !persa ? 'ok' : 'warn', `<b>${persa ? 'Fatto, ma leggi l\'avviso rosso qui sopra.' : 'Fatto.'}</b> ${fascia.avviato ? 'La fascia sta registrando di nuovo.' : '<b>La fascia non è ripartita</b> (vedi sotto).'} ${tuttoTxt}${diarioFatto ? ' e il diario riparte da capo (con una copia di sicurezza)' : ''}.${diarioNota} ${fascia.avviato && !persa ? 'Puoi chiudere la pagina e allontanarti dal telefono.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
       } else {
         out('bad', `${fascia.avviato ? 'La fascia è ripartita e i dati sono salvati sul telefono. ' : 'I dati sono salvati sul telefono. '}${fraseNonArrivato(esito)}${finale ? ' La fine del monitoraggio verrà registrata con il prossimo invio riuscito.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
         $('retryRow').style.display = '';
@@ -1873,14 +1902,16 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const giorno = t => fmtWhen(t).split(' alle ')[0];
     let stato = '';
     if (concluso) { stato = 'Monitoraggio concluso.'; }
-    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; voce(PRIO.ch, 'rosso', ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.'); }
+    // «breve» (19/11/2026): il testo della striscia rossa che resta in alto quando l'intestazione è scorsa via (una riga)
+    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; voce(PRIO.ch, 'rosso', ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.', { breve: '⚠ Fine monitoraggio da completare — tocca' }); }
     else if (fermaVista) {
       stato = `Registrazione <b>FERMA</b> (controllata ${alle(sl.t)}).`;
-      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia NON sta registrando.</b> I dati che aveva sono ancora dentro: tocca «Invia dati e continua il monitoraggio» per scaricarli e farla ripartire. <span class="nota">(Controllata ${alle(sl.t)}.)</span>`, { tocca: 'Tocca qui per scaricarli e farla ripartire' });
+      // (19/11/2026) non si afferma più che i dati ci sono: la fascia ferma può avere la memoria vuota
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia NON sta registrando.</b> Se ha registrato qualcosa, è ancora dentro: tocca «Invia dati e continua il monitoraggio» per scaricarlo e farla ripartire. <span class="nota">(Controllata ${alle(sl.t)}.)</span>`, { tocca: 'Tocca qui per scaricare e farla ripartire', breve: '⚠ Fascia ferma — tocca' });
     }
     else if (ferma) {
       stato = `Registrazione <b>FERMA</b> dalle ${hm(sl.t)} (${giorno(sl.t)}).`;
-      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione; i dati sono al sicuro (nel telefono o ancora nella fascia). Tocca qui sotto (o «Invia dati e continua il monitoraggio») con la fascia addosso.${sl.verificato ? ` <span class="nota">(Controllata ${alle(sl.verificato)}: è ancora ferma.)</span>` : ''}`, { tocca: 'Tocca qui per completare' });
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione; i dati, se ce ne sono, sono al sicuro (nel telefono o ancora nella fascia). Tocca qui sotto (o «Invia dati e continua il monitoraggio») con la fascia addosso.${sl.verificato ? ` <span class="nota">(Controllata ${alle(sl.verificato)}: è ancora ferma.)</span>` : ''}`, { tocca: 'Tocca qui per completare', breve: '⚠ Fascia ferma — tocca' });
     }
     else if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; voce(PRIO.avvio, 'grigio', 'Non trovo l’ora dell’ultimo cambio. Tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente) oppure «Invia dati e continua il monitoraggio».'); }
     else {
@@ -1892,7 +1923,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       const livOre = h >= 22 || (restanoMin != null && restanoMin <= 90) ? 'rosso' : h >= 19 || (restanoMin != null && restanoMin <= 240) ? 'giallo' : null;
       if (livOre) {
         const quando = entro == null ? '' : entro <= 5 ? ' Stima: <b>fai l’invio subito</b>.' : ` Stima: fai l’invio entro ${entro >= 90 ? 'circa ' + Math.round(entro / 60) + ' ore' : 'circa ' + Math.round(entro) + ' minuti'}.`;
-        voce(PRIO.ore, livOre, `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`);
+        voce(PRIO.ore, livOre, `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`, { breve: '⚠ È ora di fare l’invio — tocca' });
       }
       if (verificata && ora - sl.t <= VERIFICA_ORE * 3600000) {
         const b = bat && Math.abs(bat.t - sl.t) < 15 * 60000 ? bat.v : null;   // la batteria letta con lo stesso collegamento
@@ -1914,7 +1945,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
       const daFascia = voci.some(v => v.tocca);   // il pulsante della fascia (processo) manda anche quello che manca
       const regTxt = naV === 1 ? '1 registrazione salvata nel telefono non è ancora arrivata al medico' : naV + ' registrazioni salvate nel telefono non sono ancora arrivate al medico';
       const html = sosp ? `<b>Attenzione: l’invio al medico non è andato a buon fine.</b>${naV ? ' ' + regTxt + '.' : ''} <span class="nota">(tentato ${alle(sosp.t)} con «${esc(sosp.cosa || 'invio')}»)</span>` : `<b>Attenzione: ${regTxt}.</b>`;
-      voce(PRIO.invio, 'rosso', html + (daFascia ? ' Lo manda anche il pulsante qui sopra.' : ''), daFascia ? {} : { rinvia: true });
+      voce(PRIO.invio, 'rosso', html + (daFascia ? ' Lo manda anche il pulsante qui sopra.' : ''), Object.assign({ breve: '⚠ Invio non arrivato — tocca per rinviare' }, daFascia ? {} : { rinvia: true }));
     }
     if (naS) voce(PRIO.scartate, 'giallo', `${naS === 1 ? 'Una registrazione ha' : naS + ' registrazioni hanno'} un nome che il Drive del medico non accetta: usa «Condividi registrazioni e diario in un altro modo» in «Altre opzioni» e avvisa il medico.`);
     if (!voci.some(v => v.liv !== 'verde')) {   // niente in sospeso: «Tutto a posto»
@@ -1923,6 +1954,8 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     }
     voci.sort((a, b) => a.prio - b.prio);
     const livello = LIVELLI.find(l => voci.some(v => v.liv === l));
+    // striscia rossa: solo nel ROSSO, con il testo breve della voce rossa più importante (nel giallo e nel verde niente striscia)
+    strisciaTesto = livello === 'rosso' ? (voci.find(v => v.liv === 'rosso').breve || '⚠ Attenzione — tocca') : '';
     const conTuttoOk = voci.some(v => v.prio === PRIO.tuttoOk);   // «fascia verificata alle…» c'è già: non si ripete
     const dis = busy ? ' disabled' : '';
     const riquadro = `<div class="promemoria ${livello}${voci.length > 1 ? ' multi' : ''}" id="riquadro">${voci.map(v => `<div class="voce v-${v.liv}">${v.html}${v.notaVer && !conTuttoOk ? ' ' + v.notaVer : ''}${v.tocca ? `<button class="azione" id="promTocca"${dis}>${v.tocca}</button>` : ''}${v.rinvia ? `<button class="azione" id="bRinvia"${dis}>Tocca qui per rinviare al medico</button>` : ''}</div>`).join('')}</div>`;
@@ -1940,6 +1973,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const br = $('bRinvia'); if (br) br.onclick = () => { window.scrollTo(0, 0); soloInvio(); };
     const bc = $('bCompleta'); if (bc) bc.onclick = () => ch.fase === 'invio' ? soloInvio() : processo({ restart: false, finale: true });
     const bf = $('bFineBarra'); if (bf) bf.onclick = dueTocchi('bFineBarra', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => processo({ restart: false, finale: true }));
+    pianificaIntestazione();   // l'altezza o il colore del riquadro possono essere cambiati
   }
   async function aggiornaStato() {
     let m = null, sl = null, bat = null, regs = [], inviati = {};
@@ -1952,6 +1986,83 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : esc(r.id)}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${arrivataReg(r, inviati) ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
   }
   function aggiorna() { aggiornaBarra().catch(e => log('Barra: ' + e.message)); aggiornaStato().catch(() => {}); renderCopie().catch(() => {}); }
+
+  /* ---------- intestazione che scorre via (19/11/2026) ----------
+     Segnalato da Federico: l'intestazione blu (barra, riquadro, pulsanti) occupava metà schermo e restava sempre fissa sopra i
+     pulsanti del diario. Ora ha due stati:
+     - «libera» (classe .libera, position: relative): è al suo posto nella pagina e scorre via con il contenuto, mossa dal browser
+       stesso (nessun calcolo a ogni scorrimento, quindi niente tremolii). In cima alla pagina è sempre così;
+     - «agganciata» (sticky): ferma in alto sopra il contenuto. Ci va quando si RISALE di almeno SOGLIA_PX (anche a metà pagina)
+       e durante un processo o un controllo (i passi e i messaggi devono vedersi); torna «libera» quando si riscende di SOGLIA_PX.
+     Il passaggio tra i due stati usa solo transform (con una transizione breve): niente si sposta sotto il dito.
+     Piccoli movimenti, il rimbalzo di iOS in cima e in fondo, la pagina che si allunga o si accorcia da sola e la rotella di un
+     orario aperto non cambiano lo stato. Se il riquadro è ROSSO e scorre fuori dallo schermo, in alto resta una striscia rossa
+     di una riga: toccandola si torna in cima. Nel giallo e nel verde nessuna striscia. */
+  const SOGLIA_PX = 10;          // movimento minimo nello stesso verso per decidere la direzione
+  const DURATA_MS = 220;         // come la transizione dell'intestazione nel CSS
+  const STRISCIA_PX = 44;        // la striscia compare quando il fondo del riquadro è salito sopra questa altezza
+  const QUIETE_MS = 250;         // dopo un cambio di altezza della pagina: lo scorrimento fatto dal browser per compensare non è un gesto
+  const intest = document.querySelector('header'), striscia = $('striscia');
+  let agganciata = false, ancora = 0, tRilascio = 0, rafInt = 0, quieteFino = 0, strisciaTesto = '';
+  const tySu = px => px ? 'translate3d(0,' + Math.round(px) + 'px,0)' : '';
+  function tyAttuale() {   // spostamento verticale di adesso, anche a metà di una transizione
+    const v = /matrix(3d)?\(([^)]+)\)/.exec(getComputedStyle(intest).transform || '');
+    if (!v) return 0; const n = v[2].split(',').map(parseFloat); return (v[1] ? n[13] : n[5]) || 0;
+  }
+  function posa(tr, tf) { intest.style.transition = tr; intest.style.transform = tf; }
+  function campoAperto() {   // un orario (rotella) o un testo aperto: la pagina si sposta da sola, non è un gesto
+    const a = document.activeElement; if (!a || !a.matches || !a.matches('input, select, textarea')) return false;
+    const d = a.closest('dialog'); return !d || d.open;
+  }
+  function mostraIntest(y, H) {   // da «libera» ad «agganciata»: parte da dove si trova adesso e scende fino in cima allo schermo
+    clearTimeout(tRilascio); tRilascio = 0;
+    if (intest.classList.contains('libera')) {
+      posa('none', tySu(Math.max(-H, -y + tyAttuale()))); intest.classList.remove('libera'); void intest.offsetHeight;
+    }
+    posa('', '');
+  }
+  function nascondiIntest(y, H) {   // da «agganciata» a «libera»
+    clearTimeout(tRilascio); tRilascio = 0;
+    if (y < H) {   // vicino alla cima: torna subito nella pagina e sale insieme al contenuto fino al suo posto
+      const da = y + tyAttuale(); posa('none', tySu(da)); intest.classList.add('libera'); void intest.offsetHeight; posa('', '');
+    } else {       // più in basso: sale fuori dallo schermo, poi torna nella pagina (fuori schermo, non si vede)
+      posa('', tySu(-H)); tRilascio = setTimeout(rilasciaIntest, DURATA_MS + 60);
+    }
+  }
+  function rilasciaIntest() { tRilascio = 0; if (!agganciata) { posa('none', ''); intest.classList.add('libera'); } }
+  function intestazione() {
+    rafInt = 0;
+    const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const y = Math.min(Math.max(window.scrollY || window.pageYOffset || 0, 0), max), H = intest.offsetHeight;   // rimbalzo di iOS: fuori da 0…max non conta
+    if (busy) {                      // processo o controllo in corso: resta in vista
+      if (!agganciata) { agganciata = true; mostraIntest(y, H); }
+      ancora = y;
+    } else if (y <= 0) {             // in cima: al suo posto nella pagina (i due stati qui non si distinguono)
+      if (agganciata || tRilascio || !intest.classList.contains('libera')) { agganciata = false; clearTimeout(tRilascio); tRilascio = 0; posa('none', ''); intest.classList.add('libera'); }
+      ancora = 0;
+    } else if (campoAperto() || performance.now() < quieteFino) {
+      ancora = y;
+    } else if (agganciata) {
+      if (y < ancora) ancora = y;    // continua a salire: si misura dal punto più alto
+      else if (y - ancora >= SOGLIA_PX) { agganciata = false; ancora = y; nascondiIntest(y, H); }
+    } else {
+      // in fondo la pagina può «accorciarsi» da sola (rimbalzo, barre del browser): lì non si decide una risalita
+      if (y > ancora || y >= max - 1) ancora = y;   // continua a scendere: si misura dal punto più basso
+      else if (ancora - y >= SOGLIA_PX) { agganciata = true; ancora = y; mostraIntest(y, H); }
+    }
+    // striscia rossa: riquadro rosso, nessun processo in corso, e il riquadro (dove andrà l'intestazione) è fuori dallo schermo
+    const riq = $('riquadro'), fondo = riq ? riq.offsetTop + riq.offsetHeight : H;   // misurato dall'alto dell'intestazione
+    const vis = !!strisciaTesto && !busy && fondo - (agganciata ? 0 : Math.min(y, H)) < STRISCIA_PX;
+    const sp = striscia.firstElementChild;
+    if (vis && sp.textContent !== strisciaTesto) { sp.textContent = strisciaTesto; striscia.setAttribute('aria-label', strisciaTesto.replace(/^⚠\s*/, '')); }
+    if (striscia.classList.contains('on') !== vis) { striscia.classList.toggle('on', vis); striscia.setAttribute('aria-hidden', vis ? 'false' : 'true'); striscia.tabIndex = vis ? 0 : -1; }
+  }
+  function pianificaIntestazione() { if (!rafInt) rafInt = requestAnimationFrame(intestazione); }
+  window.addEventListener('scroll', pianificaIntestazione, { passive: true });
+  window.addEventListener('resize', () => { quieteFino = performance.now() + QUIETE_MS; pianificaIntestazione(); });
+  if ('ResizeObserver' in window) new ResizeObserver(() => { quieteFino = performance.now() + QUIETE_MS; }).observe(document.body);
+  striscia.onclick = () => { log('Striscia rossa toccata («' + strisciaTesto + '»): torno in cima'); window.scrollTo(0, 0); intestazione(); };
+  pianificaIntestazione();
 
   window.APP24 = {
     cambia() { processo({ restart: true }); },
