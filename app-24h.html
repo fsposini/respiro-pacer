@@ -4,103 +4,139 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Monitoraggio 24 ore — HRV Tool</title>
+<meta name="theme-color" content="#0c1620">
+<link rel="icon" href="icon-192.png">
 <style>
-  :root{ --blu:#1B549B; --bg:#F4FBF8; --testo:#2E3538; --grigio:#545E62; --linea:#e3e8ea;
-    --fisica:#1565C8; --mente:#E5251D; --recupero:#5E9E2A; --terapie:#0E7F86; --schermi:#C2731B; --svago:#A8457E; --puntuale:#7A5C9E; --giornata:#545E62; }
+  /* Tema scuro come HRV Tool (20/11/2026): stesse variabili di respiro-pacer-app/index.html.
+     Solo aspetto: la logica (archivio, processo, scudo degli orari, intestazione che scorre via, striscia rossa) non cambia. */
+  :root{ color-scheme:dark;
+    --bg:#0c1620; --bg2:#0f1d2a; --panel:#13283a; --panel-soft:#193249; --line:#244563;
+    --text:#e8f1f8; --muted:#8fb0c9; --accent:#3fb8c4; --accent2:#5ad1c0; --danger:#e06a6a;
+    --shadow:0 8px 28px rgba(0,0,0,.4); --radius:14px;
+    /* segnali, inconfondibili anche sul fondo scuro: ROSSO pieno con testo bianco, GIALLO ambra pieno con testo scuro,
+       VERDE scuro con bordo e voce principale in --accent2 */
+    --rosso:#c62828; --rosso-scuro:#b3261e; --rosso-bordo:#ff8a80; --rosso-chiaro:#ffb3ab;
+    --giallo:#f2b705; --giallo-testo:#2a1d00; --giallo-bordo:#ffd54f;
+    --verde-fondo:rgba(90,209,192,.10); --verde-bordo:rgba(90,209,192,.45);
+    --ok:#5fd38a; --no:#ff7b72;
+    /* colori delle attività: quelli di sempre; scuriti il minimo indispensabile dove il testo bianco non arrivava a 4,5:1
+       (recupero #5E9E2A, schermi #C2731B, fine lavoro #7d878b, sveglia #C79A2E, digiuno #B07A1E) */
+    --fisica:#1565C8; --mente:#E5251D; --recupero:#4d8223; --terapie:#0E7F86; --schermi:#a96418; --svago:#A8457E; --puntuale:#7A5C9E; --giornata:#545E62;
+    --fine-lavoro:#6d767a; --sonno:#2E2A5A; --sveglia:#917022; --digiuno:#9b6c1a; --fine-digiuno:#8a6a2e; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;background:var(--bg);color:var(--testo);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:40px}
-  header{background:var(--blu);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;position:sticky;top:0;z-index:5}
-  header h1{margin:0;font-size:20px}
-  header .sub{opacity:.85;font-size:12.5px;font-weight:600;letter-spacing:.5px}
+  body{margin:0;background:var(--bg) radial-gradient(1000px 700px at 50% -10%,var(--bg2),var(--bg)) no-repeat;color:var(--text);font:16px/1.4 'Segoe UI',system-ui,-apple-system,sans-serif;padding-bottom:40px}
+  input,select,textarea{background-color:var(--bg2);color:var(--text);border-color:var(--line)}
+  input::placeholder{color:var(--muted);opacity:1}
+  progress{accent-color:var(--accent)}
+  /* intestazione come HRV Tool: logo, titolo e nome; fondo pieno perché, agganciata in alto, passa sopra il contenuto */
+  header{background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);padding:calc(12px + env(safe-area-inset-top)) 18px 10px;position:sticky;top:0;z-index:5;border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  header .testa{display:flex;align-items:center;gap:11px}
+  header .testa img{height:38px;width:auto;opacity:.95;flex:none}
+  header .titles{min-width:0}
+  header .titles h1{margin:0;font-size:1.05rem;font-weight:600;letter-spacing:.3px;line-height:1.3}
+  header .titles p{margin:1px 0 0;color:var(--muted);font-size:.72rem;line-height:1.35;letter-spacing:1.4px;text-transform:uppercase}
+  header .titles p b{color:var(--accent);font-weight:700}
+  @media (max-width:400px){header .titles p{letter-spacing:.9px}}
   main{max-width:620px;margin:0 auto;padding:12px 14px}
-  .now{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-  .now .lab{font-size:12px;color:var(--grigio);text-transform:uppercase;letter-spacing:.5px}
+  .now{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  .now .lab{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
   .now .what{font-size:21px;font-weight:700;margin:2px 0}
-  .now .since{font-size:14px;color:var(--grigio)}
-  .now .bg{font-size:13.5px;margin-top:6px;color:var(--grigio)}
+  .now .since{font-size:14px;color:var(--muted)}
+  .now .bg{font-size:13.5px;margin-top:6px;color:var(--muted)}
   .now button{margin-top:10px}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--grigio);margin:18px 2px 8px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 2px 8px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-  .btn{border:0;border-radius:13px;padding:14px 10px;font:600 15.5px/1.2 inherit;color:#fff;cursor:pointer;min-height:58px;text-align:center}
-  .btn.on{outline:4px solid #222;outline-offset:-4px}
-  .btn small{display:block;font-weight:500;font-size:11.5px;opacity:.9;margin-top:3px}
-  button.plain{border:0;border-radius:10px;padding:10px 14px;font:600 15px inherit;background:#e9eff5;color:var(--blu);cursor:pointer}
-  button.main{border:0;border-radius:10px;padding:12px 16px;font:600 16px inherit;background:var(--blu);color:#fff;cursor:pointer;width:100%}
-  .log{background:#fff;border-radius:14px;padding:6px 12px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-  .log .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--linea);font-size:15px}
+  .btn{border:1px solid rgba(255,255,255,.16);border-radius:13px;padding:14px 10px;font:600 15.5px/1.2 inherit;color:#fff;cursor:pointer;min-height:58px;text-align:center}
+  .btn.on{outline:4px solid #fff;outline-offset:-4px}
+  .btn small{display:block;font-weight:500;font-size:11.5px;margin-top:3px}
+  button.plain{border:1px solid var(--line);border-radius:10px;padding:10px 14px;font:600 15px inherit;background:var(--panel-soft);color:var(--text);cursor:pointer}
+  button.main{border:0;border-radius:10px;padding:12px 16px;font:600 16px inherit;background:var(--accent);color:#06222a;cursor:pointer;width:100%}
+  .log{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  .log .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);font-size:15px}
   .log .it:first-child{border-top:0}
-  .log .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .log .dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
   .log .it span.t{flex:1}
-  .log input[type=time]{font:inherit;font-size:14px;padding:4px;border:1px solid var(--linea);border-radius:7px;width:92px}
-  .log .x{border:0;background:none;color:#b3261e;font-size:20px;cursor:pointer;padding:0 4px}
-  .note{font-size:13px;color:var(--grigio)}
-  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
-  .toast.show{opacity:.92}
-  .toast.act{pointer-events:auto;opacity:.97}
-  .toast button{border:0;border-radius:14px;background:#fff;color:var(--blu);font:600 14px inherit;padding:6px 11px;margin-left:8px;cursor:pointer}
-  dialog{border:0;border-radius:14px;padding:18px;max-width:340px}
+  .log input[type=time]{font:inherit;font-size:14px;padding:4px;border:1px solid var(--line);border-radius:7px;width:92px}
+  .log .x{border:0;background:none;color:var(--no);font-size:20px;cursor:pointer;padding:0 4px}
+  .note{font-size:13px;color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--panel-soft);color:var(--text);border:1px solid var(--accent);box-shadow:var(--shadow);padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+  .toast.show{opacity:.97}
+  .toast.act{pointer-events:auto;opacity:1}
+  .toast button{border:0;border-radius:14px;background:var(--accent);color:#06222a;font:600 14px inherit;padding:6px 11px;margin-left:8px;cursor:pointer}
+  dialog{border:1px solid var(--line);border-radius:14px;padding:18px;max-width:340px;background:linear-gradient(180deg,var(--panel),var(--bg2));color:var(--text);box-shadow:var(--shadow)}
+  dialog::backdrop{background:rgba(6,14,20,.72)}
   dialog .row{display:flex;gap:8px;margin-top:12px}
   .lvl{display:flex;gap:6px;margin-top:10px}
-  .lvl button{flex:1;border:0;border-radius:9px;padding:12px 0;font:700 17px inherit;background:#eef3f8;color:var(--blu)}
-  .avviso{background:#fdf3df;color:#6b4a00;border-radius:12px;padding:11px 13px;margin-bottom:14px;font-size:14.5px}
+  .lvl button{flex:1;border:1px solid var(--line);border-radius:9px;padding:12px 0;font:700 17px inherit;background:var(--panel-soft);color:var(--text)}
+  /* istruzione fissa: ambra tenue (non è un segnale di stato, così il GIALLO del riquadro resta inconfondibile) */
+  .avviso{background:rgba(242,183,5,.10);color:var(--text);border:1px solid rgba(242,183,5,.45);border-left:4px solid var(--giallo);border-radius:12px;padding:11px 13px;margin-bottom:14px;font-size:14.5px}
+  .avviso b{color:#ffd566}
   /* barra fissa (app unica): stato della registrazione, promemoria e processo unico */
-  header{padding-bottom:10px}
   #barra{margin-top:8px}
-  #barra .stato{font-size:13.5px;opacity:.95}
-  #barra .promemoria{margin-top:7px;border-radius:10px;padding:8px 10px;font-size:14px;line-height:1.35;color:#222}
-  #barra .promemoria.giallo{background:#ffe9a8}
-  #barra .promemoria.rosso{background:#ffb4ac}
-  #barra .promemoria.grigio{background:rgba(255,255,255,.18);color:#fff}
+  #barra .stato{font-size:13.5px;color:var(--text)}
+  #barra .promemoria{margin-top:7px;border-radius:10px;padding:8px 10px;font-size:14px;line-height:1.35;color:var(--text);border:2px solid var(--line);background:var(--panel)}
+  #barra .promemoria.giallo{background:var(--giallo);border-color:var(--giallo-bordo);color:var(--giallo-testo)}
+  #barra .promemoria.rosso{background:var(--rosso);border-color:var(--rosso-bordo);color:#fff}
+  #barra .promemoria.grigio{background:var(--panel-soft);border-color:var(--line);color:var(--text)}
   /* riquadro di stato (18/11/2026): sempre presente, un solo posto per invio e fascia; la prima voce è la più importante */
-  #barra .promemoria.verde{background:#cdeec0;color:#1d4d12}
+  #barra .promemoria.verde{background:var(--verde-fondo);border-color:var(--verde-bordo);color:var(--text)}
+  #barra .promemoria.verde .voce:first-child{color:var(--accent2)}
   #barra .promemoria .voce+.voce{margin-top:7px}
   #barra .promemoria .voce:first-child{font-size:15.5px}
   #barra .promemoria.multi .voce{border-left:4px solid transparent;padding-left:8px}
-  #barra .promemoria.multi .v-rosso{border-left-color:#b3261e}
-  #barra .promemoria.multi .v-giallo{border-left-color:#b07a00}
-  #barra .promemoria.multi .v-verde{border-left-color:#2b7a1f}
-  #barra .promemoria.multi .v-grigio{border-left-color:#7d878b}
-  #barra .promemoria .nota{font-size:12.5px;opacity:.85;font-weight:400}
-  #barra .promemoria .azione{display:block;width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px 10px;font-weight:700;font-size:16px;font-family:inherit;line-height:1.2;background:#b3261e;color:#fff;cursor:pointer}
+  #barra .promemoria.multi .v-rosso{border-left-color:#fff}
+  #barra .promemoria.multi .v-giallo{border-left-color:var(--giallo)}
+  #barra .promemoria.multi .v-verde{border-left-color:var(--accent2)}
+  #barra .promemoria.multi .v-grigio{border-left-color:var(--muted)}
+  #barra .promemoria.giallo.multi .v-giallo{border-left-color:var(--giallo-testo)}
+  #barra .promemoria.giallo.multi .v-grigio{border-left-color:#6b5300}
+  #barra .promemoria.giallo.multi .v-verde{border-left-color:#1d5e3a}
+  #barra .promemoria .nota{font-size:12.5px;opacity:.9;font-weight:400}
+  #barra .promemoria.rosso .nota,#barra .promemoria.giallo .nota{opacity:1}
+  /* pulsante dentro il riquadro ROSSO: chiaro, così si stacca dal fondo rosso */
+  #barra .promemoria .azione{display:block;width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px 10px;font-weight:700;font-size:16px;font-family:inherit;line-height:1.2;background:#fff;color:#9b1c14;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)}
   #barra .promemoria .azione:disabled{opacity:.55}
-  #barra .controlla{display:block;width:100%;margin-top:8px;border:2px solid rgba(255,255,255,.9);border-radius:10px;padding:9px 8px;background:rgba(255,255,255,.08);color:#fff;font-weight:700;font-size:15px;font-family:inherit;line-height:1.2;cursor:pointer}
-  #barra .controlla span{display:block;font-weight:500;font-size:11.5px;opacity:.9}
+  #barra .controlla{display:block;width:100%;margin-top:8px;border:2px solid var(--accent);border-radius:10px;padding:9px 8px;background:var(--panel);color:var(--text);font-weight:700;font-size:15px;font-family:inherit;line-height:1.2;cursor:pointer}
+  #barra .controlla span{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
   #barra .controlla:disabled{opacity:.55}
   #ctrlOut .msg{margin-top:8px}
   #barra .azioni{display:flex;gap:8px;margin-top:8px}
   #barra .azioni button{border:0;border-radius:10px;padding:11px 8px;font:700 14.5px/1.2 inherit;cursor:pointer}
-  #barra .azioni .primario{flex:2.2;background:#fff;color:var(--blu)}
-  #barra .azioni .secondario{flex:1;background:rgba(255,255,255,.22);color:#fff}
+  #barra .azioni .primario{flex:2.2;background:var(--accent);color:#06222a}
+  #barra .azioni .secondario{flex:1;background:var(--panel);color:var(--text);box-shadow:inset 0 0 0 2px var(--accent)}
   #barra .azioni button:disabled{opacity:.55}
-  #barra .fine{margin-top:8px;width:100%;border:0;border-radius:10px;padding:11px;font:700 15px inherit;background:#b3261e;color:#fff;cursor:pointer}
+  #barra .fine{margin-top:8px;width:100%;border:0;border-radius:10px;padding:11px;font:700 15px inherit;background:var(--rosso-scuro);color:#fff;cursor:pointer}
   #procPanel{display:none}
   #procPanel.on{display:block}
   .steps{list-style:none;padding:0;margin:8px 0 0;font-size:14.5px}
   .steps li{padding:4px 0 4px 24px;position:relative}
-  .steps li::before{content:'○';position:absolute;left:0;color:var(--grigio)}
+  .steps li::before{content:'○';position:absolute;left:0;color:var(--muted)}
   .steps li.wait::before{content:'…'}
-  .steps li.ok::before{content:'✓';color:#2b7a1f;font-weight:700}
-  .steps li.no::before{content:'✕';color:#b3261e;font-weight:700}
+  .steps li.ok::before{content:'✓';color:var(--ok);font-weight:700}
+  .steps li.no::before{content:'✕';color:var(--no);font-weight:700}
   .steps li.skip::before{content:'–'}
-  .msg{border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14.5px;line-height:1.4}
-  .msg.ok{background:#e8f4e1;color:#2b5e19}
-  .msg.bad{background:#fde9e7;color:#8a1b13}
-  .msg.warn{background:#fdf3df;color:#6b4a00}
+  .msg{border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14.5px;line-height:1.4;border:2px solid transparent}
+  .msg.ok{background:var(--verde-fondo);border-color:var(--verde-bordo);color:var(--text)}
+  .msg.ok b{color:var(--accent2)}
+  .msg.bad{background:var(--rosso);border-color:var(--rosso-bordo);color:#fff}
+  .msg.warn{background:var(--giallo);border-color:var(--giallo-bordo);color:var(--giallo-testo)}
+  .msg-ok{background:var(--verde-fondo);border:1px solid var(--verde-bordo);color:var(--text)}
+  .msg-ok b{color:var(--accent2)}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14.5px}
   details.altre{margin-top:18px}
-  details.altre summary{color:var(--blu);font-weight:600;cursor:pointer;font-size:15px}
-  details.altre .blocco{background:#fff;border-radius:14px;padding:12px 14px;margin-top:10px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+  details.altre summary{color:var(--accent);font-weight:600;cursor:pointer;font-size:15px}
+  details.altre .blocco{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:10px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
   details.altre button{margin-top:8px}
-  #log24{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--grigio);max-height:240px;overflow:auto;background:#f3f5f6;border-radius:8px;padding:8px;margin-top:8px}
-  .days div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--linea);padding:7px 0;font-size:14px}
+  #log24{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--muted);max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px}
+  .days div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:7px 0;font-size:14px}
   .days div:first-child{border-top:0}
-  button.danger{background:#fde9e7;color:#b3261e}
+  button.danger{background:rgba(198,40,40,.16);border-color:rgba(255,138,128,.55);color:var(--rosso-chiaro)}
   /* intestazione che scorre via (19/11/2026): in cima alla pagina è al suo posto («libera»: scorre via con il contenuto);
      risalendo ricompare ferma in alto («agganciata», sticky). Solo transform: niente si sposta sotto il dito. */
   header{transition:transform .22s ease-out}
   header.libera{position:relative}
   /* striscia rossa: solo con il riquadro ROSSO e l'intestazione scorsa via; toccandola si torna in cima */
-  .striscia{position:fixed;top:0;left:0;right:0;z-index:6;display:block;width:100%;height:calc(40px + env(safe-area-inset-top));margin:0;padding:env(safe-area-inset-top) 12px 0;border:0;border-radius:0;background:#b3261e;color:#fff;font:700 14.5px/40px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.25);visibility:hidden;transform:translateY(-100%);transition:transform .2s ease-out,visibility 0s linear .2s}
+  .striscia{position:fixed;top:0;left:0;right:0;z-index:6;display:block;width:100%;height:calc(40px + env(safe-area-inset-top));margin:0;padding:env(safe-area-inset-top) 12px 0;border:0;border-radius:0;background:var(--rosso);color:#fff;font:700 14.5px/40px 'Segoe UI',system-ui,-apple-system,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);visibility:hidden;transform:translateY(-100%);transition:transform .2s ease-out,visibility 0s linear .2s}
   .striscia span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .striscia.on{visibility:visible;transform:none;transition:transform .2s ease-out,visibility 0s}
   @media (prefers-reduced-motion:reduce){header,.striscia,.striscia.on{transition:none}}
@@ -108,8 +144,13 @@
 </head>
 <body>
 <header class="libera">
-  <h1>Monitoraggio 24 ore</h1>
-  <div class="sub">HRV TOOL · DIARIO E FASCIA</div>
+  <div class="testa">
+    <img src="data:image/png;base64,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" alt="Dott. Federico Sposini" width="48" height="38">
+    <div class="titles">
+      <h1>Monitoraggio 24 ore</h1>
+      <p>Dott. Sposini Federico — Medicina Funzionale <b>&amp;</b> Longevity</p>
+    </div>
+  </div>
   <div id="barra"></div>
 </header>
 <button type="button" id="striscia" class="striscia" aria-hidden="true" tabindex="-1"><span></span></button>
@@ -119,7 +160,7 @@
     <div class="lab">Invio e continuazione del monitoraggio</div>
     <div id="codeRow" style="display:none;margin-top:8px">
       <label style="font-size:15px">Il tuo codice (te l'ha dato il medico)
-        <input id="inCodice" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--linea);border-radius:10px;text-transform:uppercase">
+        <input id="inCodice" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--line);border-radius:10px;text-transform:uppercase">
       </label>
       <div class="note" style="margin-top:4px">Scrivilo una volta sola: poi tocca di nuovo il pulsante in alto.</div>
     </div>
@@ -140,7 +181,7 @@
   <div class="now" id="voiceCard">
     <div class="lab">Dimmelo a voce</div>
     <div style="display:flex;gap:8px;margin-top:6px">
-      <input type="text" id="voiceIn" enterkeyhint="done" autocomplete="off" placeholder="es. vado a fare una passeggiata" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:11px;border:1px solid var(--linea);border-radius:10px">
+      <input type="text" id="voiceIn" enterkeyhint="done" autocomplete="off" placeholder="es. vado a fare una passeggiata" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:11px;border:1px solid var(--line);border-radius:10px">
       <button class="plain" id="voiceGo" style="padding:10px 14px">Segna</button>
     </div>
     <div class="note" style="margin-top:6px">Tocca la casella e poi il <b>microfono</b> della tastiera. Puoi dire anche l'orario: <i>"alle 10 ho preso un caffè"</i>, <i>"dalle 9 alle 10 palestra"</i>, <i>"sono tornato"</i>, <i>"ho rotto il digiuno"</i>.</div>
@@ -162,7 +203,7 @@
       <div style="margin-top:12px"><b>Registrazioni salvate su questo telefono</b></div>
       <div class="days" id="days"></div>
       <label style="display:block;margin-top:12px;font-size:15px">Il tuo codice
-        <input id="inCodice2" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--linea);border-radius:10px;text-transform:uppercase">
+        <input id="inCodice2" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--line);border-radius:10px;text-transform:uppercase">
       </label>
     </div>
     <div class="blocco">
@@ -207,10 +248,10 @@
 <dialog id="dlgPast">
   <b id="pastTitle">Ho dimenticato di segnare</b>
   <div class="note" id="pastNote">Scegli l'attività e gli orari, anche approssimati.</div>
-  <select id="pastLabel" style="font:inherit;font-size:17px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%"></select>
+  <select id="pastLabel" style="font:inherit;font-size:17px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%"></select>
   <div class="row" style="align-items:center">
-    <label id="pastFromL" style="flex:1">dalle<br><input type="time" id="pastFrom" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--linea);border-radius:9px;width:100%"></label>
-    <label style="flex:1"><span id="pastToT">alle</span><br><input type="time" id="pastTo" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--linea);border-radius:9px;width:100%"></label>
+    <label id="pastFromL" style="flex:1">dalle<br><input type="time" id="pastFrom" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--line);border-radius:9px;width:100%"></label>
+    <label style="flex:1"><span id="pastToT">alle</span><br><input type="time" id="pastTo" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--line);border-radius:9px;width:100%"></label>
   </div>
   <div class="row"><button class="plain" id="pastCancel">Annulla</button><button class="main" id="pastOk" style="width:auto;flex:1">Registra</button></div>
 </dialog>
@@ -218,14 +259,14 @@
 <dialog id="dlgWake">
   <b>A che ora sei andato a letto?</b>
   <div class="note">Ieri sera non era stato segnato: indicalo qui e la notte viene registrata lo stesso.</div>
-  <input type="time" id="bedTime" value="23:00" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
+  <input type="time" id="bedTime" value="23:00" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%">
   <div class="row"><button class="plain" id="wakeCancel">Annulla</button><button class="main" id="wakeOk" style="width:auto;flex:1">Registra la notte</button></div>
 </dialog>
 
 <dialog id="dlgOra">
   <b id="oraTitle">A che ora?</b>
   <div class="note">Se è dopo l'ora attuale, vale come ieri.</div>
-  <input type="time" id="oraIn" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--linea);border-radius:9px;margin-top:12px;width:100%">
+  <input type="time" id="oraIn" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%">
   <div class="row"><button class="plain" id="oraCancel">Annulla</button><button class="main" id="oraOk" style="width:auto;flex:1">Correggi</button></div>
 </dialog>
 
@@ -419,7 +460,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
   CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
   // il digiuno è una fascia di sfondo indipendente: può comprendere la notte, il lavoro e le altre attività
-  CAT['Digiuno'] = { cat: 'giornata', col: '#B07A1E', tipo: 'sfondo' };
+  CAT['Digiuno'] = { cat: 'giornata', col: 'var(--digiuno)', tipo: 'sfondo' };
   CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
   CAT['Telefono / social'] = CAT['Telefono / tablet / social']; // nome della prima versione, per i diari già iniziati
 
@@ -766,7 +807,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
         const cur = r.label ? (apertaLabel(r.label) || stessaFamiglia) : aperta('durata');
         if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; if (TOGLIE_FASCIA.test(cur.label)) rimessa = cur.label; break; }
         if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
-        $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:#a35b00">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
+        $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:var(--giallo)">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
       }
       case 'intervallo': {
         // se comincia adesso, chiude l'attività precedente (la fascia di lavoro resta aperta)
@@ -796,7 +837,7 @@ if (typeof module !== 'undefined') module.exports = VOCE;
     }
     const fatti = cambiamenti(prima);
     save(); render();
-    $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;background:#e8f4e1;color:#2b5e19;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
+    $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
     $('voiceUndo').onclick = () => { annullaCambiamenti(fatti); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
     const iniziaSenzaFascia = (r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label);
     const finitaDaPoco = r.azione === 'intervallo' && !r.inCorso && TOGLIE_FASCIA.test(r.label) && r.to > Date.now() - 2 * 3600000; // "ho fatto la doccia"
@@ -867,11 +908,11 @@ if (typeof module !== 'undefined') module.exports = VOCE;
       `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
       `<h2>Giornata</h2><div class="grid">
         <button class="btn" style="background:var(--giornata)${wk ? ';opacity:.55' : ''}" data-s="Lavoro" ${wk ? 'disabled' : ''}>Inizio lavoro<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
-        <button class="btn" style="background:#7d878b" id="bWorkEnd">Fine lavoro</button>
-        <button class="btn" style="background:#2E2A5A${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
-        <button class="btn" style="background:#C79A2E;grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
-        <button class="btn" style="background:#B07A1E${dg ? ';opacity:.55' : ''}" id="bFastStart" ${dg ? 'disabled' : ''}>Inizio digiuno<small>${dg ? 'dalle ' + hhmm(dg.inizio) : 'dopo l\'ultimo pasto'}</small></button>
-        <button class="btn" style="background:#8a6a2e" id="bFastEnd">Fine digiuno<small>segna anche il pasto</small></button>
+        <button class="btn" style="background:var(--fine-lavoro)" id="bWorkEnd">Fine lavoro</button>
+        <button class="btn" style="background:var(--sonno)${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
+        <button class="btn" style="background:var(--sveglia);grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
+        <button class="btn" style="background:var(--digiuno)${dg ? ';opacity:.55' : ''}" id="bFastStart" ${dg ? 'disabled' : ''}>Inizio digiuno<small>${dg ? 'dalle ' + hhmm(dg.inizio) : 'dopo l\'ultimo pasto'}</small></button>
+        <button class="btn" style="background:var(--fine-digiuno)" id="bFastEnd">Fine digiuno<small>segna anche il pasto</small></button>
       </div>`;
     document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
     document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
@@ -1990,9 +2031,9 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const inizio = r => r.startedAt || startFromId(r.id);
     regs = regs.sort((a, b) => (inizio(a) || a.savedAt) - (inizio(b) || b.savedAt));
     $('state').innerHTML = (m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span>` : '') + (sl ? `<b>Ultimo collegamento</b><span>${fmtWhen(sl.t)}: la fascia ${sl.recording ? 'registrava' : 'era ferma'}</span>` : '') +
-      (bat ? `<b>Batteria</b><span>${bat.v}% <span class="note">(letta ${fmtWhen(bat.t)})</span>${bat.v <= 15 ? ' · <b style="color:#a35b00">cambia la pila al prossimo cambio</b>' : ''}</span>` : '') || '<span class="note">Nessun dato.</span>';
+      (bat ? `<b>Batteria</b><span>${bat.v}% <span class="note">(letta ${fmtWhen(bat.t)})</span>${bat.v <= 15 ? ' · <b style="color:var(--giallo)">cambia la pila al prossimo cambio</b>' : ''}</span>` : '') || '<span class="note">Nessun dato.</span>';
     const tot = regs.reduce((s, r) => s + r.durMin, 0);
-    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : esc(r.id)}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${arrivataReg(r, inviati) ? ' <b style="color:#2b5e19" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : esc(r.id)}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${arrivataReg(r, inviati) ? ' <b style="color:var(--ok)" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
   }
   function aggiorna() { aggiornaBarra().catch(e => log('Barra: ' + e.message)); aggiornaStato().catch(() => {}); renderCopie().catch(() => {}); }
 
