@@ -183,6 +183,17 @@ function doGet(e) {
     return _json(r24);
   }
 
+  // ── Monitoraggio 24 ore: stato della licenza di un codice (JSONP). Restituisce SOLO lo stato del codice chiesto ──
+  if (p.kind === 'mon24stato') {
+    var rs24 = _statoMon24(p.code);
+    if (p.callback && /^[A-Za-z0-9_$.]+$/.test(p.callback)) {
+      return ContentService
+        .createTextOutput(p.callback + '(' + JSON.stringify(rs24) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return _json(rs24);
+  }
+
   // Nota: l'export dei dati verso il PC NON passa di qui. Lo fa esportaFogliCSV()
   // (in fondo a questo file), che scrive i CSV nella cartella Drive: Drive li
   // sincronizza sul PC e la cartella clinica li legge in locale, senza token né
@@ -210,8 +221,7 @@ function _activate(code, device) {
   try { lock.waitLock(15000); } catch (e) {}
   try {
     var folder = DriveApp.getFolderById(FOLDER_ID);
-    var ss = _openSheet(folder, 'licenze',
-      ['codice', 'pseudonimo', 'stato', 'max_dispositivi', 'dispositivi', 'data_attivazione', 'ultimo_accesso']);
+    var ss = _openSheet(folder, 'licenze', INTESTAZIONE_LICENZE);
     var sheet = ss.getActiveSheet();
     var data = sheet.getDataRange().getValues();
     var C = 0, STATO = 2, MAX = 3, DISP = 4, DATA = 5, LAST = 6;   // indici colonna (0-based)
@@ -257,10 +267,23 @@ function _token(code, device) {
 // Da lanciare UNA volta dall'editor Apps Script (menu ▶ Esegui) per creare il foglio
 // "licenze" già pronto con le intestazioni. Poi apri il foglio nella cartella HRV
 // pazienti e aggiungi una riga per ogni paziente: codice, pseudonimo, stato "attivo".
+// La colonna «monitoraggio_fino» (data di fine del pacchetto monitoraggio 24 ore, es. 2026-12-05) è in CODA: le colonne
+// 0-6 non si spostano, quindi _activate (che le legge per posizione) non cambia. Il monitoraggio legge le colonne PER NOME.
+var INTESTAZIONE_LICENZE = ['codice', 'pseudonimo', 'stato', 'max_dispositivi', 'dispositivi', 'data_attivazione', 'ultimo_accesso', 'monitoraggio_fino'];
 function creaFoglioLicenze() {
-  var folder = DriveApp.getFolderById(FOLDER_ID);
-  _openSheet(folder, 'licenze',
-    ['codice', 'pseudonimo', 'stato', 'max_dispositivi', 'dispositivi', 'data_attivazione', 'ultimo_accesso']);
+  var folder = DriveApp.getFolderById(FOLDER_ID), it = folder.getFilesByName('licenze'), file = null, ss;
+  while (it.hasNext()) { var x = it.next(); if (!x.isTrashed()) { file = x; break; } }   // un foglio «licenze» nel cestino non conta
+  if (file) ss = SpreadsheetApp.open(file);
+  else {
+    ss = SpreadsheetApp.create('licenze');
+    var f = DriveApp.getFileById(ss.getId());
+    folder.addFile(f); DriveApp.getRootFolder().removeFile(f);
+    ss.getActiveSheet().appendRow(INTESTAZIONE_LICENZE);
+  }
+  try { ss.setSpreadsheetTimeZone('Europe/Rome'); } catch (e) {}   // le date scritte come data non devono slittare di un giorno
+  var sheet = ss.getActiveSheet(), head = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
+    .map(function (x) { return String(x).trim().toLowerCase(); });
+  if (head.indexOf('monitoraggio_fino') < 0) sheet.getRange(1, sheet.getLastColumn() + 1).setValue('monitoraggio_fino');   // foglio già esistente: aggiunge la colonna in coda
 }
 
 // Apre (o crea) un foglio dedicato nella cartella, con intestazione se nuovo.
@@ -482,6 +505,16 @@ function _salva24(code, p) {
   if (!RE_CODICE_24.test(code)) return { ok: false, error: 'codice non valido' };
   if (!RE_FILE_24.test(fname)) return { ok: false, error: 'nome file non valido' };
   if (!data) return { ok: false, error: 'nessun dato' };
+  // LICENZA (solo con l'interruttore LICENZE_ATTIVE = si): si salva solo con licenza attiva o in tolleranza; FINE.json si ripete anche a monitoraggio chiuso.
+  // Se il foglio delle licenze non si legge, si salva comunque (mai far perdere dati per un guasto): l'errore resta nel registro.
+  if (_licenzeAttive()) {
+    var L = _licenza24(code);
+    if (L.errore) { try { Logger.log('mon24: licenze non lette (' + L.errore + '), salvo comunque'); } catch (_) {} }
+    // FINE.json (solo un segno di chiusura, senza dati clinici) si accetta anche a monitoraggio chiuso, e a scaduto se la cartella del paziente esiste già:
+    // senza questo, una chiusura cominciata in tolleranza e finita dopo la mezzanotte resterebbe a metà per sempre
+    else if (!(L.stato === 'attivo' || L.stato === 'tolleranza' || (fname === 'FINE.json' && (L.stato === 'chiuso' || (L.stato === 'scaduto' && _cartella24(code, false))))))
+      return { ok: false, reason: L.stato, error: _testoStato24(L.stato) };
+  }
   var lock = LockService.getScriptLock();
   // se il blocco non arriva in 20 s NON si salva senza protezione: la pagina non vedrà il file e dirà «non ancora arrivato, riprova»
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'occupato, riprova' }; }
@@ -511,6 +544,74 @@ function _salva24(code, p) {
     catch (err) { try { Logger.log('mon24: registro_invii_hrv non aggiornato: ' + err); } catch (_) {} }
   }
   return esito;
+}
+
+// ─────────── LICENZA DEL MONITORAGGIO 24 ORE (foglio «licenze», colonne lette PER NOME) ───────────
+// Stati: attivo (oggi ≤ fine) · tolleranza (fine < oggi ≤ fine + 3 giorni) · scaduto · chiuso (esiste FINE.json vivo) ·
+// non_attivo (riga senza data di fine valida) · revocato (colonna «stato» = revocato/sospeso/bloccato) · sconosciuto (codice senza riga).
+// La data è quella del SERVER (fuso Europe/Rome), mai quella del telefono. Interruttore di emergenza: Proprietà script
+// LICENZE_ATTIVE = si; se non è «si» il server non rifiuta niente (lo stato si calcola e si può leggere, ma non blocca).
+var TOLLERANZA_GIORNI_24 = 3;
+function _licenzeAttive() {   // «si» o «sì», senza badare a maiuscole e spazi; se il servizio delle proprietà non risponde: spento (mai rifiutare per un guasto)
+  try { var v = String(PropertiesService.getScriptProperties().getProperty('LICENZE_ATTIVE') || '').trim().toLowerCase(); return v === 'si' || v === 'sì'; } catch (e) { return false; }
+}
+function _oggi24() { return Utilities.formatDate(new Date(), 'Europe/Rome', 'yyyy-MM-dd'); }
+function _numGiorno24(iso) {       // 'AAAA-MM-GG' → giorni dal 1970 (null se non è una data vera)
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso)); if (!m) return null;
+  var t = Date.UTC(+m[1], +m[2] - 1, +m[3]), d = new Date(t);
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null;
+  return Math.round(t / 86400000);
+}
+function _isoGiorno24(n) { return new Date(n * 86400000).toISOString().slice(0, 10); }
+function _leggiData24(c) {         // cella → 'AAAA-MM-GG' oppure null (data illeggibile = monitoraggio non attivo, mai aperto per errore)
+  if (Object.prototype.toString.call(c) === '[object Date]') { return isNaN(c.getTime()) ? null : Utilities.formatDate(c, 'Europe/Rome', 'yyyy-MM-dd'); }
+  var s = String(c === null || c === undefined ? '' : c).trim(), m;
+  if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s))) s = m[1] + '-' + m[2] + '-' + m[3];
+  else if ((m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(s))) s = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  else return null;
+  return _numGiorno24(s) === null ? null : s;
+}
+function _licenza24(code) {
+  code = String(code || '').trim().toUpperCase();
+  try {
+    var it = DriveApp.getFolderById(FOLDER_ID).getFilesByName('licenze'), file = null;
+    while (it.hasNext()) { var x = it.next(); if (!x.isTrashed()) { file = x; break; } }
+    if (!file) return { errore: 'foglio licenze assente' };
+    var data = SpreadsheetApp.open(file).getActiveSheet().getDataRange().getValues();
+    if (!data.length) return { errore: 'foglio licenze vuoto' };
+    var head = data[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iC = head.indexOf('codice'), iF = head.indexOf('monitoraggio_fino'), iS = head.indexOf('stato');
+    if (iC < 0 || iF < 0) return { errore: 'colonne «codice» o «monitoraggio_fino» mancanti' };
+    var riga = null;
+    var migliore = '';   // più righe per lo stesso codice (rinnovo scritto come riga nuova): vale quella con la data di fine più lontana
+    for (var r = 1; r < data.length; r++) if (String(data[r][iC]).trim().toUpperCase() === code) { var fr = _leggiData24(data[r][iF]) || ''; if (!riga || fr > migliore) { riga = data[r]; migliore = fr; } }
+    if (!riga) return { stato: 'sconosciuto' };
+    var oggi = _oggi24(), fino = _leggiData24(riga[iF]), out = { oggi: oggi };
+    if (fino) { out.fino = fino; out.tolleranzaFino = _isoGiorno24(_numGiorno24(fino) + TOLLERANZA_GIORNI_24); }
+    var st = iS >= 0 ? String(riga[iS] || '').trim().toLowerCase() : '';
+    if (st === 'revocato' || st === 'sospeso' || st === 'bloccato') { out.stato = 'revocato'; return out; }
+    var cart = _cartella24(code, false);
+    if (cart && _versioni24(_elenco24(cart), 'FINE.json').length) { out.stato = 'chiuso'; return out; }
+    if (!fino) { out.stato = 'non_attivo'; return out; }
+    var n = _numGiorno24(oggi), f = _numGiorno24(fino);
+    out.stato = n <= f ? 'attivo' : (n <= f + TOLLERANZA_GIORNI_24 ? 'tolleranza' : 'scaduto');
+    return out;
+  } catch (e) { return { errore: String(e) }; }
+}
+function _testoStato24(stato) {
+  if (stato === 'scaduto' || stato === 'chiuso')
+    return 'Il periodo di monitoraggio è terminato. I dati registrati da ora in poi non verranno inviati al medico per il referto finale. Per continuare, contattare il medico.';
+  return 'Per questo codice il monitoraggio non è attivo. Contatta il medico.';
+}
+// Risposta di mon24stato: solo lo stato del codice chiesto (nessun elenco di altri codici). Se il foglio non si legge: ok:false,
+// reason:'errore' → la pagina si comporta come «attivo» per tutto ciò che è locale (fail-open).
+function _statoMon24(code) {
+  code = String(code || '').trim().toUpperCase();
+  if (!RE_CODICE_24.test(code)) return { ok: false, reason: 'codice non valido' };
+  var L = _licenza24(code);
+  if (L.errore) { try { Logger.log('mon24stato: ' + L.errore); } catch (_) {} return { ok: false, reason: 'errore' }; }
+  if (L.stato === 'sconosciuto') return { ok: false, reason: 'sconosciuto', attive: _licenzeAttive() };
+  return { ok: true, stato: L.stato, fino: L.fino || null, oggi: L.oggi, tolleranzaFino: L.tolleranzaFino || null, attive: _licenzeAttive() };
 }
 
 function _verifica24(code, nomi) {

@@ -212,8 +212,64 @@ def main():
                           attese=1, etichetta="blocco del service worker")
     passi.append("aggiunto il banco di prova del riepilogo settimanale (6 casi)")
 
+    # 7) Riquadro «Monitoraggio 24 ore» nel menu (23/11/2026, SOLO nella copia di prova) ---------
+    # Decisione di Federico: per ora tutto resta nella copia che usa lui; sull'app dei pazienti (index.html) non si tocca niente.
+    # Nella copia il riquadro è SEMPRE attivo (altrimenti non potrebbe usare il diario). Con «?grigio=1» nell'indirizzo si vede
+    # com'è per un paziente senza il pacchetto: grigio, non toccabile, «Da concordare con il medico».
+    # Si apre la pagina del monitoraggio della COPIA (prova/app-24h.html), che torna a questo menu.
+    tile = """
+    <a href="app-24h.html" class="home-tile" id="homeMon24" style="grid-column:1/-1;text-decoration:none">
+      <span class="ht-ico">⌚</span><b>Monitoraggio 24 ore</b><i>Diario e fascia H10, per più giorni</i>
+    </a>"""
+    html, _ = sostituisci(html, "    </button>\n  </div>\n  <div class=\"home-foot\">", "    </button>" + tile + "\n  </div>\n  <div class=\"home-foot\">",
+                          attese=1, etichetta="fine del menu della Home")
+    script_mon = """
+/* ---- Riquadro «Monitoraggio 24 ore» (SOLO versione di prova) ---- */
+(function(){
+  const t = document.getElementById('homeMon24'); if(!t) return;
+  if(new URLSearchParams(location.search).has('grigio')){      // come lo vedrebbe un paziente senza pacchetto
+    t.setAttribute('aria-disabled','true'); t.removeAttribute('href');
+    t.style.cssText += ';opacity:.45;pointer-events:none;cursor:not-allowed;filter:grayscale(1)';
+    t.querySelector('i').textContent = 'Da concordare con il medico';
+    return;
+  }
+  const RUNS = [['hrvTestRun','il test clinico','Interrompi'],['mornRun','il test del mattino','Interrompi'],
+                ['alphaRun','la misura α1','Interrompi'],['camRun','l\\'allenamento con la fotocamera','Termina sessione']];
+  t.addEventListener('click', e => {
+    e.preventDefault();
+    let w = null;
+    if(document.body.dataset.running === '1') w = ['la sessione di respirazione','Stop'];
+    else for(const [id, what, how] of RUNS){ const x = document.getElementById(id); if(x && x.style.display !== 'none'){ w = [what, how]; break; } }
+    if(w){ alert('C\\'è ' + w[0] + ' in corso. Per aprire il monitoraggio chiudi prima con il tasto "' + w[1] + '".'); return; }
+    let code = ''; try{ const P = JSON.parse(localStorage.getItem('respiroPacer.testProfile.v1') || 'null'); code = (P && P.code) || ''; }catch(x){}
+    location.href = 'app-24h.html' + (code ? '?codice=' + encodeURIComponent(code) : '');
+  });
+})();
+"""
+    html, _ = sostituisci(html, "\n/* ---------- SERVICE WORKER", script_mon + "\n/* ---------- SERVICE WORKER", attese=1, etichetta="blocco del service worker (riquadro monitoraggio)")
+    passi.append("aggiunto il riquadro «Monitoraggio 24 ore» nel menu (sempre attivo; ?grigio=1 per vedere la versione paziente)")
+
+    # 8) Pagina del monitoraggio della copia: prova/app-24h.html, dalla versione in lavorazione (monitoraggio_24h/app-24h.html)
+    PAG_SRC = BASE.parent / "monitoraggio_24h" / "app-24h.html"
+    if not PAG_SRC.exists():
+        sys.exit(f"ERRORE: non trovo {PAG_SRC}")
+    pag = PAG_SRC.read_text(encoding="utf-8")
+    pag, _ = sostituisci(pag, "<title>Monitoraggio 24 ore — HRV Tool</title>", "<title>PROVA · Monitoraggio 24 ore — HRV Tool</title>", attese=1, etichetta="titolo della pagina")
+    pag, _ = sostituisci(pag, '<link rel="icon" href="icon-192.png">', '<link rel="icon" href="../icon-192.png">', attese=1, etichetta="icona della pagina")
+    # la pagina deve essere quella rigenerata dal sorgente: se il sorgente è più nuovo, ci si ferma
+    import subprocess
+    try:
+        r = subprocess.run(["node", "genera_app24.js", "--verifica"], cwd=str(PAG_SRC.parent), capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            sys.exit("ERRORE: monitoraggio_24h/app-24h.html non coincide con il sorgente: lancia «node genera_app24.js» e rifai la prova.\n" + r.stdout + r.stderr)
+    except FileNotFoundError:
+        print("  (node non trovato: non ho potuto controllare che la pagina coincida con il sorgente)")
+    pag, _ = sostituisci(pag, "<body>", '<body><div style="background:#8a2f24;color:#fff;padding:6px 12px;font:600 12.5px/1.35 system-ui,sans-serif;text-align:center">VERSIONE DI PROVA — stessi dati del telefono e stesso Drive della pagina vera</div>', attese=1, etichetta="tag body della pagina")
+    passi.append("generata prova/app-24h.html (copia della pagina del monitoraggio in lavorazione; stessi dati del telefono della pagina vera)")
+
     OUT_DIR.mkdir(exist_ok=True)
     OUT.write_text(html, encoding="utf-8")
+    (OUT_DIR / "app-24h.html").write_text(pag, encoding="utf-8")
 
     print(f"Generata: {OUT.relative_to(BASE.parent)}")
     for p in passi:

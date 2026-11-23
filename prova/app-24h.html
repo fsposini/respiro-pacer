@@ -1,0 +1,2206 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PROVA · Monitoraggio 24 ore — HRV Tool</title>
+<meta name="theme-color" content="#0c1620">
+<link rel="icon" href="../icon-192.png">
+<style>
+  /* Tema scuro come HRV Tool (20/11/2026): stesse variabili di respiro-pacer-app/index.html.
+     Solo aspetto: la logica (archivio, processo, scudo degli orari, intestazione che scorre via, striscia rossa) non cambia. */
+  :root{ color-scheme:dark;
+    --bg:#0c1620; --bg2:#0f1d2a; --panel:#13283a; --panel-soft:#193249; --line:#244563;
+    --text:#e8f1f8; --muted:#8fb0c9; --accent:#3fb8c4; --accent2:#5ad1c0; --danger:#e06a6a;
+    --shadow:0 8px 28px rgba(0,0,0,.4); --radius:14px;
+    /* segnali, inconfondibili anche sul fondo scuro: ROSSO pieno con testo bianco, GIALLO ambra pieno con testo scuro,
+       VERDE scuro con bordo e voce principale in --accent2 */
+    --rosso:#c62828; --rosso-scuro:#b3261e; --rosso-bordo:#ff8a80; --rosso-chiaro:#ffb3ab;
+    --giallo:#f2b705; --giallo-testo:#2a1d00; --giallo-bordo:#ffd54f;
+    --verde-fondo:rgba(90,209,192,.10); --verde-bordo:rgba(90,209,192,.45);
+    --ok:#5fd38a; --no:#ff7b72;
+    /* colori delle attività: quelli di sempre; scuriti il minimo indispensabile dove il testo bianco non arrivava a 4,5:1
+       (recupero #5E9E2A, schermi #C2731B, fine lavoro #7d878b, sveglia #C79A2E, digiuno #B07A1E) */
+    --fisica:#1565C8; --mente:#E5251D; --recupero:#4d8223; --terapie:#0E7F86; --schermi:#a96418; --svago:#A8457E; --puntuale:#7A5C9E; --giornata:#545E62;
+    --fine-lavoro:#6d767a; --sonno:#2E2A5A; --sveglia:#917022; --digiuno:#9b6c1a; --fine-digiuno:#8a6a2e; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg) radial-gradient(1000px 700px at 50% -10%,var(--bg2),var(--bg)) no-repeat;color:var(--text);font:16px/1.4 'Segoe UI',system-ui,-apple-system,sans-serif;padding-bottom:40px}
+  input,select,textarea{background-color:var(--bg2);color:var(--text);border-color:var(--line)}
+  input::placeholder{color:var(--muted);opacity:1}
+  progress{accent-color:var(--accent)}
+  /* intestazione come HRV Tool: logo, titolo e nome; fondo pieno perché, agganciata in alto, passa sopra il contenuto */
+  header{background:linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);padding:calc(12px + env(safe-area-inset-top)) 18px 10px;position:sticky;top:0;z-index:5;border-bottom:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  header .testa{display:flex;align-items:center;gap:11px}
+  header .testa img{height:38px;width:auto;opacity:.95;flex:none}
+  header .titles{min-width:0}
+  header .titles h1{margin:0;font-size:1.05rem;font-weight:600;letter-spacing:.3px;line-height:1.3}
+  header .titles p{margin:1px 0 0;color:var(--muted);font-size:.72rem;line-height:1.35;letter-spacing:1.4px;text-transform:uppercase}
+  header .titles p b{color:var(--accent);font-weight:700}
+  @media (max-width:400px){header .titles p{letter-spacing:.9px}}
+  header .torna{margin-left:auto;flex:none;color:var(--accent);text-decoration:none;font-size:.85rem;font-weight:600;padding:8px 2px 8px 8px;white-space:nowrap}
+  .lic{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:15px;background:var(--panel)}
+  .lic.giallo{border-color:#caa53a;background:rgba(202,165,58,.12)}
+  .lic.grigio{border-color:var(--line);background:var(--panel-soft)}
+  .lic .nota{display:block;margin-top:4px;font-size:13px;color:var(--muted)}
+  main{max-width:620px;margin:0 auto;padding:12px 14px}
+  .now{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  .now .lab{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .now .what{font-size:21px;font-weight:700;margin:2px 0}
+  .now .since{font-size:14px;color:var(--muted)}
+  .now .bg{font-size:13.5px;margin-top:6px;color:var(--muted)}
+  .now button{margin-top:10px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 2px 8px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .btn{border:1px solid rgba(255,255,255,.16);border-radius:13px;padding:14px 10px;font:600 15.5px/1.2 inherit;color:#fff;cursor:pointer;min-height:58px;text-align:center}
+  .btn.on{outline:4px solid #fff;outline-offset:-4px}
+  .btn small{display:block;font-weight:500;font-size:11.5px;margin-top:3px}
+  button.plain{border:1px solid var(--line);border-radius:10px;padding:10px 14px;font:600 15px inherit;background:var(--panel-soft);color:var(--text);cursor:pointer}
+  button.main{border:0;border-radius:10px;padding:12px 16px;font:600 16px inherit;background:var(--accent);color:#06222a;cursor:pointer;width:100%}
+  .log{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  .log .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);font-size:15px}
+  .log .it:first-child{border-top:0}
+  .log .dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
+  .log .it span.t{flex:1}
+  .log input[type=time]{font:inherit;font-size:14px;padding:4px;border:1px solid var(--line);border-radius:7px;width:92px}
+  .log .x{border:0;background:none;color:var(--no);font-size:20px;cursor:pointer;padding:0 4px}
+  .note{font-size:13px;color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--panel-soft);color:var(--text);border:1px solid var(--accent);box-shadow:var(--shadow);padding:10px 16px;border-radius:20px;font-size:14.5px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+  .toast.show{opacity:.97}
+  .toast.act{pointer-events:auto;opacity:1}
+  .toast button{border:0;border-radius:14px;background:var(--accent);color:#06222a;font:600 14px inherit;padding:6px 11px;margin-left:8px;cursor:pointer}
+  dialog{border:1px solid var(--line);border-radius:14px;padding:18px;max-width:340px;background:linear-gradient(180deg,var(--panel),var(--bg2));color:var(--text);box-shadow:var(--shadow)}
+  dialog::backdrop{background:rgba(6,14,20,.72)}
+  dialog .row{display:flex;gap:8px;margin-top:12px}
+  .lvl{display:flex;gap:6px;margin-top:10px}
+  .lvl button{flex:1;border:1px solid var(--line);border-radius:9px;padding:12px 0;font:700 17px inherit;background:var(--panel-soft);color:var(--text)}
+  /* istruzione fissa: ambra tenue (non è un segnale di stato, così il GIALLO del riquadro resta inconfondibile) */
+  .avviso{background:rgba(242,183,5,.10);color:var(--text);border:1px solid rgba(242,183,5,.45);border-left:4px solid var(--giallo);border-radius:12px;padding:11px 13px;margin-bottom:14px;font-size:14.5px}
+  .avviso b{color:#ffd566}
+  /* barra fissa (app unica): stato della registrazione, promemoria e processo unico */
+  #barra{margin-top:8px}
+  #barra .stato{font-size:13.5px;color:var(--text)}
+  #barra .promemoria{margin-top:7px;border-radius:10px;padding:8px 10px;font-size:14px;line-height:1.35;color:var(--text);border:2px solid var(--line);background:var(--panel)}
+  #barra .promemoria.giallo{background:var(--giallo);border-color:var(--giallo-bordo);color:var(--giallo-testo)}
+  #barra .promemoria.rosso{background:var(--rosso);border-color:var(--rosso-bordo);color:#fff}
+  #barra .promemoria.grigio{background:var(--panel-soft);border-color:var(--line);color:var(--text)}
+  /* riquadro di stato (18/11/2026): sempre presente, un solo posto per invio e fascia; la prima voce è la più importante */
+  #barra .promemoria.verde{background:var(--verde-fondo);border-color:var(--verde-bordo);color:var(--text)}
+  #barra .promemoria.verde .voce:first-child{color:var(--accent2)}
+  #barra .promemoria .voce+.voce{margin-top:7px}
+  #barra .promemoria .voce:first-child{font-size:15.5px}
+  #barra .promemoria.multi .voce{border-left:4px solid transparent;padding-left:8px}
+  #barra .promemoria.multi .v-rosso{border-left-color:#fff}
+  #barra .promemoria.multi .v-giallo{border-left-color:var(--giallo)}
+  #barra .promemoria.multi .v-verde{border-left-color:var(--accent2)}
+  #barra .promemoria.multi .v-grigio{border-left-color:var(--muted)}
+  #barra .promemoria.giallo.multi .v-giallo{border-left-color:var(--giallo-testo)}
+  #barra .promemoria.giallo.multi .v-grigio{border-left-color:#6b5300}
+  #barra .promemoria.giallo.multi .v-verde{border-left-color:#1d5e3a}
+  #barra .promemoria .nota{font-size:12.5px;opacity:.9;font-weight:400}
+  #barra .promemoria.rosso .nota,#barra .promemoria.giallo .nota{opacity:1}
+  /* pulsante dentro il riquadro ROSSO: chiaro, così si stacca dal fondo rosso */
+  #barra .promemoria .azione{display:block;width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px 10px;font-weight:700;font-size:16px;font-family:inherit;line-height:1.2;background:#fff;color:#9b1c14;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+  #barra .promemoria .azione:disabled{opacity:.55}
+  #barra .controlla{display:block;width:100%;margin-top:8px;border:2px solid var(--accent);border-radius:10px;padding:9px 8px;background:var(--panel);color:var(--text);font-weight:700;font-size:15px;font-family:inherit;line-height:1.2;cursor:pointer}
+  #barra .controlla span{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+  #barra .controlla:disabled{opacity:.55}
+  #ctrlOut .msg{margin-top:8px}
+  #barra .azioni{display:flex;gap:8px;margin-top:8px}
+  #barra .azioni button{border:0;border-radius:10px;padding:11px 8px;font:700 14.5px/1.2 inherit;cursor:pointer}
+  #barra .azioni .primario{flex:2.2;background:var(--accent);color:#06222a}
+  #barra .azioni .secondario{flex:1;background:var(--panel);color:var(--text);box-shadow:inset 0 0 0 2px var(--accent)}
+  #barra .azioni button:disabled{opacity:.55}
+  #barra .fine{margin-top:8px;width:100%;border:0;border-radius:10px;padding:11px;font:700 15px inherit;background:var(--rosso-scuro);color:#fff;cursor:pointer}
+  #procPanel{display:none}
+  #procPanel.on{display:block}
+  .steps{list-style:none;padding:0;margin:8px 0 0;font-size:14.5px}
+  .steps li{padding:4px 0 4px 24px;position:relative}
+  .steps li::before{content:'○';position:absolute;left:0;color:var(--muted)}
+  .steps li.wait::before{content:'…'}
+  .steps li.ok::before{content:'✓';color:var(--ok);font-weight:700}
+  .steps li.no::before{content:'✕';color:var(--no);font-weight:700}
+  .steps li.skip::before{content:'–'}
+  .msg{border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14.5px;line-height:1.4;border:2px solid transparent}
+  .msg.ok{background:var(--verde-fondo);border-color:var(--verde-bordo);color:var(--text)}
+  .msg.ok b{color:var(--accent2)}
+  .msg.bad{background:var(--rosso);border-color:var(--rosso-bordo);color:#fff}
+  .msg.warn{background:var(--giallo);border-color:var(--giallo-bordo);color:var(--giallo-testo)}
+  .msg-ok{background:var(--verde-fondo);border:1px solid var(--verde-bordo);color:var(--text)}
+  .msg-ok b{color:var(--accent2)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14.5px}
+  details.altre{margin-top:18px}
+  details.altre summary{color:var(--accent);font-weight:600;cursor:pointer;font-size:15px}
+  details.altre .blocco{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:10px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+  details.altre button{margin-top:8px}
+  #log24{white-space:pre-wrap;word-break:break-all;font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--muted);max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px}
+  .days div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:7px 0;font-size:14px}
+  .days div:first-child{border-top:0}
+  button.danger{background:rgba(198,40,40,.16);border-color:rgba(255,138,128,.55);color:var(--rosso-chiaro)}
+  /* intestazione che scorre via (19/11/2026): in cima alla pagina è al suo posto («libera»: scorre via con il contenuto);
+     risalendo ricompare ferma in alto («agganciata», sticky). Solo transform: niente si sposta sotto il dito. */
+  header{transition:transform .22s ease-out}
+  header.libera{position:relative}
+  /* striscia rossa: solo con il riquadro ROSSO e l'intestazione scorsa via; toccandola si torna in cima */
+  .striscia{position:fixed;top:0;left:0;right:0;z-index:6;display:block;width:100%;height:calc(40px + env(safe-area-inset-top));margin:0;padding:env(safe-area-inset-top) 12px 0;border:0;border-radius:0;background:var(--rosso);color:#fff;font:700 14.5px/40px 'Segoe UI',system-ui,-apple-system,sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);visibility:hidden;transform:translateY(-100%);transition:transform .2s ease-out,visibility 0s linear .2s}
+  .striscia span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .striscia.on{visibility:visible;transform:none;transition:transform .2s ease-out,visibility 0s}
+  @media (prefers-reduced-motion:reduce){header,.striscia,.striscia.on{transition:none}}
+</style>
+</head>
+<body><div style="background:#8a2f24;color:#fff;padding:6px 12px;font:600 12.5px/1.35 system-ui,sans-serif;text-align:center">VERSIONE DI PROVA — stessi dati del telefono e stesso Drive della pagina vera</div>
+<header class="libera">
+  <div class="testa">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABMCAMAAAClKEJHAAAA/1BMVEUAAAD8/v71+/3x+Pzy+fzz+fzy+fzz+fz1+vzo6fR///+u///X6vPT//9/f/+/v7+qqv9/f3+/v//Z2f/V1dUA//+12dnMzP+qqqr//7T/zMz/f///AP/MzMz/v/8AAP8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABl+UNkAAAAQHRSTlMABfsuT49vrNAOAgMNBgIEAwIEBwYBBwUDAwUCAQUEAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvkZVEwAABndJREFUeNq1WYlC4zoMtGpZdtpSYGGvd+3//+Wbke3EYQubFDDQ0sTRWPfREG5Z+VBSDEHCZ61ywEryeQgOcCgxnD4V4HCI7+ZBfH25X9N5TCk7RsHN95G//j/XWQmR3sMCSYpayilpbJ/vpHN1DJEI8XYW8GBMLocCSiU5aRuPLOU9LMAGSb4ozipCKAOpnANAkmGpnhQbuq3u5USqBPL8GOFyxokfLTcjUlqTOYCLc+f5SaVMlHhU91p173LT/+bCS7xU/gPhrxDnPreTSz40I5FgOLs2BABU04yZRlrcF7AyGZIdDPhxIXbp/+dJQupKJcZDBm1zGTn9RR2bAHKT8gwAdYgMViPhjA8R1+cd21loGlgD4LxgYTFLXC88SKmsHbq+t6wLT7boYAaQONo9NBBFHbjs5qABlC9rgMcVQIDbTeWg0gC2B6ZZRG4iC8BdyCuAmH641KqIbJcV5caCrAFSA5DnLqZIJUwMGsP5a7h6E8AOixZiB3hqADy7v/Mv4+gIinFW4Ez6n9cx3CIP3TTEIzMAfga1EcAhIvcEBtrl3JPEGCVsYoEirnEvDhYKgJ/+ns+UYNZBPJpqMio5vR7M5ccpzwgTLrg5XlrMhFqaqIz4ZBDUEGFrpivZFKRjVJUNhsSQ7bFn4eBeLFcdULn3iOC5n5mkd8XrxgQeOi4P/uV5oavf8UerkWVtRoCXdq2KK5YA901R9igyUt6RE/KCAE3MTwK5clBjUEe+JSvbglA88KuqC7wC9NoF+rwpN1MYAxPuEsncCjNvTjWOq2Y125ky56jfA0V3CS5rANJwvR6+scpbM5G/VS3qCKAiE6SUL8c9JYUObvsrLQgkj98yACToRUtMuidjah4TyyCmFH7wfqoArmS9PN3L1Jz7FgA3zMEhvNAYrEjlSZ7v5JxlR0bTMka2GBanK8+uhMEPsrqMJJvsAZClfDD68YygoQN8aQUNlAwtt/i0uSyScBxqJFuklAjQRORaLsgEl8sZ+X9iibcVIC4caDV2HQypJx63YKtmJNvLCtK0NQCtvXVm30b11Fjr67y9lm+etAIoPcmVf4N0T68ssDKAEs6lyA6AucrpXhCbFkZVdhaqjPLmprDp9SWAzHXGsDM1FuQMbnQPQO8gO8AcelYAVTPJZZQ2K6G3Ao4wdx4Smy7k9yoTQkopHbYqodG01hlpPeP1ArHtRXI4p82d+dx/tDTLIurYjenvFyTu/QaaLVqZ7gM45LhctNeGBzViZEu2uat1R5NJM5+L3ga2yueqCKoeilTL2ByuPUqnoXI5FHu6fsCa9ZI6h8cdQxBQ+x4xS8BqJZu8dqL7Vn+oyK3TkDdLH2kFcrftTTXRyzLw7Y5CWhEst9Vg27h1ezV5wayXCSIP/sdPp3ql3vAdJ2mbZt34y0lam+P+eLpzVy/MoSz4j1cZGfQoK1G9KsVV3KBdi5V1R8JeQTGjMcGIhgnekh6VhVH95fzGcBlNEV98kPMde2NQPhjqL6oW88kC22Y2OTC81iqgM9WiCY/nCGNEmxLxg5yJNsmQCNl6gCyypJUAY43czHpUioUs+BgwQxVsqp1d797gnG7akhKOqOx60FajD/LRVkJwjOl7UoYjeLPaSU1ZoARgYRdChxlOJKbpIcUTNtEFrE7ZZvHfEcDHV+SgAZzDBA5AzmIxBDEcFwDkIIIk+8sOENHmZXDpHPC0x2XKNqNIIs+aKSK8u4j4TwocBoIWANihKTGnA7mgLCkiihAMg1njtdibqnXAesBAY4pQ2qxkcEONQoN8hJqmiaO2pT6o5BjRBZq4krmFFylxnzvY2xGvman85tBrEx7vvcw/6WVS8gpNFg8K1d9mz2qJUyjhtaP1qDCGkpr4xrwjH7kqgn3EUPtPMWlBiB+xOgfTkn9QkB8/DmAGal7M0G0SRD5RTBP8Sa4o+XI5Ms4e5XhFh6f1h4fTNS0v9q46fX0tDMu1AP5G4nvly4Hfbk8tEEr1jjvHqt8d8Nq5ppc77uDn5zfbvmsaSD6PwLQANoCZpfkbwi3MAvkCYYuXEOlQzjCepD/1rnINILCjRkuKKIngHHNNKQnlM0lnf8VObzJt71ddDpDBvZ8VQZJHZFyLJbEP9PzAuYfUtqnsHbI4AEWQicFkFTF1x2wfhE8ky2LVAfLkYSfK4675EIq4yBzndDSAMopI10FJqbfHps6BayuGPwH8D4YXKS207JA5AAAAAElFTkSuQmCC" alt="Dott. Federico Sposini" width="48" height="38">
+    <div class="titles">
+      <h1>Monitoraggio 24 ore</h1>
+      <p><span style="display:block">Dott. Sposini Federico</span><span style="display:block">Medicina Funzionale <b>&amp;</b> Longevity</span></p>
+    </div>
+    <a class="torna" id="tornaHrv" href="./">← HRV Tool</a>
+  </div>
+  <div id="barra"></div>
+</header>
+<button type="button" id="striscia" class="striscia" aria-hidden="true" tabindex="-1"><span></span></button>
+<main>
+  <!-- licenza del monitoraggio (stato letto dal server; non blocca mai scarico, salvataggio e copie) -->
+  <div class="lic" id="licBox" role="status" aria-live="polite" style="display:none"></div>
+  <!-- esito del processo unico: passi, avanzamento e messaggi -->
+  <div class="now" id="procPanel">
+    <div class="lab">Invio e continuazione del monitoraggio</div>
+    <div id="codeRow" style="display:none;margin-top:8px">
+      <label style="font-size:15px">Il tuo codice (te l'ha dato il medico)
+        <input id="inCodice" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--line);border-radius:10px;text-transform:uppercase">
+      </label>
+      <div class="note" style="margin-top:4px">Scrivilo una volta sola: poi tocca di nuovo il pulsante in alto.</div>
+    </div>
+    <ul class="steps" id="steps"></ul>
+    <div id="perso"></div>
+    <div id="prog"></div>
+    <div id="out"></div>
+    <div id="retryRow" style="display:none"><button class="plain" id="bSoloInvio" style="width:100%;margin-top:8px">Riprova solo l'invio (senza toccare la fascia)</button></div>
+  </div>
+
+  <div class="now" id="now"></div>
+
+  <!-- istruzione fissa (Federico, 08/11/2026, aggiornata 16/11 per l'app unica): vale anche per chi la doccia non la segna -->
+  <div class="avviso">
+    <b>Se togli la fascia</b> (doccia, bagno, sauna, nuoto o per qualsiasi altro motivo), la registrazione può fermarsi. Appena l'hai rimessa, tocca <b>«Cambia»</b> in alto: scarica, invia al medico e fa ripartire la registrazione, anche se qui non l'hai segnato.
+  </div>
+
+  <div class="now" id="voiceCard">
+    <div class="lab">Dimmelo a voce</div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <input type="text" id="voiceIn" enterkeyhint="done" autocomplete="off" placeholder="es. vado a fare una passeggiata" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:11px;border:1px solid var(--line);border-radius:10px">
+      <button class="plain" id="voiceGo" style="padding:10px 14px">Segna</button>
+    </div>
+    <div class="note" style="margin-top:6px">Tocca la casella e poi il <b>microfono</b> della tastiera. Puoi dire anche l'orario: <i>"alle 10 ho preso un caffè"</i>, <i>"dalle 9 alle 10 palestra"</i>, <i>"sono tornato"</i>, <i>"ho rotto il digiuno"</i>.</div>
+    <div id="voiceOut"></div>
+  </div>
+
+  <p class="note">Tocca cosa stai facendo quando inizi: dura finché non tocchi un'altra attività o "Fine". Caffè, sigaretta e simili si segnano con un tocco. <b>Se te ne ricordi dopo</b>, usa il pulsante qui sotto, oppure tocca normalmente e poi «Cambia orario» nel messaggio che compare in basso.</p>
+
+  <div id="groups"></div>
+
+  <h2>Oggi</h2>
+  <div class="log" id="log"></div>
+
+  <details class="altre" id="altre">
+    <summary>Altre opzioni</summary>
+    <div class="blocco">
+      <b>Situazione della fascia</b>
+      <div class="kv" id="state" style="margin-top:6px"></div>
+      <div style="margin-top:12px"><b>Registrazioni salvate su questo telefono</b></div>
+      <div class="days" id="days"></div>
+      <label style="display:block;margin-top:12px;font-size:15px">Il tuo codice
+        <input id="inCodice2" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="es. MF-AB12CD" style="display:block;width:100%;margin-top:4px;padding:11px 12px;font-size:17px;border:1px solid var(--line);border-radius:10px;text-transform:uppercase">
+      </label>
+    </div>
+    <div class="blocco">
+      <b>Fine del monitoraggio</b>
+      <p class="note" style="margin:4px 0 0">Solo l'ultimo giorno, quando il medico te lo dice: scarica e invia come sempre, ma <b>non</b> fa ripartire la fascia. Compare anche in alto, ben visibile, nell'ultimo giorno del tuo pacchetto.</p>
+      <button class="plain danger" id="bEnd" style="width:100%">Fine del monitoraggio</button>
+    </div>
+    <div class="blocco">
+      <b>Solo invio</b>
+      <p class="note" style="margin:4px 0 0">Manda al medico registrazioni e diario già sul telefono, senza toccare la fascia. Serve se un invio non è arrivato.</p>
+      <button class="plain" id="bSoloInvio2" style="width:100%">Invia senza toccare la fascia</button>
+    </div>
+    <div class="blocco">
+      <b>Copia di sicurezza del diario</b>
+      <p class="note" style="margin:4px 0 0">Prima di ogni azzeramento il diario viene copiato su questo telefono e conservato 30 giorni.</p>
+      <div id="snapList" class="days" style="margin-top:6px"></div>
+      <button class="plain" id="bSnapNow" style="width:100%">Fai ora una copia del diario</button>
+      <div id="snapOut"></div>
+    </div>
+    <div class="blocco">
+      <b>Altri modi di consegnare</b>
+      <button class="plain" id="bShare" style="width:100%">Condividi registrazioni e diario in un altro modo</button>
+      <p class="note" style="margin:4px 0 0">Solo se l'invio al medico non funziona: apre la condivisione del telefono (email, WhatsApp…).</p>
+      <button class="plain" id="bReset" style="width:100%;margin-top:10px">Azzera il diario (con copia di sicurezza)</button>
+      <button class="plain danger" id="bWipe" style="width:100%">Cancella le registrazioni da questo telefono</button>
+      <p class="note" style="margin:4px 0 0">Solo quando tutte hanno il segno ✓ (arrivate al medico), o se il medico ti conferma di averle ricevute.</p>
+    </div>
+    <div class="blocco">
+      <b>Registro tecnico</b> <button class="plain" id="bCopyLog" style="width:auto;padding:6px 12px;font-size:14px;margin-left:8px">Copia</button>
+      <div id="log24"></div>
+    </div>
+  </details>
+</main>
+
+<dialog id="dlgStress">
+  <b>Quanto ti senti sotto pressione adesso?</b>
+  <div class="note">1 = per niente, 5 = moltissimo</div>
+  <div class="lvl"></div>
+  <div class="row"><button class="plain" id="dlgCancel">Annulla</button></div>
+</dialog>
+
+<dialog id="dlgPast">
+  <b id="pastTitle">Ho dimenticato di segnare</b>
+  <div class="note" id="pastNote">Scegli l'attività e gli orari, anche approssimati.</div>
+  <select id="pastLabel" style="font:inherit;font-size:17px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%"></select>
+  <div class="row" style="align-items:center">
+    <label id="pastFromL" style="flex:1">dalle<br><input type="time" id="pastFrom" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--line);border-radius:9px;width:100%"></label>
+    <label style="flex:1"><span id="pastToT">alle</span><br><input type="time" id="pastTo" style="font:inherit;font-size:19px;padding:6px;border:1px solid var(--line);border-radius:9px;width:100%"></label>
+  </div>
+  <div class="row"><button class="plain" id="pastCancel">Annulla</button><button class="main" id="pastOk" style="width:auto;flex:1">Registra</button></div>
+</dialog>
+
+<dialog id="dlgWake">
+  <b>A che ora sei andato a letto?</b>
+  <div class="note">Ieri sera non era stato segnato: indicalo qui e la notte viene registrata lo stesso.</div>
+  <input type="time" id="bedTime" value="23:00" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%">
+  <div class="row"><button class="plain" id="wakeCancel">Annulla</button><button class="main" id="wakeOk" style="width:auto;flex:1">Registra la notte</button></div>
+</dialog>
+
+<dialog id="dlgOra">
+  <b id="oraTitle">A che ora?</b>
+  <div class="note">Se è dopo l'ora attuale, vale come ieri.</div>
+  <input type="time" id="oraIn" style="font:inherit;font-size:20px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-top:12px;width:100%">
+  <div class="row"><button class="plain" id="oraCancel">Annulla</button><button class="main" id="oraOk" style="width:auto;flex:1">Correggi</button></div>
+</dialog>
+
+<dialog id="dlgFascia">
+  <b>Togli la fascia?</b>
+  <p style="font-size:15px;margin:10px 0 0">Se la togli per la doccia, il bagno, la sauna o il nuoto, la registrazione <b>può fermarsi</b> e non ripartire da sola quando la rimetti.</p>
+  <p style="font-size:15px;margin:8px 0 0">Quando segni la fine, ti propongo di toccare <b>«Cambia»</b>: scarica, invia al medico e fa ripartire la registrazione.</p>
+  <div class="note" style="margin-top:8px">Se la tieni addosso, non devi fare niente.</div>
+  <div class="row"><button class="main" id="fasciaOk" style="width:auto;flex:1">Ho capito</button></div>
+</dialog>
+
+<dialog id="dlgRimessa">
+  <b id="rimTitolo">Hai tolto la fascia?</b>
+  <p style="font-size:15px;margin:10px 0 0" id="rimStima"></p>
+  <p style="font-size:15px;margin:8px 0 0">Ti consiglio di toccare <b>«Cambia»</b> appena l'hai rimessa: scarica, invia al medico e fa ripartire la registrazione. Togliendo la fascia, a volte la registrazione si ferma da sola: con il cambio non si perde niente. Ci vogliono 5-8 minuti, con la fascia addosso, il telefono vicino e lo schermo acceso.</p>
+  <div class="note" style="margin-top:8px">Se non l'hai tolta, puoi farlo più tardi.</div>
+  <div class="row"><button class="plain" id="rimessaDopo">Più tardi</button><button class="main" id="rimessaVai" style="width:auto;flex:1">Cambia ora</button></div>
+</dialog>
+
+<dialog id="dlgCodice">
+  <b>Quale codice uso?</b>
+  <p style="font-size:15px;margin:10px 0 0" id="codTesto"></p>
+  <div class="row"><button class="plain" id="codTieni" style="flex:1"></button><button class="main" id="codUsa" style="width:auto;flex:1"></button></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script id="voce">
+/* Interpreta una frase dettata ("vado a fare una passeggiata", "alle 10 ho preso un caffè",
+   "dalle 9 alle 10 palestra", "sono tornato") tutto sul telefono, a parole chiave. */
+const VOCE = (() => {
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’'`]/g, ' ').replace(/[^a-z0-9:.,\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  // dal più specifico al più generico: la prima regola che corrisponde vince
+  const ATTIVITA = [
+    ['Telefonata o discussione difficile', /\b(litig\w*|lite|discussion\w*|discuss\w*|telefonata difficile|chiamata difficile|arrabbiat\w*)\b/],
+    // terapie, caldo e freddo: prima della respirazione ("respiro con l'airnergy" è una seduta di Airnergy)
+    ['Airnergy', /\b(airnergy|airenergy|air energy|air nergy)\b/],
+    ['Fotobiomodulazione', /\b(fotobiomodul\w*|foto biomodul\w*|luce rossa|luce infrarossa|red light|pbm)\b/],
+    ['Sauna', /\b(saun\w*|bagno turco|hammam)\b/],
+    ['Doccia fredda', /\b(docci\w* fredd\w*|getto freddo)\b/],
+    ['Doccia calda', /\b(docci\w*)\b/],
+    // bagno freddo o nel ghiaccio (06/11): prima di Allenamento, altrimenti "piscina ghiacciata" diventa un allenamento
+    ['Bagno freddo', /\b((?:bagn|piscin|vasc|immersion|tuff)\w* (?:\w+ ){0,2}(?:fredd\w*|ghiacc\w*|gelid\w*)|ice ?bath)\b/],
+    // bagno caldo (08/11): anche vasca, idromassaggio, terme
+    ['Bagno caldo', /\b((?:bagn|vasc|immersion)\w* (?:\w+ ){0,2}(?:cald\w*|bollent\w*|tiepid\w*)|bagno nella vasca|vasca da bagno|idromassaggio|jacuzzi|terme|termal\w*)\b/],
+    // suonare uno strumento (08/11): solo in prima persona ("sta suonando la batteria" detto di un altro resta una nota);
+    // "batteria" da sola no, potrebbe essere quella del telefono
+    ['Suonare uno strumento', /\b(suono|suonare|suonato|sto suonando|vado a suonare|(?:esercizi\w*|lezion\w*|prov\w*|studio) (?:di|alla|al|con la|con il|della|del) (?:batteria|chitarra|pianoforte|piano|basso|violino|canto|sax\w*)|chitarra|pianoforte|violino|violoncello|flauto|sassofono)\b/],
+    ['Riunione di lavoro', /\b(riunion\w*|meeting|call|videochiamat\w*|conference|colloqui\w*)\b/],
+    // tre tecniche con effetti diversi sul grafico (06/11): prima le specifiche, poi la generica.
+    // Wim Hof anche storpiato dalla dettatura: "vim of", "win hof", "wimhof", "wim hoff"
+    ['Respirazione Wim Hof', /\b([wvu]h?i[mn]{1,2} ?h?o(?:f|ff|ph)|[wv]im)\b/],
+    ['Respirazione vagale', /\b(vagal\w*|espirazion\w* (?:lung\w*|prolungat\w*|lent\w*)|espir\w* lung\w*)\b/],
+    ['Respirazione di coerenza', /\b(coerenz\w*|coherence)\b/],
+    ['Respirazione guidata', /\b(respirazion\w*|respiro guidato|esercizi di respiro|pacer)\b/],
+    ['Meditazione', /\b(medit\w*|mindfulness)\b/],
+    ['Pisolino', /\b(pisolino|riposino|sonnellino|pennichella)\b/],
+    ['TV / serie', /\b(tv|tivu|televisione|partita|film|serie|netflix)\b/],
+    ['Telefono / tablet / social', /\b(social|instagram|tiktok|facebook|whatsapp|scroll\w*|cellulare|telefonino|telefono)\b/],
+    ['Bicicletta', /\b(bici\w*|pedal\w*|ciclismo|spinning)\b/],
+    // nuoto (08/11): voce a sé, perché in acqua la fascia di solito si toglie; prima di Allenamento
+    ['Nuoto', /\b(nuot\w*|piscina|bracciate)\b/],
+    ['Allenamento', /\b(palestra|allen\w*|corsa|corr[eo]\w*|jogging|tennis|padel|calcetto|pesi|crossfit|sport)\b/],
+    ['Camminata', /\b(passeggi\w*|cammin\w*|a piedi|giro col cane|cane fuori)\b/],
+    ['Scale / lavoro fisico', /\b(scale|giardinaggio|pulizie|faccende|trasloco|lavoro fisico|spesa pesante)\b/],
+    ['Guida', /\b(guid\w*|macchina|in auto|traffico|al volante)\b/],
+    ['Attivita mentale / PC', /\b(computer|pc|portatile|email|mail|studi\w*|scriv\w*|documenti|contabilita|pratiche)\b/],
+    // lettura fuori dal lavoro: sullo schermo conta come schermo, su carta come relax
+    ['Telefono / tablet / social', /\b(ipad|tablet|kindle|ebook)\b/],
+    ['Pausa / relax', /\b(pausa|relax|rilass\w*|riposo|riposarmi|divano|musica|libro|romanzo|giornale|rivista|legg\w*|lettura)\b/],
+  ];
+  const PUNTUALI = [
+    ['Mi sento sotto stress', /\b(stressat\w*|sotto stress|ansia|ansios\w*|agitat\w*|nervos\w*|teso|tesa)\b/],
+    ['Caffè', /\b(caffe\w*|espresso|cappuccino|macchiato|ginseng)\b/],
+    ['Sigaretta', /\b(sigarett\w*|fumo|fumato|fumare|fumata|svapo|iqos)\b/],
+    ['Alcol', /\b(vino|birra|birre|alcol\w*|aperitivo|spritz|cocktail|amaro|grappa|whisky|prosecco)\b/],
+    ['Farmaco / integratore', /\b(farmac\w*|medicin\w*|pastiglia|pillola|compress\w*|integrator\w*|melatonina|magnesio)\b/],
+    ['Pasto', /\b(pranz\w*|cena|cenato|colazione|mangi\w*|pasto|spuntino|merenda)\b/],
+  ];
+  const FINE = /\b(finit\w*|fine|tornat\w*|rientrat\w*|smess\w*|basta|terminat\w*|uscit\w* dal|esco dal|ho chiuso|stop)\b/;
+  const NUM = { una: 1, un: 1, uno: 1, due: 2, tre: 3, quattro: 4, cinque: 5, sei: 6, sette: 7, otto: 8, nove: 9, dieci: 10, undici: 11, dodici: 12, tredici: 13, quattordici: 14, quindici: 15, sedici: 16, diciassette: 17, diciotto: 18, diciannove: 19, venti: 20, ventuno: 21, ventidue: 22, ventitre: 23, trenta: 30, quaranta: 40, quarantacinque: 45, cinquanta: 50 };
+  const WORDNUM = Object.keys(NUM).sort((a, b) => b.length - a.length).join('|');
+  const ORA = `(\\d{1,2}(?:[:.]\\d{2})?|${WORDNUM}|mezzogiorno|mezzanotte)(?:\\s+e\\s+(mezza|mezzo|un quarto|tre quarti|\\d{1,2}|${WORDNUM}))?`;
+
+  function hm(hTok, mTok) {
+    let h, m = 0;
+    if (hTok === 'mezzogiorno') h = 12; else if (hTok === 'mezzanotte') h = 0;
+    else if (/^\d/.test(hTok)) { const p = hTok.split(/[:.]/); h = +p[0]; if (p[1]) m = +p[1]; }
+    else h = NUM[hTok];
+    if (mTok) m = mTok === 'mezza' || mTok === 'mezzo' ? 30 : mTok === 'un quarto' ? 15 : mTok === 'tre quarti' ? 45 : /^\d/.test(mTok) ? +mTok : (NUM[mTok] || 0);
+    if (!(h >= 0 && h <= 24 && m >= 0 && m < 60)) return null;
+    return [h % 24, m];
+  }
+  // l'orario detto è il più recente già passato: "alle 3" detto alle 16 = le 15
+  function risolvi([h, m], now, nonOltre) {
+    const cands = h < 12 && h !== 0 ? [h, h + 12] : h === 12 ? [12, 0] : [h];
+    let best = null;
+    for (const hh of cands) {
+      const d = new Date(now); d.setHours(hh, m, 0, 0);
+      let t = d.getTime();
+      while (t > (nonOltre != null ? nonOltre : now) + 5 * 60000) t -= 864e5;
+      if (best == null || t > best) best = t;
+    }
+    return best;
+  }
+
+  function interpreta(testo, now = Date.now()) {
+    const s = ' ' + norm(testo) + ' ';
+    const out = { testo: testo.trim(), t: now };
+    if (!s.trim()) return null;
+    // orari
+    let m;
+    if ((m = s.match(new RegExp(`\\bdall[ea']?\\s*${ORA}\\s+(?:all[ea']?|fino alle)\\s*${ORA}`)))) {
+      const a = hm(m[1], m[2]), b = hm(m[3], m[4]);
+      if (a && b) { out.to = risolvi(b, now); out.from = risolvi(a, now, out.to); if (out.from >= out.to) out.from -= 864e5; }
+    } else if ((m = s.match(/\b(\d{1,3}|un|una|mezz|mezzo|un quarto d)\s*(minut\w*|ora|ore|or)\s+fa\b/)) || (m = s.match(/\bmezz\s*ora fa\b/))) {
+      let min;
+      if (/mezz/.test(m[0])) min = 30; else if (/quarto/.test(m[0])) min = 15;
+      else { const n = /^\d/.test(m[1]) ? +m[1] : 1; min = /min/.test(m[2]) ? n : n * 60; }
+      out.t = now - min * 60000;
+    } else if ((m = s.match(new RegExp(`\\b(?:all[ea']?|verso le|alle ore|dalle|dall)\\s*(?:ore\\s+)?${ORA}`)))) {
+      const a = hm(m[1], m[2]); if (a) out.t = risolvi(a, now);
+    }
+    // digiuno (prima dei pasti: "ho rotto il digiuno mangiando" è la fine del digiuno, non solo un pasto)
+    if (/\bdigiun/.test(s) || /\bultimo pasto\b/.test(s)) {
+      if (out.from != null) return { ...out, azione: 'intervallo', label: 'Digiuno' };
+      if (/\b(fine (del )?digiuno|rott\w* (il )?digiuno|romp\w* (il )?digiuno|interromp\w* (il )?digiuno|interrott\w* (il )?digiuno|finit\w* (il )?digiuno|finisco (il )?digiuno|chius\w* (il )?digiuno|smess\w* (il |di fare )?(il )?digiuno|termin\w* (il )?digiuno)\b/.test(s)) return { ...out, azione: 'digiuno_fine' };
+      if (/\b(inizi\w* (il |a fare )?(il )?digiuno|cominci\w* (il |a fare )?(il )?digiuno|parte il digiuno|ultimo pasto)\b/.test(s)) return { ...out, azione: 'digiuno_inizio' };
+    }
+    // sonno e lavoro
+    if (/\b(vado a dormire|vado a letto|a letto|buonanotte|mi corico|spengo la luce)\b/.test(s) && !/\bsvegli/.test(s)) return { ...out, azione: 'dormo' };
+    if (/\b(svegliat\w*|sveglio|sveglia|buongiorno|mi alzo|alzat\w*)\b/.test(s)) return { ...out, azione: 'sveglio' };
+    if (/\b(fine (del )?lavoro|finit\w* (di )?lavorare|smess\w* (di )?lavorare|esco dal(l)? (lavoro|ufficio)|uscit\w* dal(l)? (lavoro|ufficio)|stacco)\b/.test(s)) return { ...out, azione: 'lavoro_fine' };
+    if (/\b(inizio (a )?lavorare|inizio (il )?lavoro|comincio (a )?lavorare|arrivat\w* in ufficio|sono in ufficio|attacco)\b/.test(s)) return { ...out, azione: 'lavoro_inizio' };
+    // attività
+    const fine = FINE.test(s);
+    const att = ATTIVITA.find(([, re]) => re.test(s));
+    const pun = PUNTUALI.find(([, re]) => re.test(s));
+    if (pun && !(att && /\b(guard|faccio|vado|inizio|sto)\w*/.test(s) && !/\b(preso|bevuto|mangiat|fumat)\w*/.test(s))) {
+      const lv = pun[0] === 'Mi sento sotto stress' ? (s.match(/\b([1-5])\b/) || [])[1] : null;
+      return { ...out, azione: 'puntuale', label: pun[0], livello: lv ? +lv : null };
+    }
+    // fascia tolta o rimessa per qualunque motivo (08/11): se la frase nomina anche doccia, bagno o sauna, vince l'attività
+    if (/\b(fascia|sensore|polar|cardiofrequenzimetro)\b/.test(s) && /\b(tolt\w*|tolgo|togli\w*|slacci\w*|stacc\w*|rimess\w*|rimett\w*)\b/.test(s) && !(att && /^(Sauna|Doccia|Bagno|Nuoto)/.test(att[0])))
+      return { ...out, azione: 'fascia' };
+    const label = att ? att[0].replace('Attivita mentale', 'Attività mentale') : null;
+    if (out.from != null) return label ? { ...out, azione: 'intervallo', label } : { ...out, azione: 'nota' };
+    // "faccio 5 minuti di respirazione" = da adesso per 5 minuti; "ho fatto 5 minuti di…" = i 5 minuti appena passati
+    const dm = s.match(new RegExp(`\\b(\\d{1,3}|${WORDNUM}) minut\\w*(?! fa\\b)`));
+    if (label && dm) {
+      const n = /^\d/.test(dm[1]) ? +dm[1] : NUM[dm[1]];
+      if (n > 0 && n <= 240) {
+        const passato = /\b(ho fatto|fatto|ho finito|finito|terminato|appena)\b/.test(s);
+        return passato ? { ...out, azione: 'intervallo', label, from: out.t - n * 60000, to: out.t } : { ...out, azione: 'intervallo', label, from: out.t, to: out.t + n * 60000, inCorso: true };
+      }
+    }
+    if (fine) return { ...out, azione: 'fine', label };
+    if (label) return { ...out, azione: 'inizio', label };
+    return { ...out, azione: 'nota' };
+  }
+  return { interpreta, norm };
+})();
+if (typeof module !== 'undefined') module.exports = VOCE;
+</script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'hrv24.diarioTelefono.v1';
+  // tipo: 'durata' = inizia e resta attiva; 'puntuale' = un tocco, con una finestra di analisi di default (minuti)
+  const GRUPPI = [
+    { id: 'fisica', nome: 'Attività fisica', col: 'var(--fisica)', voci: [
+      ['Camminata', 'durata'], ['Allenamento', 'durata'], ['Bicicletta', 'durata'], ['Nuoto', 'durata'], ['Scale / lavoro fisico', 'durata'] ] },
+    { id: 'mente', nome: 'Lavoro e mente', col: 'var(--mente)', voci: [
+      ['Riunione di lavoro', 'durata'], ['Attività mentale / PC', 'durata'], ['Telefonata o discussione difficile', 'durata'], ['Guida', 'durata'] ] },
+    { id: 'recupero', nome: 'Recupero', col: 'var(--recupero)', voci: [
+      ['Meditazione', 'durata'], ['Respirazione di coerenza', 'durata'], ['Respirazione vagale', 'durata'], ['Respirazione Wim Hof', 'durata'],
+      ['Respirazione guidata', 'durata'], ['Pausa / relax', 'durata'], ['Pisolino', 'durata'] ] },
+    { id: 'terapie', nome: 'Terapie, caldo e freddo', col: 'var(--terapie)', voci: [
+      ['Airnergy', 'durata'], ['Fotobiomodulazione', 'durata'], ['Sauna', 'durata'], ['Bagno caldo', 'durata'], ['Bagno freddo', 'durata'], ['Doccia fredda', 'durata'], ['Doccia calda', 'durata'] ] },
+    { id: 'schermi', nome: 'Schermi', col: 'var(--schermi)', voci: [
+      ['Telefono / tablet / social', 'durata'], ['TV / serie', 'durata'] ] },
+    // tempo libero (08/11): misurato, non colorato come attività fisica, per vedere se suonare fa recuperare o carica
+    { id: 'svago', nome: 'Tempo libero', col: 'var(--svago)', voci: [
+      ['Suonare uno strumento', 'durata'] ] },
+    { id: 'puntuale', nome: 'Con un tocco', col: 'var(--puntuale)', voci: [
+      ['Caffè', 'puntuale', 30], ['Sigaretta', 'puntuale', 20], ['Pasto', 'puntuale', 45], ['Alcol', 'puntuale', 60],
+      ['Farmaco / integratore', 'puntuale', 30], ['Mi sento sotto stress', 'puntuale', 15] ] },
+  ];
+  const CAT = {}; for (const g of GRUPPI) for (const v of g.voci) CAT[v[0]] = { cat: g.id, col: g.col, tipo: v[1], win: v[2] };
+  CAT['Lavoro'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+  CAT['Sonno'] = { cat: 'giornata', col: 'var(--giornata)', tipo: 'sfondo' };
+  // il digiuno è una fascia di sfondo indipendente: può comprendere la notte, il lavoro e le altre attività
+  CAT['Digiuno'] = { cat: 'giornata', col: 'var(--digiuno)', tipo: 'sfondo' };
+  CAT['Nota'] = { cat: 'altro', col: '#9aa5a9', tipo: 'puntuale', win: 15 };
+  CAT['Telefono / social'] = CAT['Telefono / tablet / social']; // nome della prima versione, per i diari già iniziati
+
+  // ---- memoria del diario (17/11/2026): due pagine o due schede aperte sullo stesso telefono (anche il diario vecchio, che usa
+  // la stessa chiave) non devono più cancellarsi le voci a vicenda. Ogni voce ha un identificativo interno ("id", mai mandato al
+  // medico) e PRIMA di ogni scrittura il diario si rilegge dal telefono e si unisce a tre vie: com'era l'ultima volta che questa
+  // pagina l'ha letto ("base"), com'è qui, com'è sul telefono. Le voci tolte apposta da questa app sono annotate in
+  // "cancellate" (con data e impronta, per 30 giorni): una pagina vecchia che riscrive il diario come l'aveva letto non le fa
+  // risorgere, e una voce che manca solo perché un'altra pagina non la conosceva NON viene cancellata.
+  let seqId = 0;
+  const nuovoId = () => 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + (seqId++).toString(36);
+  const J = v => JSON.stringify(v, Object.keys(v).sort());          // forma canonica di una voce, per i confronti
+  const senzaId = v => { const o = Object.assign({}, v); delete o.id; return J(o); };
+  const impronta = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(16); };
+  const GIORNI_CANCELLATE = 30;
+  let D = { voci: [], cancellate: {} };
+  let base = new Map();     // id -> forma canonica, com'era l'ultima volta che questa pagina ha letto o scritto il diario
+  let ultimoLetto = null;   // testo esatto dell'ultimo diario letto o scritto da questa pagina
+  const fissaBase = () => { base = new Map(D.voci.map(v => [v.id, J(v)])); };
+  // { s, d } oppure null se il telefono non si legge: in quel caso NON si unisce niente (meglio non toccare che cancellare)
+  function leggiTelefono() {
+    let s; try { s = localStorage.getItem(KEY); } catch (e) { return null; }
+    if (s == null) return { s, d: { voci: [] } };
+    try { const d = JSON.parse(s); if (!d || !Array.isArray(d.voci)) return null; d.voci = d.voci.filter(v => v && typeof v === 'object'); return { s, d }; } catch (e) { return null; }
+  }
+  // dà l'id alle voci che non l'hanno (scritte dal diario vecchio): se coincidono con una voce già nota ne prendono l'id
+  // Senza corrispondenza l'id si ricava dal contenuto: due pagine aperte insieme danno lo STESSO id alla stessa voce vecchia
+  // (con un id a caso ognuna avrebbe il suo, e l'unione la raddoppierebbe).
+  function daiId(voci, note, tomba) {
+    const usati = new Set();
+    for (const v of voci) if (v.id) { let id = String(v.id); while (usati.has(id)) id += '~'; v.id = id; usati.add(id); }   // id doppio: il secondo ne riceve uno derivato
+    const liberi = [...new Map(note.filter(n => n && n.id && !usati.has(n.id)).map(n => [n.id, n])).values()];
+    const tombe = Object.keys(tomba || {}).filter(id => !usati.has(id) && tomba[id] && tomba[id].k);
+    for (const v of voci) if (!v.id) {
+      const c = senzaId(v), k0 = v.label + '|' + v.inizio;
+      let k = liberi.findIndex(n => senzaId(n) === c);
+      if (k < 0) k = liberi.findIndex(n => n.label + '|' + n.inizio === k0);
+      if (k >= 0) v.id = liberi.splice(k, 1)[0].id;
+      else { const j = tombe.findIndex(id => tomba[id].k === k0); if (j >= 0) v.id = tombe.splice(j, 1)[0]; else { let id = 'h' + impronta(c); while (usati.has(id)) id += '~'; v.id = id; } }
+      usati.add(v.id);
+    }
+    return voci;
+  }
+  function sostituisci(m, t) { for (const k of Object.keys(m)) delete m[k]; Object.assign(m, t); }   // stesso oggetto, contenuto nuovo
+  // unione a tre vie tra le voci di questa pagina (mine) e il diario letto dal telefono (theirs)
+  function unisciTre(mine, theirsD) {
+    const tomba = Object.assign({}, theirsD.cancellate || {}, D.cancellate || {});
+    const note = [...base.values()].map(s => JSON.parse(s)).concat(mine);
+    const theirs = daiId(theirsD.voci, note, tomba);
+    // rete di sicurezza: stessa voce (contenuto identico) con id diversi qui e sul telefono → prende l'id del telefono
+    { const tIds = new Set(theirs.map(v => v.id)), mIds = new Set(mine.map(v => v.id));
+      const orfaneT = theirs.filter(t => !mIds.has(t.id) && !base.has(t.id));
+      for (const m of mine) if (!tIds.has(m.id)) { const c = senzaId(m), k = orfaneT.findIndex(t => senzaId(t) === c); if (k >= 0) { const t = orfaneT.splice(k, 1)[0], vecchio = m.id, intatta = base.get(vecchio) === J(m); m.id = t.id; base.delete(vecchio); if (intatta) base.set(m.id, J(m)); } } }
+    const mMap = new Map(mine.map(v => [v.id, v])), tMap = new Map(theirs.map(v => [v.id, v])), out = [];
+    for (const m of mine) {
+      const b = base.get(m.id), t = tMap.get(m.id), mCambiata = b === undefined || J(m) !== b;
+      if (t) { if (!mCambiata && J(t) !== b) sostituisci(m, t); out.push(m); }   // cambiata solo altrove: vince l'altra; altrimenti questa
+      else if (b === undefined) out.push(m);                                    // nuova di questa pagina
+      else if (tomba[m.id] && !mCambiata) {}                                    // tolta apposta altrove, qui non toccata: via
+      else { delete tomba[m.id]; out.push(m); }                                 // sparita senza cancellazione voluta, o cambiata qui: resta
+    }
+    for (const t of theirs) {
+      if (mMap.has(t.id)) continue;
+      const b = base.get(t.id);
+      if (b === undefined) { const tb = tomba[t.id]; if (!tb || tb.h !== impronta(J(t))) { delete tomba[t.id]; out.push(t); } }   // nuova di un'altra pagina (una voce tolta qui e riscritta uguale da una pagina vecchia resta tolta)
+      else if (J(t) !== b) { delete tomba[t.id]; out.push(t); }                // tolta qui ma cambiata altrove nel frattempo: resta
+    }
+    return { voci: out, tomba };
+  }
+  function potaTomba(t) { const lim = Date.now() - GIORNI_CANCELLATE * 864e5; for (const id of Object.keys(t)) if (!t[id] || !(t[id].t >= lim)) delete t[id]; return t; }
+  const firma = d => JSON.stringify([d.voci.map(J).sort(), Object.keys(d.cancellate || {}).sort()]);
+  function caricaIniziale() {
+    const L = leggiTelefono(); if (!L) return;
+    D = L.d; D.cancellate = D.cancellate && typeof D.cancellate === 'object' ? D.cancellate : {};
+    daiId(D.voci, [], {}); ultimoLetto = L.s; fissaBase();
+  }
+  // porta in questa pagina quello che altre pagine hanno scritto; riscrive solo se serve (niente rimbalzi tra schede). true = cambiato
+  function sincronizza() {
+    const L = leggiTelefono(); if (!L || L.s === ultimoLetto) return false;
+    daiId(D.voci, [], {});
+    const r = unisciTre(D.voci, L.d);
+    D.voci = r.voci; D.cancellate = potaTomba(r.tomba);
+    if (firma(D) !== firma(L.d)) { try { const s = JSON.stringify(D); localStorage.setItem(KEY, s); ultimoLetto = s; } catch (e) { ultimoLetto = L.s; } }
+    else ultimoLetto = L.s;
+    fissaBase();
+    return true;
+  }
+  function save() {
+    try {
+      const ora = Date.now();
+      daiId(D.voci, [], {});
+      D.cancellate = D.cancellate || {};
+      const qui = new Set(D.voci.map(v => v.id));
+      for (const [id, s] of base) if (!qui.has(id)) { const b = JSON.parse(s); D.cancellate[id] = { t: ora, k: b.label + '|' + b.inizio, h: impronta(s) }; }
+      const L = leggiTelefono();
+      if (L && L.s !== ultimoLetto) { const r = unisciTre(D.voci, L.d); D.voci = r.voci; D.cancellate = r.tomba; }   // un'altra pagina ha scritto nel frattempo
+      potaTomba(D.cancellate);
+      const s = JSON.stringify(D); localStorage.setItem(KEY, s); ultimoLetto = s; fissaBase();
+    } catch (e) { toast('Attenzione: non riesco a salvare sul telefono'); }
+  }
+  caricaIniziale();
+  const trova = id => D.voci.find(v => v.id === id);
+  // «Annulla» che tocca SOLO quello che l'azione ha cambiato (17/11/2026): prima rimetteva il diario intero com'era,
+  // cancellando quello che nel frattempo era arrivato da un'altra pagina o era stato ripristinato
+  const foto = () => new Map(D.voci.filter(v => v.id).map(v => [v.id, J(v)]));
+  function cambiamenti(prima) {   // da chiamare dopo l'azione e PRIMA di save()
+    return { nuove: D.voci.filter(v => !v.id), cambiate: D.voci.filter(v => v.id && prima.has(v.id) && prima.get(v.id) !== J(v)).map(v => ({ id: v.id, prima: prima.get(v.id), dopo: J(v) })) };
+  }
+  function annullaCambiamenti(c) {   // dopo save(): le voci nuove hanno ormai il loro id
+    sincronizza();
+    const via = new Set(c.nuove.map(v => v.id));
+    D.voci = D.voci.filter(v => !via.has(v.id));
+    for (const x of c.cambiate) { const v = trova(x.id); if (v && J(v) === x.dopo) sostituisci(v, JSON.parse(x.prima)); }   // solo se nessuno l'ha cambiata dopo
+    save(); render();
+  }
+  function togliAnnulla() {   // a ogni azzeramento o ripristino il vecchio «Annulla» non ha più senso
+    if ($('voiceUndo')) $('voiceOut').innerHTML = '';
+    const t = $('toast'); if (t.classList.contains('act')) { t.classList.remove('show', 'act'); clearTimeout(t._h); }
+  }
+  const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const durTxt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0'); };
+  function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms || 2200); }
+  // doccia, sauna e bagno freddo si fanno spesso senza fascia. Tolta, a volte la registrazione si chiude e rimettendola non
+  // riparte (04/11: mattinata persa), a volte continua (08/11: stessa doccia, nessun buco). All'inizio una finestra lo spiega;
+  // alla fine si consiglia SEMPRE il cambio con l'invio al medico (decisione di Federico, 08/11/2026: dopo tante ore servirebbe comunque).
+  const TOGLIE_FASCIA = /^(Sauna|Doccia|Bagno|Nuoto)/; // sauna, docce calda e fredda, bagni caldo e freddo, nuoto
+  // (app unica 16/11/2026: il cambio non è più una pagina a parte; i pulsanti chiamano APP24.cambia())
+  function avvisoFascia(poi) {
+    const dlg = $('dlgFascia');
+    $('fasciaOk').onclick = () => { dlg.close(); if (poi) poi(); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  // Ora dell'ultimo cambio, letta dall'archivio della pagina del cambio (stesso sito: su iPhone solo se anche il diario è in Bluefy).
+  // Solo lettura, e non crea MAI l'archivio: creato vuoto da qui, la pagina del cambio non riuscirebbe più a usarlo.
+  function statoFascia() {
+    return new Promise(res => {
+      let fatto = false; const fine = v => { if (!fatto) { fatto = true; res(v); } };
+      setTimeout(() => fine(null), 1500);
+      let r;
+      try { r = indexedDB.open('hrv24cambio'); } catch (e) { return fine(null); }
+      r.onupgradeneeded = e => { if (e.oldVersion === 0) r.transaction.abort(); }; // non esiste: si rinuncia senza crearlo
+      r.onerror = () => fine(null);
+      r.onblocked = () => fine(null);
+      r.onsuccess = () => {
+        const d = r.result;
+        try {
+          if (!d.objectStoreNames.contains('meta') || !d.objectStoreNames.contains('reg')) { d.close(); return fine(null); }
+          const t = d.transaction(['meta', 'reg'], 'readonly'), out = {};
+          t.objectStore('meta').get('ultimoAvvio').onsuccess = e => { out.avvio = e.target.result; };
+          t.objectStore('meta').get('fine').onsuccess = e => { out.fine = e.target.result; };
+          t.objectStore('reg').getAll().onsuccess = e => { out.regs = e.target.result || []; };
+          t.oncomplete = () => { d.close(); fine(out); };
+          t.onerror = t.onabort = () => { d.close(); fine(null); };
+        } catch (e) { d.close(); fine(null); }
+      };
+    });
+  }
+  // stessa stima della pagina del cambio: capienza 95.000 battiti (non ancora verificata fino a memoria piena),
+  // frequenza media delle registrazioni salvate oltre l'ora, altrimenti 68 battiti al minuto
+  function stimaFascia(s) {
+    if (!s || !s.avvio || !(s.avvio.t > 0)) return null;
+    if (s.fine && s.fine > s.avvio.t) return { conclusa: true };
+    const rr = (s.regs || []).filter(r => r.type === 'rr' && r.durMin > 60), n = rr.reduce((a, r) => a + r.n, 0), m = rr.reduce((a, r) => a + r.durMin, 0);
+    const fc = m ? n / m : 68, ora = Date.now(), trascorsi = (ora - s.avvio.t) / 60000, restano = Math.max(0, 94626 - trascorsi * fc) / fc;
+    return { avvio: s.avvio.t, trascorsi, restano, piena: ora + restano * 60000 };
+  }
+  const quando = t => {
+    const g = Math.round((new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+    return (g === 0 ? 'oggi' : g === -1 ? 'ieri' : g === 1 ? 'domani' : new Date(t).toLocaleDateString('it-IT', { day: 'numeric', month: 'numeric' })) + ' alle ' + hhmm(t);
+  };
+  // fine di doccia, sauna o bagno freddo: domanda, stima di quanto resta e consiglio del cambio (testo di Federico, 08/11)
+  async function avvisoRimessa(label) {
+    const dlg = $('dlgRimessa');
+    if (dlg.open) return;
+    const s = stimaFascia(await statoFascia());
+    if (s && s.conclusa) return; // monitoraggio già concluso: la fascia non registra, il cambio non serve
+    const fatto = !label || !TOGLIE_FASCIA.test(label) ? '' : label === 'Nuoto' ? 'Hai nuotato. ' : 'Hai fatto ' + (/^Bagno/.test(label) ? 'il ' : 'la ') + label.toLowerCase() + '. ';
+    $('rimTitolo').textContent = fatto + 'Hai tolto la fascia?';
+    $('rimStima').innerHTML = !s ? 'Su questo telefono non trovo l\'ora dell\'ultimo cambio: il diario e la pagina del cambio vanno usati tutti e due in Bluefy.'
+      : `La fascia registra dall'ultimo cambio, ${quando(s.avvio)} (da ${durTxt(s.trascorsi * 60000)}). ` +
+        (s.restano > 0 ? `Se sta ancora registrando, la memoria si riempirebbe ${quando(s.piena)}: <b>restano circa ${durTxt(s.restano * 60000)}</b>.` : '<b>La memoria potrebbe essere già piena.</b>');
+    $('rimessaDopo').onclick = () => dlg.close();
+    $('rimessaVai').onclick = () => { dlg.close(); window.scrollTo(0, 0); if (window.APP24) APP24.cambia(); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  // dopo un tocco, per 8 secondi il messaggio offre di correggere l'orario: chi si ricorda in ritardo segna e sistema subito
+  function toastOra(s, v) {
+    const t = $('toast'); t.textContent = s;
+    const b = document.createElement('button'); b.textContent = 'Era prima? Cambia orario';
+    b.onclick = () => { t.classList.remove('show', 'act'); cambiaOra(v); };
+    t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
+  }
+  // dopo una correzione d'orario nell'elenco: 8 secondi per tornare indietro
+  function toastAnnulla(s, c) {
+    const t = $('toast'); t.textContent = s;
+    const b = document.createElement('button'); b.textContent = 'Annulla';
+    b.onclick = () => { annullaCambiamenti(c); t.classList.remove('act'); toast('Orario ripristinato'); };
+    t.append(b); t.classList.add('show', 'act'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show', 'act'), 8000);
+  }
+  function cambiaOra(v) {
+    const dlg = $('dlgOra'), inp = $('oraIn');
+    $('oraTitle').textContent = v.puntuale ? `A che ora: ${v.label.toLowerCase()}?` : `Da che ora: ${v.label.toLowerCase()}?`;
+    inp.value = hhmm(v.inizio);
+    $('oraCancel').onclick = () => dlg.close();
+    $('oraOk').onclick = () => {
+      if (!inp.value) return;
+      sincronizza();
+      const now = Date.now(), [h, m] = inp.value.split(':').map(Number), d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() > now + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri
+      const prima = v.inizio, delta = d.getTime() - prima;
+      v.inizio += delta; if (v.puntuale && v.fine != null) v.fine += delta;
+      if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+      // l'attività che questa aveva chiuso finisce anche lei all'orario corretto
+      // (entro un minuto: chiudi() allunga a 1 minuto le attività appena iniziate)
+      if (!v.puntuale) { const p = D.voci.find(x => x !== v && !x.puntuale && x.fine != null && Math.abs(x.fine - prima) <= 60000 && CAT[x.label] && CAT[x.label].tipo === 'durata'); if (p) p.fine = Math.max(p.inizio + 60000, v.inizio); }
+      save(); render(); dlg.close(); toast(`${v.label}: ${v.puntuale ? 'alle' : 'dalle'} ${hhmm(v.inizio)}`);
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  if (navigator.vibrate) {} // la vibrazione su iPhone non è disponibile: il riscontro è il messaggio in basso
+
+  // una voce che questa versione non conosce (diario scritto da una versione più nuova) non deve bloccare la pagina
+  const aperta = cat => D.voci.find(v => v.fine == null && CAT[v.label] && (cat === 'sfondo' ? CAT[v.label].tipo === 'sfondo' : CAT[v.label].tipo === 'durata'));
+  const apertaLabel = label => D.voci.find(v => v.fine == null && v.label === label);
+
+  function chiudi(v, t) { v.fine = Math.max(t, v.inizio + 60000); }
+  function tocca(label) {
+    sincronizza();
+    const c = CAT[label], t = Date.now();
+    if (c.tipo === 'puntuale') {
+      if (label === 'Mi sento sotto stress') return chiediLivello();
+      const v = { label, inizio: t, fine: t + c.win * 60000, puntuale: true }; D.voci.push(v);
+      save(); render(); toastOra(label + ' alle ' + hhmm(t), v); return;
+    }
+    const cur = aperta('durata');
+    if (cur && cur.label === label) {
+      chiudi(cur, t); save(); render();
+      toast(label + ': fine alle ' + hhmm(t)); if (TOGLIE_FASCIA.test(label)) avvisoRimessa(label);
+      return;
+    }
+    const eraSenzaFascia = cur && TOGLIE_FASCIA.test(cur.label);
+    if (cur) chiudi(cur, t);
+    const v = { label, inizio: t, fine: null }; D.voci.push(v);
+    save(); render();
+    // dalla sauna alla doccia la fascia è ancora tolta: il consiglio del cambio aspetta la fine dell'ultima
+    const msg = () => { toastOra(label + ' dalle ' + hhmm(t), v); if (eraSenzaFascia && !TOGLIE_FASCIA.test(label)) avvisoRimessa(cur.label); };
+    if (TOGLIE_FASCIA.test(label)) avvisoFascia(msg); else msg();
+  }
+  // il digiuno finisce con un pasto: "Fine digiuno" segna anche il pasto alla stessa ora
+  function digiuno() {
+    sincronizza();
+    const t = Date.now(), cur = apertaLabel('Digiuno');
+    if (cur) {
+      chiudi(cur, t);
+      D.voci.push({ label: 'Pasto', inizio: t, fine: t + CAT['Pasto'].win * 60000, puntuale: true });
+      toast('Fine digiuno alle ' + hhmm(t) + ' (' + durTxt(t - cur.inizio) + '), pasto segnato');
+    } else { D.voci.push({ label: 'Digiuno', inizio: t, fine: null }); toast('Inizio digiuno alle ' + hhmm(t)); }
+    save(); render();
+  }
+  function sfondo(label) {
+    sincronizza();
+    const t = Date.now(), cur = apertaLabel(label);
+    if (cur) { chiudi(cur, t); toast(label === 'Sonno' ? 'Buongiorno: sveglia alle ' + hhmm(t) : 'Fine lavoro alle ' + hhmm(t)); }
+    else {
+      if (label === 'Sonno') { const a = aperta('durata'); if (a) chiudi(a, t); }
+      D.voci.push({ label, inizio: t, fine: null }); toast(label === 'Sonno' ? 'Buonanotte: a letto alle ' + hhmm(t) : 'Inizio lavoro alle ' + hhmm(t));
+    }
+    save(); render();
+  }
+  // "Mi sono svegliato" funziona anche se la sera non è stato toccato "Vado a dormire"
+  function sveglia() {
+    sincronizza();
+    const sl = apertaLabel('Sonno');
+    if (sl) return sfondo('Sonno');
+    const dlg = $('dlgWake');
+    $('wakeCancel').onclick = () => dlg.close();
+    $('wakeOk').onclick = () => {
+      const v = $('bedTime').value; if (!v) return;
+      sincronizza();
+      const now = Date.now(), [h, m] = v.split(':').map(Number), d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() >= now) d.setDate(d.getDate() - 1); // orario "nel futuro" = ieri sera
+      const a = aperta('durata'); if (a) chiudi(a, d.getTime());
+      D.voci.push({ label: 'Sonno', inizio: d.getTime(), fine: now });
+      save(); render(); dlg.close(); toast('Notte registrata: dalle ' + hhmm(d.getTime()) + ' alle ' + hhmm(now));
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
+  // attività dimenticata: orari "dalle–alle" riferiti all'ultima volta che sono passati (oggi o ieri)
+  function passato(preset, titolo, nota) {
+    const dlg = $('dlgPast'), sel = $('pastLabel');
+    sel.innerHTML = GRUPPI.map(g => `<optgroup label="${g.nome}">${g.voci.map(([l]) => `<option>${l}</option>`).join('')}</optgroup>`).join('') +
+      '<optgroup label="Giornata"><option>Lavoro</option><option>Sonno</option><option>Digiuno</option></optgroup>';
+    if (preset) sel.value = preset;
+    $('pastTitle').textContent = titolo || 'Ho dimenticato di segnare';
+    $('pastNote').textContent = nota || 'Scegli l\'attività e gli orari, anche approssimati.';
+    const now = new Date();
+    $('pastTo').value = hhmm(now.getTime());
+    $('pastFrom').value = hhmm(now.getTime() - 3600000);
+    const aggiorna = () => { const p = CAT[sel.value] && CAT[sel.value].tipo === 'puntuale'; $('pastFromL').style.display = p ? 'none' : ''; $('pastToT').textContent = p ? 'alle ore' : 'alle'; };
+    sel.onchange = aggiorna; aggiorna();
+    $('pastCancel').onclick = () => dlg.close();
+    $('pastOk').onclick = () => {
+      sincronizza();
+      const label = sel.value, c = CAT[label], nowMs = Date.now();
+      const at = v => { const [h, m] = v.split(':').map(Number), d = new Date(nowMs); d.setHours(h, m, 0, 0); return d.getTime(); };
+      if (!$('pastTo').value) return;
+      let fine = at($('pastTo').value); if (fine > nowMs + 60000) fine -= 864e5;
+      if (c.tipo === 'puntuale') { D.voci.push({ label, inizio: fine, fine: fine + c.win * 60000, puntuale: true }); }
+      else {
+        if (!$('pastFrom').value) return;
+        let inizio = at($('pastFrom').value); while (inizio > fine - 60000) inizio -= 864e5;
+        // se l'attività dimenticata è quella ancora aperta, la chiude invece di duplicarla
+        const open = apertaLabel(label);
+        if (open) { open.inizio = Math.min(open.inizio, inizio); open.fine = fine; }
+        else D.voci.push({ label, inizio, fine });
+        // un digiuno finisce con un pasto: lo aggiunge se non è già segnato vicino alla fine
+        if (label === 'Digiuno' && !D.voci.some(v => v.label === 'Pasto' && Math.abs(v.inizio - fine) <= 30 * 60000))
+          D.voci.push({ label: 'Pasto', inizio: fine, fine: fine + CAT['Pasto'].win * 60000, puntuale: true });
+      }
+      save(); render(); dlg.close(); toast(label + ' registrato');
+      if (TOGLIE_FASCIA.test(label) && fine > nowMs - 2 * 3600000) avvisoRimessa(label); // segnata dopo, ma finita da poco
+    };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
+  /* ---------- dettatura: la frase diventa un'azione, con "Annulla" ---------- */
+  function applicaVoce(r) {
+    sincronizza();
+    const prima = foto(), t = r.t;
+    let rimessa = null; // voce senza fascia appena chiusa: alla fine si consiglia il cambio
+    const chiudiTutto = () => { const a = aperta('durata'); if (a) { chiudi(a, t); if (TOGLIE_FASCIA.test(a.label)) rimessa = a.label; } };
+    let txt;
+    switch (r.azione) {
+      case 'inizio': {
+        chiudiTutto(); const sl = apertaLabel('Sonno'); if (sl) chiudi(sl, t);
+        D.voci.push({ label: r.label, inizio: t, fine: null }); txt = `${r.label} dalle ${hhmm(t)}`; break;
+      }
+      case 'fine': {
+        // "finita la respirazione" chiude anche una respirazione di coerenza, vagale o Wim Hof in corso (e viceversa)
+        const stessaFamiglia = r.label && /^Respirazione/.test(r.label) ? D.voci.find(v => v.fine == null && /^Respirazione/.test(v.label)) : null;
+        const cur = r.label ? (apertaLabel(r.label) || stessaFamiglia) : aperta('durata');
+        if (cur) { chiudi(cur, t); txt = `${cur.label}: fine alle ${hhmm(t)}`; if (TOGLIE_FASCIA.test(cur.label)) rimessa = cur.label; break; }
+        if (r.label) return passato(r.label, 'Quando era iniziata?', `"${r.label}" non risultava in corso: indica gli orari, anche approssimati.`);
+        $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px;color:var(--giallo)">Non c\'è nessuna attività in corso da chiudere.</div>'; return;
+      }
+      case 'intervallo': {
+        // se comincia adesso, chiude l'attività precedente (la fascia di lavoro resta aperta)
+        if (r.inCorso) { const a = aperta('durata'); if (a) { chiudi(a, r.from); if (TOGLIE_FASCIA.test(a.label)) rimessa = a.label; } }
+        D.voci.push({ label: r.label, inizio: r.from, fine: r.to }); txt = `${r.label} dalle ${hhmm(r.from)} alle ${hhmm(r.to)}`; break;
+      }
+      case 'puntuale': { const c = CAT[r.label]; const v = { label: r.label, inizio: t, fine: t + c.win * 60000, puntuale: true }; if (r.livello) v.livello = r.livello; D.voci.push(v); txt = `${r.label}${r.livello ? ' ' + r.livello + '/5' : ''} alle ${hhmm(t)}`; break; }
+      case 'dormo': { chiudiTutto(); const w = apertaLabel('Lavoro'); if (w) chiudi(w, t); if (!apertaLabel('Sonno')) D.voci.push({ label: 'Sonno', inizio: t, fine: null }); txt = `a letto alle ${hhmm(t)}`; break; }
+      case 'sveglio': { const sl = apertaLabel('Sonno'); if (!sl) return sveglia(); chiudi(sl, t); txt = `sveglia alle ${hhmm(t)}`; break; }
+      case 'digiuno_inizio': {
+        const open = apertaLabel('Digiuno');
+        if (open) { open.inizio = t; txt = `digiuno: inizio corretto alle ${hhmm(t)}`; }
+        else { D.voci.push({ label: 'Digiuno', inizio: t, fine: null }); txt = `inizio digiuno alle ${hhmm(t)}`; }
+        break;
+      }
+      case 'digiuno_fine': {
+        const open = apertaLabel('Digiuno');
+        if (!open) return passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto, anche approssimata.');
+        chiudi(open, t); D.voci.push({ label: 'Pasto', inizio: t, fine: t + CAT['Pasto'].win * 60000, puntuale: true });
+        txt = `fine digiuno alle ${hhmm(t)} (${durTxt(t - open.inizio)}), con il pasto`; break;
+      }
+      case 'lavoro_inizio': if (!apertaLabel('Lavoro')) D.voci.push({ label: 'Lavoro', inizio: t, fine: null }); txt = `inizio lavoro alle ${hhmm(t)}`; break;
+      case 'lavoro_fine': { const w = apertaLabel('Lavoro'); if (!w) return passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui.'); chiudi(w, t); txt = `fine lavoro alle ${hhmm(t)}`; break; }
+      // "ho tolto / rimesso la fascia": resta come nota e apre il consiglio del cambio
+      case 'fascia': D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`; rimessa = 'fascia'; break;
+      default: D.voci.push({ label: 'Nota', inizio: t, fine: t + 15 * 60000, puntuale: true, nota: r.testo }); txt = `nota alle ${hhmm(t)}: “${r.testo.replace(/[<>&]/g, '')}”`;
+    }
+    const fatti = cambiamenti(prima);
+    save(); render();
+    $('voiceOut').innerHTML = `<div class="msg-ok" style="margin-top:8px;border-radius:9px;padding:9px 11px;font-size:15px">Ho segnato: <b>${txt}</b> <button class="plain" id="voiceUndo" style="padding:4px 10px;margin-left:6px;font-size:14px">Annulla</button></div>`;
+    $('voiceUndo').onclick = () => { annullaCambiamenti(fatti); $('voiceOut').innerHTML = '<div class="note" style="margin-top:8px">Annullato.</div>'; };
+    const iniziaSenzaFascia = (r.azione === 'inizio' || (r.azione === 'intervallo' && r.inCorso)) && TOGLIE_FASCIA.test(r.label);
+    const finitaDaPoco = r.azione === 'intervallo' && !r.inCorso && TOGLIE_FASCIA.test(r.label) && r.to > Date.now() - 2 * 3600000; // "ho fatto la doccia"
+    if (iniziaSenzaFascia) avvisoFascia();
+    else if (finitaDaPoco) avvisoRimessa(r.label);
+    else if (rimessa) avvisoRimessa(rimessa);
+  }
+  function segnaVoce() {
+    const inp = $('voiceIn'), s = inp.value.trim(); if (!s) return;
+    const r = VOCE.interpreta(s); if (!r) return;
+    inp.value = ''; inp.blur(); applicaVoce(r);
+  }
+  $('voiceGo').onclick = segnaVoce;
+  $('voiceIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); segnaVoce(); } });
+
+  function chiediLivello() {
+    const dlg = $('dlgStress'), box = dlg.querySelector('.lvl');
+    box.innerHTML = [1, 2, 3, 4, 5].map(n => `<button data-n="${n}">${n}</button>`).join('');
+    box.querySelectorAll('button').forEach(b => b.onclick = () => {
+      sincronizza();
+      const t = Date.now();
+      D.voci.push({ label: 'Mi sento sotto stress', inizio: t, fine: t + 15 * 60000, puntuale: true, livello: +b.dataset.n });
+      save(); render(); dlg.close(); toast('Stress ' + b.dataset.n + '/5 segnato alle ' + hhmm(t));
+    });
+    $('dlgCancel').onclick = () => dlg.close();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+
+  // ---- scudo contro i tocchi sbagliati sugli orari (18/11/2026) ----
+  // Segnalato da Federico: cambiando un'ora con la rotella dell'iPhone si segnava un'attività sottostante (per esempio
+  // «Respirazione di coerenza»). Cause probabili (DEDOTTE, non riprodotte su iPhone): il tocco che chiude la rotella cade sul
+  // pulsante sotto il dito, e l'elenco ridisegnato alla chiusura cambia i pulsanti sotto il dito. Rimedi: (a) mentre un orario
+  // è aperto e per 600 ms dopo la sua chiusura (o la chiusura di una finestra) i tocchi sui pulsanti delle attività, della
+  // giornata, su «Fine …» e sulla × dell'elenco si ignorano in silenzio; i pulsanti delle finestre («Annulla», «Correggi»,
+  // «Registra»…) e dei messaggi in basso restano attivi. (b) Niente si ridisegna mentre un orario è aperto: si rimanda.
+  const SCUDO_MS = 600, PROTETTI = '#groups button, #bFine, #log [data-del]';
+  let scudoFino = 0, renderRimandato = false;
+  const eOra = el => !!(el && el.matches && el.matches('input[type=time]'));
+  function oraAperta() { const a = document.activeElement; if (!eOra(a)) return false; const d = a.closest('dialog'); return !d || d.open; }   // un orario in una finestra chiusa non conta
+  const scudoAttivo = () => oraAperta() || Date.now() < scudoFino;
+  function rendiRimandato() { setTimeout(() => { if (renderRimandato && !oraAperta()) render(); }, 0); }
+  document.addEventListener('focusin', e => { if (eOra(e.target)) scudoFino = Math.max(scudoFino, Date.now() + SCUDO_MS); }, true);
+  document.addEventListener('focusout', e => { if (eOra(e.target)) { scudoFino = Date.now() + SCUDO_MS; rendiRimandato(); } }, true);
+  document.addEventListener('close', e => { if (e.target && e.target.tagName === 'DIALOG') { scudoFino = Date.now() + SCUDO_MS; rendiRimandato(); } }, true);   // «close» non risale: si prende in cattura
+  window.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest(PROTETTI) : null;
+    if (!b || !scudoAttivo()) return;
+    e.preventDefault(); e.stopImmediatePropagation();   // in silenzio: nessun messaggio al paziente
+    if (window.APP24 && APP24.log) APP24.log('Tocco ignorato su «' + (b.dataset.l || b.dataset.s || (b.dataset.del ? 'togli voce' : '') || b.textContent.trim().slice(0, 40)) + '» (subito dopo un orario o una finestra)');
+  }, true);
+
+  function render() {
+    // mai ridisegnare mentre è aperta la rotella di un orario: la chiuderebbe e cambierebbe i pulsanti sotto il dito
+    if (oraAperta()) { renderRimandato = true; return; }
+    renderRimandato = false;
+    const cur = aperta('durata'), sl = apertaLabel('Sonno'), wk = apertaLabel('Lavoro'), dg = apertaLabel('Digiuno');
+    // attività con durata già detta ("5 minuti di respirazione"), ancora in corso
+    const plan = !cur && !sl && D.voci.filter(v => !v.puntuale && v.fine && v.inizio <= Date.now() && v.fine > Date.now() && CAT[v.label] && CAT[v.label].tipo === 'durata').sort((a, b) => b.inizio - a.inizio)[0];
+    $('now').innerHTML = `<div class="lab">Adesso</div>
+      <div class="what">${sl ? 'A letto' : cur ? cur.label : plan ? plan.label : 'Nessuna attività segnata'}</div>
+      <div class="since">${sl ? 'dalle ' + hhmm(sl.inizio) : cur ? 'dalle ' + hhmm(cur.inizio) + ' · ' + durTxt(Date.now() - cur.inizio) : plan ? 'dalle ' + hhmm(plan.inizio) + ' alle ' + hhmm(plan.fine) + ' · si chiude da sola' : 'Tocca un pulsante quando inizi qualcosa.'}</div>
+      ${wk ? `<div class="bg">In orario di lavoro dalle ${hhmm(wk.inizio)}</div>` : ''}
+      ${dg ? `<div class="bg">In digiuno dalle ${hhmm(dg.inizio)} · ${durTxt(Date.now() - dg.inizio)}</div>` : ''}
+      ${cur && !sl ? '<button class="plain" id="bFine">Fine ' + cur.label.toLowerCase() + '</button>' : ''}`;
+    const bf = $('bFine'); if (bf) bf.onclick = () => { sincronizza(); chiudi(cur, Date.now()); save(); render(); toast('Fine alle ' + hhmm(Date.now())); if (TOGLIE_FASCIA.test(cur.label)) avvisoRimessa(cur.label); };
+
+    $('groups').innerHTML = GRUPPI.map(g => `<h2>${g.nome}</h2><div class="grid">${g.voci.map(([l]) =>
+      `<button class="btn${cur && cur.label === l ? ' on' : ''}" style="background:${g.col}" data-l="${l}">${l}</button>`).join('')}</div>`).join('') +
+      `<h2>Giornata</h2><div class="grid">
+        <button class="btn" style="background:var(--giornata)${wk ? ';opacity:.55' : ''}" data-s="Lavoro" ${wk ? 'disabled' : ''}>Inizio lavoro<small>${wk ? 'dalle ' + hhmm(wk.inizio) : ''}</small></button>
+        <button class="btn" style="background:var(--fine-lavoro)" id="bWorkEnd">Fine lavoro</button>
+        <button class="btn" style="background:var(--sonno)${sl ? ';opacity:.55' : ''}" data-s="Sonno" ${sl ? 'disabled' : ''}>Vado a dormire<small>${sl ? 'a letto dalle ' + hhmm(sl.inizio) : ''}</small></button>
+        <button class="btn" style="background:var(--sveglia);grid-column:1 / -1" id="bWake">Mi sono svegliato</button>
+        <button class="btn" style="background:var(--digiuno)${dg ? ';opacity:.55' : ''}" id="bFastStart" ${dg ? 'disabled' : ''}>Inizio digiuno<small>${dg ? 'dalle ' + hhmm(dg.inizio) : 'dopo l\'ultimo pasto'}</small></button>
+        <button class="btn" style="background:var(--fine-digiuno)" id="bFastEnd">Fine digiuno<small>segna anche il pasto</small></button>
+      </div>`;
+    document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => tocca(b.dataset.l));
+    document.querySelectorAll('[data-s]').forEach(b => b.onclick = () => sfondo(b.dataset.s));
+    $('bWake').onclick = sveglia;
+    $('bFastStart').onclick = digiuno;
+    $('bFastEnd').onclick = () => apertaLabel('Digiuno') ? digiuno() : passato('Digiuno', 'Quando avevi iniziato il digiuno?', 'L\'inizio non era stato segnato: indica l\'ora dell\'ultimo pasto e quella in cui hai mangiato di nuovo.');
+    $('bWorkEnd').onclick = () => apertaLabel('Lavoro') ? sfondo('Lavoro') : passato('Lavoro', 'A che ora avevi iniziato a lavorare?', 'L\'inizio non era stato segnato: indicalo qui, anche approssimato.');
+    // in cima, non in fondo: chi si ricorda dopo deve trovarlo subito
+    $('groups').insertAdjacentHTML('afterbegin', '<button class="plain" id="bPast" style="width:100%;margin-top:4px;padding:13px">＋ Segna qualcosa fatto prima, con l\'orario</button>');
+    $('bPast').onclick = () => passato();
+
+    daiId(D.voci, [], {});
+    const items = D.voci.map(v => ({ v, i: v.id })).sort((a, b) => b.v.inizio - a.v.inizio);
+    $('log').innerHTML = items.length ? items.map(({ v, i }) => `<div class="it">
+        <span class="dot" style="background:${CAT[v.label] ? CAT[v.label].col : '#999'}"></span>
+        <input type="time" value="${hhmm(v.inizio)}" data-i="${i}">
+        ${!v.puntuale && v.fine ? `<span class="note">→</span><input type="time" value="${hhmm(v.fine)}" data-f="${i}" title="ora di fine">` : ''}
+        <span class="t">${v.nota ? 'Nota: “' + String(v.nota).replace(/[<>&]/g, '') + '”' : String(v.label).replace(/[<>&]/g, '')}${v.livello ? ' (' + v.livello + '/5)' : ''}${v.puntuale ? '' : v.fine ? ' · ' + durTxt(v.fine - v.inizio) : ' · in corso'}</span>
+        <button class="x" data-del="${i}" aria-label="togli">×</button></div>`).join('') : '<div class="it note">Ancora niente.</div>';
+    // 11/11/2026: l'orario si salva solo quando la rotella si chiude (spunta), non mentre gira. Prima si salvava a ogni
+    // "change", che l'iPhone manda a ogni scatto della rotella: il diario ridisegnava l'elenco, la rotella si chiudeva e
+    // restava l'orario di passaggio. Dopo il salvataggio, 8 secondi per annullare.
+    document.querySelectorAll('#log input[type=time]').forEach(inp => {
+      inp.dataset.orig = inp.value;
+      inp.onblur = () => {
+        if (!inp.value || inp.value === inp.dataset.orig) return;
+        sincronizza();
+        const prima = foto(), [h, m] = inp.value.split(':').map(Number);
+        if (inp.dataset.f != null) {
+          const v = trova(inp.dataset.f); if (!v) { render(); return; }   // tolta nel frattempo da un'altra pagina
+          const d = new Date(v.inizio);
+          d.setHours(h, m, 0, 0);
+          if (d.getTime() <= v.inizio) d.setDate(d.getDate() + 1); // la fine dopo mezzanotte cade il giorno dopo
+          v.fine = Math.min(d.getTime(), Date.now() + 60000);
+          const c = cambiamenti(prima); save(); render(); toastAnnulla('Fine corretta: ' + hhmm(v.fine), c);
+        } else {
+          const v = trova(inp.dataset.i); if (!v) { render(); return; }
+          const d = new Date(v.inizio);
+          d.setHours(h, m, 0, 0);
+          if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1); // orario "nel futuro" = riferito a ieri sera
+          const delta = d.getTime() - v.inizio; v.inizio += delta; if (v.puntuale && v.fine) v.fine += delta;
+          if (v.fine != null && v.fine <= v.inizio) v.fine = v.inizio + 60000;
+          const c = cambiamenti(prima); save(); render(); toastAnnulla('Orario corretto: ' + hhmm(v.inizio), c);
+        }
+      };
+    });
+    document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { sincronizza(); D.voci = D.voci.filter(v => v.id !== b.dataset.del); save(); render(); });
+  }
+
+  // ---- punti di contatto per il processo unico (APP24): niente accede a D dall'esterno, tutto passa da qui ----
+  const chiaveVoce = v => v.label + '|' + v.inizio;
+  // diario cambiato da un'altra pagina o scheda: si rilegge e si ridisegna (non mentre si sta cambiando un orario)
+  function ricarica() {
+    if (!sincronizza()) return false;
+    render();   // con un orario aperto render() si rimanda da solo alla chiusura (18/11/2026)
+    return true;
+  }
+  window.DIARIO24 = {
+    // il diario nel formato dei file mandati al medico (stesso formato delle condivisioni del diario di prima).
+    // Le voci ancora aperte hanno fine = ora dell'invio e il segno "aperta": il report prende la versione più recente.
+    // "inviate": impronta esatta di ogni voce chiusa esportata (per toglierla dopo l'invio solo se è ancora identica)
+    esporta(t) {
+      sincronizza();
+      t = t || Date.now();
+      daiId(D.voci, [], {});
+      const out = { formato: 'diario-24h', versione: 1, creato: new Date(t).toISOString(),
+        voci: D.voci.map(v => { const o = { label: v.nota ? 'Nota: ' + v.nota : v.label, categoria: CAT[v.label] ? CAT[v.label].cat : 'altro', inizio: new Date(v.inizio).toISOString(), fine: new Date(v.fine == null ? t : v.fine).toISOString(), puntuale: !!v.puntuale, livello: v.livello || null };
+          if (v.fine == null && !v.puntuale) o.aperta = true; return o; }) };
+      return { out, n: D.voci.length, t, inviate: D.voci.filter(v => v.fine != null).map(v => [v.id, J(v)]) };
+    },
+    raw() { sincronizza(); daiId(D.voci, [], {}); return JSON.parse(JSON.stringify(D)); },   // copia completa del diario RILETTO dal telefono
+    conta() { return D.voci.length; },
+    // dopo l'invio confermato toglie le sole voci CHIUSE ancora IDENTICHE a quelle spedite (anche fine, livello, nota):
+    // una correzione fatta durante l'invio resta nel diario e parte con l'invio successivo. Le aperte e le nuove restano.
+    rimuoviInviate(inviate) {
+      sincronizza();
+      const m = new Map(inviate || []), prima = D.voci.length;
+      D.voci = D.voci.filter(v => !(v.fine != null && m.has(v.id) && m.get(v.id) === J(v)));
+      save(); render(); togliAnnulla(); return prima - D.voci.length;
+    },
+    // ripristino non distruttivo: aggiunge le voci che mancano (stessa etichetta e stessa ora = già presente), sempre con un id
+    // nuovo; una voce che nella copia era ancora aperta torna CHIUSA all'ora della copia (non riapre attività già finite)
+    unisci(voci, tCopia) {
+      sincronizza();
+      const s = new Set(D.voci.map(chiaveVoce)); let n = 0, chiuse = 0;
+      for (const v0 of voci || []) {
+        if (!v0 || !v0.label || !isFinite(v0.inizio) || s.has(chiaveVoce(v0))) continue;
+        const v = JSON.parse(JSON.stringify(v0)); v.id = nuovoId();
+        if (v.fine == null) { v.fine = Math.max(tCopia || Date.now(), v.inizio + 60000); chiuse++; }
+        D.voci.push(v); s.add(chiaveVoce(v)); n++;
+      }
+      D.voci.sort((a, b) => a.inizio - b.inizio); save(); render(); togliAnnulla(); return { n, chiuse };
+    },
+    ricarica,
+    // azzeramento manuale: toglie le voci chiuse IDENTICHE a quelle della copia appena fatta (una voce arrivata nel frattempo
+    // da un'altra pagina non è nella copia, quindi resta)
+    tieniSoloAperte(copia) {
+      sincronizza();
+      const nella = new Set((copia || []).map(J)), prima = D.voci.length;
+      D.voci = D.voci.filter(v => v.fine == null || !nella.has(J(v)));
+      save(); render(); togliAnnulla(); return prima - D.voci.length;
+    },
+  };
+  // doppio tocco: il secondo vale solo dopo almeno 600 ms (un tocco doppio involontario non azzera) e entro 3 secondi
+  $('bReset').onclick = () => {
+    const b = $('bReset'), testo = 'Azzera il diario (con copia di sicurezza)';
+    if (!b.dataset.arm) { b.dataset.arm = String(Date.now()); b.textContent = 'Tocca di nuovo per azzerare'; clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 3000); return; }
+    if (Date.now() - +b.dataset.arm < 600) return;
+    clearTimeout(b._t); delete b.dataset.arm; b.textContent = testo;
+    if (window.APP24) APP24.azzeraConCopia(); else toast('Funzione non disponibile');
+  };
+  window.addEventListener('storage', e => { if (e.key === KEY || e.key == null) ricarica(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) ricarica(); });
+
+  render();
+  // ogni minuto si aggiornano le durate, ma non mentre si sta cambiando un orario: ridisegnare chiuderebbe la rotella
+  setInterval(() => render(), 60000);   // render() stesso aspetta se un orario è aperto (18/11/2026)
+})();
+</script>
+
+<!-- Protocollo copiato da prova-memoria-h10.html (collaudato con collaudo_core.js) -->
+<script id="core">
+// Protocollo Polar per la memoria interna della H10 (servizio file PSFTP).
+// Riscritto dalla documentazione di polar-h10-web (PROTOCOL.md, derivata dal
+// Polar BLE SDK ufficiale) e collaudato sulle sue tracce di una H10 reale.
+// Nessun accesso al DOM: la parte sotto lo usa, il collaudo in Node pure.
+const PolarCore = (() => {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+
+  const PSFTP_SERVICE = '0000feee-0000-1000-8000-00805f9b34fb';
+  const PSFTP_MTU_CHAR = 'fb005c51-02e7-f387-1cad-8acd2d8df0c8';
+  const Q = { SET_LOCAL_TIME: 3, START_RECORDING: 14, STOP_RECORDING: 15, RECORDING_STATUS: 16 };
+  const CMD = { GET: 0, REMOVE: 3 };
+  const SAMPLE_TYPE_RR = 16;
+  const PACKET_TIMEOUT_MS = 90000;
+
+  const ERR = {
+    1: 'la fascia si sta riavviando', 2: 'riprova',
+    101: 'comando non valido', 102: 'parametro non valido', 103: 'file non trovato',
+    106: 'operazione non permessa', 108: 'tempo scaduto', 201: 'non implementato',
+    202: 'fascia occupata', 203: 'contenuto non valido', 205: 'memoria piena',
+    208: 'attendi che la fascia sia libera', 209: 'batteria troppo scarica'
+  };
+  class PftpError extends Error {
+    constructor(code) { super('errore ' + code + ' (' + (ERR[code] || 'sconosciuto') + ')'); this.code = code; }
+  }
+
+  function concatList(list) {
+    let n = 0; for (const a of list) n += a.length;
+    const out = new Uint8Array(n); let p = 0;
+    for (const a of list) { out.set(a, p); p += a.length; }
+    return out;
+  }
+  const concat = (...a) => concatList(a);
+  const hex = (b) => Array.from(b, (x) => x.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+
+  // --- protobuf minimo (proto2: varint, length-delimited) ---
+  function varint(n) {
+    let v = BigInt.asUintN(64, BigInt(n));
+    const out = [];
+    do { let b = Number(v & 0x7Fn); v >>= 7n; if (v) b |= 0x80; out.push(b); } while (v);
+    return Uint8Array.from(out);
+  }
+  const fVar = (f, n) => concat(varint((f << 3) | 0), varint(n));
+  const fBytes = (f, b) => concat(varint((f << 3) | 2), varint(b.length), b);
+  const fStr = (f, s) => fBytes(f, enc.encode(s));
+
+  function readVarint(buf, pos) {
+    let r = 0n, shift = 0n, b;
+    do {
+      if (pos >= buf.length) throw new Error('dati protobuf troncati');
+      b = buf[pos++]; r |= BigInt(b & 0x7f) << shift; shift += 7n;
+    } while (b & 0x80);
+    return [r, pos];
+  }
+  function parse(buf) {
+    const m = new Map(); let pos = 0;
+    while (pos < buf.length) {
+      let k; [k, pos] = readVarint(buf, pos);
+      const field = Number(k >> 3n), wire = Number(k & 7n); let val;
+      if (wire === 0) { [val, pos] = readVarint(buf, pos); }
+      else if (wire === 2) {
+        let len; [len, pos] = readVarint(buf, pos); len = Number(len);
+        if (pos + len > buf.length) throw new Error('dati protobuf troncati');
+        val = buf.subarray(pos, pos + len); pos += len;
+      }
+      else if (wire === 1) { val = buf.subarray(pos, pos + 8); pos += 8; }
+      else if (wire === 5) { val = buf.subarray(pos, pos + 4); pos += 4; }
+      else throw new Error('tipo protobuf ' + wire + ' non gestito');
+      if (!m.has(field)) m.set(field, []);
+      m.get(field).push({ wire, val });
+    }
+    return m;
+  }
+  const last = (m, f) => { const e = m.get(f); return e ? e[e.length - 1] : null; };
+  const getNum = (m, f) => { const e = last(m, f); return e && e.wire === 0 ? Number(e.val) : 0; };
+  const getStr = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? dec.decode(e.val) : ''; };
+  const getMsg = (m, f) => { const e = last(m, f); return e && e.wire === 2 ? parse(e.val) : null; };
+  function getUints(m, f) {
+    const out = [];
+    for (const e of (m.get(f) || [])) {
+      if (e.wire === 0) out.push(Number(e.val));
+      else if (e.wire === 2) { let p = 0, v; while (p < e.val.length) { [v, p] = readVarint(e.val, p); out.push(Number(v)); } }
+    }
+    return out;
+  }
+
+  // --- buste RFC60 e pacchetti RFC76 ---
+  const queryEnvelope = (id, params) => {
+    const pre = Uint8Array.of(id & 0xff, ((id >> 8) & 0x7f) | 0x80);
+    return params ? concat(pre, params) : pre;
+  };
+  const requestEnvelope = (hdr) => concat(Uint8Array.of(hdr.length & 0xff, (hdr.length >> 8) & 0x7f), hdr);
+  const operation = (cmd, path) => concat(fVar(1, cmd), fStr(2, path));
+
+  function buildPackets(stream, size = 20) {
+    const max = size - 1, packets = [];
+    let off = 0, seq = 0, next = 0;
+    do {
+      const more = stream.length - off > max, take = more ? max : stream.length - off;
+      const p = new Uint8Array(1 + take);
+      p[0] = next | (more ? 0x06 : 0x02) | (seq << 4);
+      p.set(stream.subarray(off, off + take), 1);
+      packets.push(p); off += take; seq = (seq + 1) & 0x0f; next = 1;
+    } while (off < stream.length);
+    return packets;
+  }
+
+  // write(bytes) scrive un pacchetto sulla caratteristica; onPacket(bytes)
+  // va chiamato per ogni notifica ricevuta; fail(err) alla disconnessione.
+  function createPsftp(write) {
+    let queue = [], waiters = [], failed = null, chain = Promise.resolve();
+    function onPacket(bytes) { if (waiters.length) waiters.shift().resolve(bytes); else queue.push(bytes); }
+    function fail(err) { failed = err; while (waiters.length) waiters.shift().reject(err); }
+    function next() {
+      if (queue.length) return Promise.resolve(queue.shift());
+      if (failed) return Promise.reject(failed);
+      return new Promise((resolve, reject) => {
+        const w = {
+          resolve: (v) => { clearTimeout(t); resolve(v); },
+          reject: (e) => { clearTimeout(t); reject(e); }
+        };
+        const t = setTimeout(() => {
+          const i = waiters.indexOf(w); if (i >= 0) waiters.splice(i, 1);
+          reject(new Error('nessuna risposta dalla fascia per ' + PACKET_TIMEOUT_MS / 1000 + ' secondi'));
+        }, PACKET_TIMEOUT_MS);
+        waiters.push(w);
+      });
+    }
+    async function run(stream, onProgress) {
+      queue = [];
+      for (const p of buildPackets(stream)) await write(p);
+      let expSeq = 0, expNext = 0, received = 0;
+      const chunks = [];
+      try {
+        for (;;) {
+          const pk = await next();
+          received += Math.max(0, pk.length - 1);
+          if (onProgress) onProgress(received);
+          const b0 = pk[0], nxt = b0 & 1, st = (b0 >> 1) & 3, seq = (b0 >> 4) & 15;
+          if (seq !== expSeq) throw new Error('pacchetto perso (atteso ' + expSeq + ', arrivato ' + seq + ')');
+          expSeq = (expSeq + 1) & 15;
+          if (nxt !== expNext) throw new Error('flusso dati fuori sincronia');
+          expNext = 1;
+          if (st === 3) { chunks.push(pk.slice(1)); continue; }
+          if (st === 1) { chunks.push(pk.slice(1)); return concatList(chunks); }
+          if (st === 0) {
+            const code = (pk[1] | 0) | ((pk[2] | 0) << 8);
+            if (code) throw new PftpError(code);
+            return concatList(chunks);
+          }
+          throw new Error('pacchetto con stato sconosciuto ' + st);
+        }
+      } catch (e) {
+        if (!(e instanceof PftpError)) { try { await write(Uint8Array.of(0, 0, 0)); } catch (_) {} }
+        throw e;
+      }
+    }
+    function transact(stream, onProgress) {
+      const p = chain.then(() => run(stream, onProgress));
+      chain = p.catch(() => {});
+      return p;
+    }
+    const query = (id, params) => transact(queryEnvelope(id, params));
+    const request = (hdr, onProgress) => transact(requestEnvelope(hdr), onProgress);
+
+    async function status() {
+      const m = parse(await query(Q.RECORDING_STATUS));
+      return { recording: getNum(m, 1) !== 0, id: getStr(m, 2) };
+    }
+    async function listDir(path) {
+      const m = parse(await request(operation(CMD.GET, path)));
+      return (m.get(1) || []).map((e) => { const em = parse(e.val); return { name: getStr(em, 1), size: getNum(em, 2) }; });
+    }
+    // Le registrazioni stanno in /<identificativo>/SAMPLES.BPB
+    async function listRecordings(path = '/', depth = 0, seen = []) {
+      if (depth > 3) return [];
+      let entries;
+      try { entries = await listDir(path); }
+      catch (e) { if (e.code === 103) return []; throw e; }
+      seen.push(path + ' → ' + entries.map((x) => x.name + ' (' + x.size + ' B)').join(', '));
+      const out = [];
+      for (const en of entries) {
+        if (en.name.endsWith('/')) out.push(...await listRecordings(path + en.name, depth + 1, seen));
+        else if (en.name === 'SAMPLES.BPB') out.push({ path: path + en.name, id: path.split('/').filter(Boolean)[0] || path, size: en.size });
+      }
+      return out;
+    }
+    async function fetchRecording(path, onProgress) {
+      return decodeSamples(await request(operation(CMD.GET, path), onProgress));
+    }
+    const remove = (path) => request(operation(CMD.REMOVE, path));
+    async function setLocalTime(d = new Date()) {
+      const date = concat(fVar(1, d.getFullYear()), fVar(2, d.getMonth() + 1), fVar(3, d.getDate()));
+      const time = concat(fVar(1, d.getHours()), fVar(2, d.getMinutes()), fVar(3, d.getSeconds()), fVar(4, d.getMilliseconds()));
+      await query(Q.SET_LOCAL_TIME, concat(fBytes(1, date), fBytes(2, time), fVar(3, -d.getTimezoneOffset())));
+    }
+    const startRr = (id) => query(Q.START_RECORDING, concat(fVar(1, SAMPLE_TYPE_RR), fBytes(2, fVar(3, 1)), fStr(3, id)));
+    const stop = () => query(Q.STOP_RECORDING);
+
+    return { onPacket, fail, status, listRecordings, fetchRecording, remove, setLocalTime, startRr, stop };
+  }
+
+  // PbExerciseSamples: campo 1 = intervallo (PbDuration, secondi nel campo 3),
+  // campo 2 = FC in bpm, campo 28 = PbExerciseRRIntervals (RR in ms nel campo 1).
+  function decodeSamples(body) {
+    const m = parse(body);
+    const dur = getMsg(m, 1);
+    const interval = dur ? getNum(dur, 3) : 0;
+    const rr = getMsg(m, 28);
+    if (rr) return { type: 'rr', interval, samples: getUints(rr, 1) };
+    return { type: 'hr', interval, samples: getUints(m, 2) };
+  }
+
+  // Stima del tempo di registrazione che resta nella memoria della fascia.
+  // Ora di avvio dall'identificativo HRVT_AAAAMMGG_HHMM (ora locale, la scrive questa pagina all'avvio).
+  // Battiti usati: dalla dimensione del file, se la fascia la dà (circa 2,0 byte a battito: 162.283 byte
+  // per 81.135 battiti il 02/11/2026), altrimenti minuti trascorsi × FC media.
+  // Capienza di 95.000 battiti: stima, non ancora verificata registrando fino a memoria piena.
+  function stimaResiduo({ id, ora = new Date(), byte = null, fcMedia = 68, capienza = 95000, bytePerBattito = 2.0 }) {
+    const m = /^HRVT_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/.exec(id || '');
+    if (!m) return null;
+    const inizio = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]);
+    if (inizio.getMonth() !== m[2] - 1 || inizio.getDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) return null;
+    const trascorsiMin = (ora.getTime() - inizio.getTime()) / 60000;
+    if (!(trascorsiMin >= 0) || !(fcMedia > 0)) return null;
+    const daByte = byte != null && byte > 0;
+    const battitiUsati = daByte ? byte / bytePerBattito : trascorsiMin * fcMedia;
+    const restanoMin = Math.max(0, capienza - battitiUsati) / fcMedia;
+    const fine = new Date(ora.getTime() + restanoMin * 60000);
+    return { inizio, trascorsiMin, battitiUsati, restanoMin, fine, scaricaEntro: new Date(fine.getTime() - 60 * 60000), fonte: daByte ? 'byte' : 'stima' };
+  }
+
+  return { PSFTP_SERVICE, PSFTP_MTU_CHAR, PftpError, createPsftp, decodeSamples, buildPackets, hex, parse, stimaResiduo };
+})();
+if (typeof module !== 'undefined') module.exports = PolarCore;
+</script>
+
+<script id="app24">
+/* App unica (16/11/2026): barra fissa con promemoria, processo unico "scarica → salva → cancella → riparte → invia → verifica → azzera il diario",
+   copie di sicurezza e ripristino del diario. Dati nel telefono: IndexedDB "hrv24cambio" (stesso schema delle pagine di prima, versione 1:
+   NON cambiare versione) e localStorage del diario; copie di sicurezza in un database a parte, "hrv24diario". */
+(() => {
+  const $ = id => document.getElementById(id);
+  // solo per le prove automatiche: niente Bluetooth vero. Vale SOLO se la pagina di prova ha messo la fascia finta prima del
+  // caricamento: un «?finta=1» scritto a mano da chiunque altro viene ignorato (17/11/2026)
+  const FINTA = new URLSearchParams(location.search).has('finta') && !!window.__psftpFinta && typeof window.__psftpFinta.status === 'function';
+  const ATTESA_MIN = 120000;     // tra un avvio e il processo successivo: almeno 2 minuti (stesso minuto = stesso identificativo)
+  const NOME_OK = /^h10_HRVT_\d{8}_\d{4}\.csv$/;   // nomi delle registrazioni che l'Apps Script accetta (RE_FILE_24)
+  const CAPIENZA = 94626;        // misurata: 4 registrazioni fermate a 94.626 battiti
+  const MAX_BYTES_PER_BEAT = 2.5; // misurato: 2,0 byte per battito
+  const BATT_MIN = 10;           // a questo livello o sotto non si fa ripartire (prima il riavvio del sensore, poi la pila)
+  const GIORNI_COPIE = 30;
+  const CODE_KEY = 'hrv24.codice.v1', FINO_KEY = 'hrv24.monitoraggioFino.v1';
+  const RE_COD = /^(MF|ATL)-[A-Z0-9]{4,8}$/;
+  const UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbxCZSzyXdHN70Fi8iVA7L2fQi_C5N38axZN4mQuO_b76z6mTMEvmUoPhUMsF8POxn50Rg/exec';
+  let device = null, psftp = null, wakeLock = null, busy = false, battLetta = null;
+
+  /* ---------- registro tecnico ---------- */
+  const logLines = [];
+  function log(s) { logLines.push(new Date().toLocaleTimeString('it-IT') + '  ' + s); if (logLines.length > 500) logLines.shift(); const el = $('log24'); if (el) { el.textContent = logLines.join('\n'); el.scrollTop = 1e9; } }
+  $('bCopyLog').onclick = async () => { try { await navigator.clipboard.writeText(logLines.join('\n')); $('bCopyLog').textContent = 'Copiato'; } catch (e) {} };
+  log('Browser: ' + navigator.userAgent + (FINTA ? ' [MODALITÀ DI PROVA: fascia finta]' : ''));
+
+  /* ---------- archivio registrazioni (IndexedDB hrv24cambio, versione 1: come le pagine di prima) ---------- */
+  let dbp = null;
+  function db() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('hrv24cambio', 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore('reg', { keyPath: 'id' }); r.result.createObjectStore('meta'); };
+      // iPhone può chiudere la connessione a pagina ferma in background: la si dimentica, così la prossima operazione la riapre
+      r.onsuccess = () => { const d = r.result; d.onclose = () => { if (dbp) dbp = null; }; d.onversionchange = () => { try { d.close(); } catch (e) {} dbp = null; }; res(d); };
+      r.onerror = () => { dbp = null; rej(r.error); };
+    });
+    return dbp;
+  }
+  async function tx(store, mode, fn, riprova = true) {
+    const d = await db();
+    let t0;
+    try { t0 = d.transaction(store, mode); }   // se la connessione è stata chiusa dal telefono, qui lancia: si riapre e si rifà UNA volta (nulla è ancora stato scritto)
+    catch (e) { if (!riprova) throw e; log('Archivio chiuso dal telefono (' + e.message + '): lo riapro'); dbp = null; try { d.close(); } catch (e2) {} return tx(store, mode, fn, false); }
+    return new Promise((res, rej) => { const t = t0; const s = t.objectStore(store); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
+  }
+  const putReg = r => tx('reg', 'readwrite', s => s.put(r));
+  const getReg = id => tx('reg', 'readonly', s => s.get(id));
+  const allRegs = () => tx('reg', 'readonly', s => s.getAll());
+  const setMeta = (k, v) => tx('meta', 'readwrite', s => s.put(v, k));
+  const getMeta = k => tx('meta', 'readonly', s => s.get(k));
+  const clearAll = async () => { await tx('reg', 'readwrite', s => s.clear()); await tx('meta', 'readwrite', s => s.clear()); };
+
+  /* ---------- copie di sicurezza del diario (database a parte: hrv24diario) ---------- */
+  let sdbp = null;
+  function sdb() {
+    if (!sdbp) sdbp = new Promise((res, rej) => {
+      const r = indexedDB.open('hrv24diario', 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore('snap', { keyPath: 't' }); };
+      r.onsuccess = () => { const d = r.result; d.onclose = () => { if (sdbp) sdbp = null; }; d.onversionchange = () => { try { d.close(); } catch (e) {} sdbp = null; }; res(d); };
+      r.onerror = () => { sdbp = null; rej(r.error); };
+    });
+    return sdbp;
+  }
+  async function stx(mode, fn, riprova = true) {
+    const d = await sdb();
+    let t0;
+    try { t0 = d.transaction('snap', mode); }
+    catch (e) { if (!riprova) throw e; log('Archivio copie chiuso dal telefono (' + e.message + '): lo riapro'); sdbp = null; try { d.close(); } catch (e2) {} return stx(mode, fn, false); }
+    return new Promise((res, rej) => { const t = t0; const s = t.objectStore('snap'); const out = fn(s); t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('operazione annullata')); });
+  }
+  // la copia si rilegge dall'archivio e si confronta voce per voce: se qualcosa non torna, NON si azzera
+  async function faiCopia(motivo) {
+    const raw = DIARIO24.raw(); if (!raw.voci.length) return null;
+    const t = Date.now(), snap = { t, motivo, codice: codiceSalvato(), n: raw.voci.length, voci: raw.voci };
+    await stx('readwrite', s => s.put(snap));
+    const back = await stx('readonly', s => s.get(t));
+    if (!back || back.n !== snap.n || JSON.stringify(back.voci) !== JSON.stringify(snap.voci)) throw new Error('copia di sicurezza non verificata');
+    log('Copia di sicurezza del diario: ' + snap.n + ' voci (' + motivo + ')');
+    return snap;
+  }
+  const tutteLeCopie = async () => (await stx('readonly', s => s.getAll())).sort((a, b) => b.t - a.t);
+  // solo all'apertura della pagina, mai durante un processo
+  async function pulisciCopie() { const lim = Date.now() - GIORNI_COPIE * 864e5; for (const x of (await tutteLeCopie()).filter(x => x.t < lim)) await stx('readwrite', s => s.delete(x.t)); }
+
+  /* ---------- formato ---------- */
+  const p2 = n => String(n).padStart(2, '0');
+  const fmtWhen = t => { const d = new Date(t), o = new Date(); const same = d.toDateString() === o.toDateString(); const y = new Date(o.getTime() - 864e5).toDateString() === d.toDateString(); return (same ? 'oggi' : y ? 'ieri' : d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })) + ' alle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); };
+  const fmtDur = min => { min = Math.round(min); const h = Math.floor(min / 60); return h ? h + ' h ' + p2(min % 60) + ' min' : min + ' min'; };
+  const startFromId = id => { const x = /^HRVT_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})$/.exec(id || ''); return x ? new Date(+x[1], +x[2] - 1, +x[3], +x[4], +x[5]).getTime() : null; };
+  const nByte = s => new TextEncoder().encode(s).length;
+  function buildCsv(r) {
+    const head = ['# HRV Tool · cambio della fascia', '# identificativo: ' + r.id, '# tipo: ' + r.type];
+    if (r.startedAt) head.push('# avvio: ' + new Date(r.startedAt).toISOString());
+    head.push('# fine: ' + new Date(r.stoppedAt || r.savedAt).toISOString(), '# scaricato: ' + new Date(r.savedAt).toISOString());
+    return head.concat([r.type === 'rr' ? 'rr_ms' : 'fc_bpm'], r.samples.map(String)).join('\n') + '\n';
+  }
+  const oggiLocale = () => { const d = new Date(); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); };
+  const hm = t => p2(new Date(t).getHours()) + ':' + p2(new Date(t).getMinutes());
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const idDa = d => 'HRVT_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes());
+  // lunghezza in byte del file che si manda per una registrazione (con memoria: il CSV di 24 ore è grande)
+  const cacheLen = new Map();
+  const lenCsv = r => { const k = [r.id, r.type, r.n, r.startedAt, r.stoppedAt, r.savedAt].join('|'); if (!cacheLen.has(k)) { let n = -1; try { n = nByte(buildCsv(r)); } catch (e) {} cacheLen.set(k, n); } return cacheLen.get(k); };   // -1 = registrazione malformata: mai «arrivata»
+  // ✓ «arrivata al medico» solo se è arrivata la versione di ADESSO (stessa lunghezza), non una più vecchia o più corta
+  const arrivataReg = (r, inviati) => (inviati || {})['h10_' + r.id + '.csv'] === lenCsv(r);
+  const quante = n => n === 1 ? '1 registrazione non risulta ancora arrivata' : n + ' registrazioni non risultano ancora arrivate';
+  async function regsNonArrivate() { const regs = await allRegs(), inv = (await getMeta('inviati')) || {}; return regs.filter(r => !arrivataReg(r, inv)); }
+  // la frase della fascia ferma (stessa nella barra e nei messaggi di errore)
+  const fraseFerma = (t, finale) => finale
+    ? `<b>La fascia è FERMA dalle ${hm(t)}</b> (fine del monitoraggio): tocca «Completa la fine del monitoraggio» in alto per completare.`
+    : `<b>La fascia è FERMA dalle ${hm(t)}: tocca per completare</b> (pulsante «Invia dati e continua il monitoraggio» in alto, con la fascia addosso).`;
+  // (19/11/2026) fascia trovata FERMA con la memoria VUOTA, mentre c'era una registrazione avviata da più di 10 minuti e non salvata
+  // nel telefono: quella registrazione è persa (successo davvero: «Scarico i dati — memoria vuota»). Lo si dice in rosso nel pannello
+  // dei passi e lo si scrive nel registro tecnico. Non scatta se l'ultimo avvio manca o è di pochi minuti fa, né se la
+  // registrazione partita a quell'ora è già nel telefono (per esempio scaricata da un cambio interrotto dopo lo scarico).
+  const PERSA_DOPO_MS = 10 * 60000;
+  async function avvisoRegistrazionePersa(s, m, tControllo) {
+    if (s.recording || !m || !(m.t > 0) || tControllo - m.t <= PERSA_DOPO_MS) return false;
+    if (m.id && await getReg(m.id).catch(() => null)) return false;
+    const quando = t => hm(t) + (new Date(t).toDateString() === new Date().toDateString() ? '' : ' (' + fmtWhen(t).split(' alle ')[0] + ')');
+    log(`ATTENZIONE: la fascia era ferma e la memoria vuota. La registrazione dalle ${quando(m.t)} (ultimo avvio, ${m.id || 'identificativo ignoto'}) alle ${quando(tControllo)} (ultimo controllo) NON è stata salvata`);
+    $('perso').innerHTML = `<div class="msg bad"><b>Attenzione: la fascia era ferma e la memoria vuota.</b> La registrazione dalle ${quando(m.t)} alle ${quando(tControllo)} <b>NON è stata salvata</b>. Annota l'ora e dimmelo.</div>`;
+    return true;
+  }
+
+  /* ---------- codice del paziente ---------- */
+  function codiceSalvato() { try { const c = (localStorage.getItem(CODE_KEY) || '').trim().toUpperCase(); return RE_COD.test(c) ? c : ''; } catch (e) { return ''; } }
+  function codiceIniziale() {
+    try {
+      const q = (new URLSearchParams(location.search).get('codice') || '').trim().toUpperCase(), c = codiceSalvato();
+      if (RE_COD.test(q)) {
+        if (!c) { localStorage.setItem(CODE_KEY, q); return q; }
+        if (q !== c) setTimeout(() => chiediCodiceDaLink(c, q), 0);   // codice diverso da quello salvato: si chiede, non si cambia da solo
+        return c;
+      }
+      if (c) return c;
+      const L = JSON.parse(localStorage.getItem('respiroPacer.license.v1') || 'null'); if (L && L.code && RE_COD.test(String(L.code).trim().toUpperCase())) return String(L.code).trim().toUpperCase();   // già attivato nel Respiro Pacer
+      const P = JSON.parse(localStorage.getItem('respiroPacer.testProfile.v1') || 'null');   // codice già scritto in HRV Tool (stesso sito, stessa memoria): non si chiede due volte
+      if (P && P.code && RE_COD.test(String(P.code).trim().toUpperCase())) { const v = String(P.code).trim().toUpperCase(); localStorage.setItem(CODE_KEY, v); return v; }
+    } catch (e) {}
+    return '';
+  }
+  function chiediCodiceDaLink(c, q) {
+    const dlg = $('dlgCodice');
+    $('codTesto').innerHTML = `Il collegamento che hai aperto contiene il codice <b>${esc(q)}</b>, ma su questo telefono è salvato <b>${esc(c)}</b>. I dati vengono mandati al medico con il codice che scegli.`;
+    $('codTieni').textContent = 'Tieni ' + c; $('codUsa').textContent = 'Usa ' + q;
+    $('codTieni').onclick = () => { dlg.close(); log('Codice del collegamento (' + q + ') non usato: resta ' + c); };
+    $('codUsa').onclick = () => { try { localStorage.setItem(CODE_KEY, q); localStorage.removeItem(FINO_KEY); } catch (e) {} lic = null; mostraLic(); setTimeout(() => verificaStato(true), 0); $('inCodice').value = q; $('inCodice2').value = q; dlg.close(); log('Codice cambiato dal collegamento: ' + q + ' (prima ' + c + ')'); };
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  function leggiCodice() { const a = ($('inCodice').value || '').trim().toUpperCase(), b = ($('inCodice2').value || '').trim().toUpperCase(); return RE_COD.test(a) ? a : RE_COD.test(b) ? b : (a || b); }
+  function sincronizzaCodice(da, a) { const v = ($(da).value || '').trim().toUpperCase(); $(a).value = v; if (RE_COD.test(v)) { try { localStorage.setItem(CODE_KEY, v); } catch (e) {} clearTimeout(tVer); tVer = setTimeout(() => verificaStato(true), 700); } }
+  { const c = codiceIniziale(); $('inCodice').value = c; $('inCodice2').value = c; }
+  $('inCodice').addEventListener('input', () => sincronizzaCodice('inCodice', 'inCodice2'));
+  $('inCodice2').addEventListener('input', () => sincronizzaCodice('inCodice2', 'inCodice'));
+
+  /* ---------- licenza del monitoraggio (23/11/2026) ----------
+     Lo stato lo decide il SERVER (data di Roma). La pagina lo mostra e basta: NON blocca mai scarico dalla fascia, salvataggio nel
+     telefono, copie di sicurezza e ritentativi di invio. Se il server non risponde (o è ancora la versione vecchia) si comporta
+     come sempre (fail-open) e usa l'ultimo stato noto solo per i messaggi. */
+  const STATO_KEY = 'hrv24.stato.v1', INUSO_KEY = 'hrv24.inUso.v1';
+  const BLOCCATI = ['scaduto', 'chiuso', 'non_attivo', 'sconosciuto', 'revocato'];
+  const gm = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] : ''; };
+  const testoLic = s => (s === 'scaduto' || s === 'chiuso') ? 'Il periodo di monitoraggio è terminato. I dati registrati da ora in poi non verranno inviati al medico per il referto finale. Per continuare, contattare il medico.' : 'Per questo codice il monitoraggio non è attivo. Contatta il medico.';
+  let lic = (() => { try { const s = JSON.parse(localStorage.getItem(STATO_KEY) || 'null'); return s && s.stato ? Object.assign(s, { fresco: false }) : null; } catch (e) { return null; } })();
+  let ultimaVerifica = 0, provato = false, tVer = 0;
+  // blocco «vero»: rifiuti accesi sul server, stato letto adesso, per il codice di questo telefono
+  const bloccoAttivo = () => !!(lic && lic.fresco && lic.attive && lic.codice === codiceSalvato() && BLOCCATI.includes(lic.stato));
+  // FINE.json il server lo accetta in scaduto (se la cartella c'è) e chiuso; non in revocato, non_attivo, sconosciuto
+  const fineImpossibile = () => bloccoAttivo() && ['revocato', 'non_attivo', 'sconosciuto'].includes(lic.stato);
+  function mostraLic() {
+    const b = $('licBox'); if (!b) return;
+    // con i rifiuti SPENTI sul server (attive:false) la pagina non dice mai che il monitoraggio è chiuso: il server accetta tutto
+    const s = lic && lic.codice === codiceSalvato() && lic.attive ? lic.stato : '';
+    const vecchio = lic && !lic.fresco && provato ? '<span class="nota">(ultimo stato noto: adesso non riesco a controllarlo)</span>' : '';
+    let h = '', cl = '';
+    if (s === 'tolleranza') { cl = 'giallo'; h = `<b>Il periodo di monitoraggio è terminato.</b> Hai tempo fino al <b>${gm(lic.tolleranzaFino)}</b> per scaricare, inviare e toccare «Fine del monitoraggio».${vecchio}`; }
+    else if (s === 'scaduto' || s === 'chiuso') { cl = 'grigio'; h = `<b>Monitoraggio concluso.</b> ${testoLic(s)}<span class="nota">Puoi comunque scaricare i dati dalla fascia: restano al sicuro sul telefono.</span>${vecchio}`; }
+    else if (BLOCCATI.includes(s)) { cl = 'grigio'; h = `${testoLic(s)}<span class="nota">Se nella fascia o nel telefono ci sono registrazioni, puoi comunque scaricarle e tenerle sul telefono.</span>${vecchio}`; }
+    b.className = 'lic ' + cl; b.innerHTML = h; b.style.display = h ? '' : 'none';
+    pianificaIntestazione();
+  }
+  async function verificaStato(forza) {
+    const code = codiceSalvato(); if (!code) return;
+    if (!forza && Date.now() - ultimaVerifica < 300000) return;
+    ultimaVerifica = Date.now();
+    try {
+      const r = await jsonp(UPLOAD_URL + '?kind=mon24stato&code=' + encodeURIComponent(code), 8000);
+      if (code !== codiceSalvato()) return;   // nel frattempo il codice è cambiato: questa risposta non vale
+      if (r && r.ok && r.stato) {
+        lic = { stato: r.stato, fino: r.fino || '', oggi: r.oggi || '', tolleranzaFino: r.tolleranzaFino || '', attive: !!r.attive, t: Date.now(), codice: code, fresco: true };
+        try { localStorage.setItem(STATO_KEY, JSON.stringify(lic)); if (r.fino) localStorage.setItem(FINO_KEY, r.fino); else localStorage.removeItem(FINO_KEY); } catch (e) {}
+        log('Stato del monitoraggio: ' + r.stato + (r.fino ? ' (fine ' + r.fino + ')' : '') + (r.attive ? '' : ' [rifiuti sul server spenti]'));
+      } else if (r && r.reason === 'sconosciuto') {
+        lic = { stato: 'sconosciuto', fino: '', oggi: '', tolleranzaFino: '', attive: !!r.attive, t: Date.now(), codice: code, fresco: true };
+        try { localStorage.setItem(STATO_KEY, JSON.stringify(lic)); localStorage.removeItem(FINO_KEY); } catch (e) {}
+        log('Stato del monitoraggio: codice sconosciuto al server');
+      } else log('Stato del monitoraggio non leggibile (' + ((r && (r.reason || r.error)) || 'versione vecchia del server') + '): vado avanti come sempre');
+    } catch (e) { log('Stato del monitoraggio: ' + e.message + ' (nessun blocco)'); }
+    provato = true; mostraLic(); aggiorna();
+  }
+
+  /* ---------- passi, messaggi ---------- */
+  const STEPS = [['conn', 'Collego la fascia'], ['stop', 'Fermo la registrazione'], ['dl', 'Scarico i dati'], ['save', 'Salvo nel telefono'], ['del', 'Libero la memoria della fascia'], ['start', 'Faccio ripartire la registrazione'], ['send', 'Invio al medico'], ['check', 'Controllo che sia arrivato'], ['reset', 'Faccio ripartire il diario'], ['chiudi', 'Registro la fine del monitoraggio']];
+  const st = {};
+  // "testo" (facoltativo) sostituisce il nome del passo, per esempio «Diario: nessuna voce nuova da inviare»
+  function step(k, s, extra, testo) { st[k] = [s, extra, testo]; $('steps').innerHTML = STEPS.map(([id, l]) => st[id] ? `<li class="${st[id][0]}">${st[id][2] || l}${st[id][1] ? ' — ' + st[id][1] : ''}</li>` : '').join(''); }
+  const DIARIO_VUOTO = 'Diario: nessuna voce nuova da inviare';
+  function resetSteps() { for (const k in st) delete st[k]; $('steps').innerHTML = ''; $('perso').innerHTML = ''; $('prog').innerHTML = ''; $('out').innerHTML = ''; $('retryRow').style.display = 'none'; }
+  const out = (kind, html) => { $('out').innerHTML = `<div class="msg ${kind}">${html}</div>`; };
+  // (19/11/2026) si torna in cima: i passi stanno subito sotto l'intestazione e devono vedersi. I pulsanti in alto si possono
+  // toccare anche a metà pagina (l'intestazione ricompare risalendo): senza questo i passi resterebbero fuori dallo schermo.
+  const mostraPannello = () => { $('procPanel').classList.add('on'); if ((window.scrollY || 0) > 0) window.scrollTo(0, 0); };
+  // durante il processo nessun altro pulsante che tocchi fascia, registrazioni o diario (anche «Cancella» e «Azzera»)
+  // (19/11/2026) e l'intestazione resta in vista finché il processo (o il controllo) è in corso
+  function setBusy(b) { busy = b; for (const id of ['bInvia', 'bCambia', 'bControlla', 'bRinvia', 'promTocca', 'bFineBarra', 'bCompleta', 'bEnd', 'bSoloInvio', 'bSoloInvio2', 'bShare', 'bWipe', 'bReset']) { const el = $(id); if (el) el.disabled = b; } pianificaIntestazione(); }
+
+  /* ---------- segno dell'invio in sospeso (18/11/2026) ----------
+     Scritto nel telefono PRIMA di ogni invio al Drive (processo e «Invia senza toccare la fascia») e tolto SOLO quando il Drive
+     conferma l'arrivo di tutto con la lunghezza giusta (mon24check). Se la pagina si chiude a metà, alla riapertura il segno
+     c'è ancora e il riquadro in alto è rosso. Il diario con voci nuove non ancora inviate è normale e NON accende il rosso. */
+  const SOSPESO_KEY = 'hrv24.invioInSospeso.v1', CONFERMATO_KEY = 'hrv24.ultimoInvioConfermato.v1';
+  function leggiSospeso() { try { const o = JSON.parse(localStorage.getItem(SOSPESO_KEY) || 'null'); return o && typeof o === 'object' && o.t > 0 ? o : null; } catch (e) { return null; } }
+  function leggiConfermato() { try { const t = +localStorage.getItem(CONFERMATO_KEY); return t > 0 ? t : null; } catch (e) { return null; } }
+  function segnaSospeso(cosa, n) { try { localStorage.setItem(SOSPESO_KEY, JSON.stringify({ t: Date.now(), cosa, file: n })); } catch (e) { log('Segno dell\'invio in sospeso non salvato: ' + e.message); } }
+  function togliSospeso(confermato) {
+    try { localStorage.removeItem(SOSPESO_KEY); if (confermato) localStorage.setItem(CONFERMATO_KEY, String(Date.now())); } catch (e) { log('Segno dell\'invio non aggiornato: ' + e.message); }
+  }
+  async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) { const w = await navigator.wakeLock.request('screen'); wakeLock = w; w.addEventListener('release', () => { if (wakeLock === w) wakeLock = null; }); if (!busy) releaseAwake(); } } catch (e) { log('Schermo sempre acceso non disponibile: ' + e.message); } }
+  // a processo finito lo schermo torna a spegnersi da solo (prima restava acceso finché non si chiudeva la pagina)
+  async function releaseAwake() { const w = wakeLock; wakeLock = null; try { if (w) await w.release(); } catch (e) {} }
+
+  /* ---------- Bluetooth ---------- */
+  const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ': tempo scaduto')), ms))]);
+  async function connect() {
+    if (FINTA) {   // prove automatiche: la fascia finta la fornisce la pagina di prova
+      if (!window.__psftpFinta) throw Object.assign(new Error('fascia finta non configurata'), { user: true });
+      device = device || { gatt: { connected: true, disconnect() {} } }; psftp = window.__psftpFinta;
+      battLetta = typeof window.__battFinta === 'number' ? window.__battFinta : 100; await setMeta('batteria', { v: battLetta, t: Date.now() }); return;
+    }
+    if (!navigator.bluetooth) throw Object.assign(new Error('Questo browser non ha il Bluetooth. Su iPhone apri la pagina con l\'app Bluefy, su Android con Chrome.'), { user: true });
+    if (!device) {
+      const opt = ['heart_rate', 'battery_service', PolarCore.PSFTP_SERVICE];
+      try { device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }], optionalServices: opt }); }
+      catch (e) { if (e && e.name === 'NotFoundError') throw Object.assign(new Error('Nessuna fascia scelta. Tocca di nuovo il pulsante in alto e scegli "Polar H10" dall\'elenco.'), { user: true, nonScelta: true }); throw e; }
+      device.addEventListener('gattserverdisconnected', () => { log('Fascia scollegata'); if (psftp) psftp.fail(new Error('la fascia si è scollegata')); psftp = null; });
+      log('Fascia: ' + (device.name || '(senza nome)'));
+    }
+    if (psftp && device.gatt.connected) return;
+    const server = await withTimeout(device.gatt.connect(), 15000, 'Collegamento');
+    try { const bs = await server.getPrimaryService('battery_service'); const bc = await bs.getCharacteristic('battery_level'); battLetta = (await bc.readValue()).getUint8(0); log('Batteria fascia ' + battLetta + '%'); await setMeta('batteria', { v: battLetta, t: Date.now() }); } catch (e) {}
+    const svc = await server.getPrimaryService(PolarCore.PSFTP_SERVICE);
+    const ch = await svc.getCharacteristic(PolarCore.PSFTP_MTU_CHAR);
+    const pr = ch.properties || {};
+    let noResp = !!pr.writeWithoutResponse && typeof ch.writeValueWithoutResponse === 'function';
+    const write = async (b) => {
+      if (noResp) { try { await ch.writeValueWithoutResponse(b); return; } catch (e) { noResp = false; } }
+      if (typeof ch.writeValueWithResponse === 'function') await ch.writeValueWithResponse(b); else await ch.writeValue(b);
+    };
+    psftp = PolarCore.createPsftp(write);
+    ch.addEventListener('characteristicvaluechanged', ev => { const v = ev.target.value; if (psftp) psftp.onPacket(new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength))); });
+    await ch.startNotifications();
+    log('Collegata');
+  }
+  async function retry(what, fn, n = 3) {   // ogni comando breve si ritenta: al primo collegamento può arrivare un pacchetto vecchio
+    let last;
+    for (let i = 1; i <= n; i++) {
+      try { await connect(); return await fn(); }
+      catch (e) { last = e; if (e.user || e.code) throw e; log(what + ': tentativo ' + i + ' non riuscito (' + e.message + ')'); await new Promise(r => setTimeout(r, FINTA ? 5 : 1200)); }
+    }
+    throw last;
+  }
+
+  /* ---------- la parte della fascia: ferma, scarica, salva, cancella, riparte ---------- */
+  // Ritorna { avviato, nota, fermaDal }. Se qualcosa non va scrive il messaggio e lancia { gestito: true }.
+  async function parteFascia(restart, finale) {
+    let cur = 'conn', nota = null, avviato = false, fermaDal = null, salvate = 0, inScarico = false;
+    try {
+      step('conn', 'wait'); await retry('Collegamento', async () => {}); step('conn', 'ok', battLetta != null ? 'batteria ' + battLetta + '%' : '');
+      cur = 'stop'; step('stop', 'wait');
+      const s = await retry('Stato', () => psftp.status());
+      log('Stato: registrando=' + s.recording + ', identificativo="' + s.id + '"');
+      if (s.recording && startFromId(s.id)) { const m0 = await getMeta('ultimoAvvio'); if (!m0 || m0.id !== s.id) { await setMeta('ultimoAvvio', { id: s.id, t: startFromId(s.id) }); log('Partenza letta dalla fascia: ' + s.id); } }
+      // ora dello stop salvata al primo tentativo: se il processo si interrompe e si riprende, il "# fine" del file resta quello vero
+      const stopPrec = await getMeta('ultimoStop');
+      const stoppedAt = Date.now();
+      if (s.recording) { await retry('Stop', () => psftp.stop()); await setMeta('ultimoStop', { id: s.id, t: stoppedAt }); step('stop', 'ok'); log('Registrazione fermata'); }
+      else step('stop', 'skip', 'non stava registrando');
+      fermaDal = s.recording ? stoppedAt : Date.now();
+      await setMeta('statoLetto', { t: fermaDal, recording: false, id: s.id || '' });
+
+      cur = 'dl'; step('dl', 'wait');
+      const seen = [];
+      const recs = await retry('Elenco', () => psftp.listRecordings('/', 0, seen));
+      seen.forEach(x => log('Cartella ' + x));
+      const meta = await getMeta('ultimoAvvio');
+      const inviati = (await getMeta('inviati')) || {};
+      if (!recs.length) { step('dl', 'skip', 'memoria vuota'); await avvisoRegistrazionePersa(s, meta, fermaDal); }
+      for (let k = 0; k < recs.length; k++) {
+        const rec = recs[k];
+        cur = 'dl'; inScarico = true; step('dl', 'wait', recs.length > 1 ? (k + 1) + ' di ' + recs.length : '');
+        const prev = await getReg(rec.id);
+        const t0 = performance.now();
+        $('prog').innerHTML = `<progress id="pg" max="${Math.max(1, rec.size)}" value="0" style="width:100%"></progress><div class="note" id="pgT"></div>`;
+        const data = await psftp.fetchRecording(rec.path, n => {
+          const pg = $('pg'); if (pg) pg.value = n;
+          const el = (performance.now() - t0) / 1000, rate = n / Math.max(1, el), left = (rec.size - n) / Math.max(1, rate);
+          const t = $('pgT'); if (t) t.textContent = Math.round(n / rec.size * 100) + '% · ' + (n > 2000 ? 'mancano circa ' + Math.max(1, Math.ceil(left / 60)) + ' min' : 'calcolo il tempo…');
+        });
+        log('Scaricata ' + rec.id + ': ' + data.type + ', ' + data.samples.length + ' valori in ' + Math.round((performance.now() - t0) / 1000) + ' s');
+        $('prog').innerHTML = '';
+        // controllo di completezza prima di qualsiasi cancellazione: ogni RR occupa ~2 byte
+        if (data.type === 'rr' && rec.size > 2000 && data.samples.length < rec.size / MAX_BYTES_PER_BEAT) throw Object.assign(new Error('scarico incompleto (' + data.samples.length + ' battiti per ' + rec.size + ' byte)'), { retryable: true });
+        // già nel telefono? Solo se i BATTITI coincidono (17/11/2026): stesso nome e stessa dimensione non bastano
+        let salva = true;
+        if (prev) {
+          const ps = Array.isArray(prev.samples) ? prev.samples : [];
+          const inizioUguale = ps.length <= data.samples.length && prev.type === data.type && ps.every((x, i) => x === data.samples[i]);
+          if (inizioUguale && ps.length === data.samples.length) { salva = false; log('Già salvata in precedenza, con gli stessi battiti: ' + rec.id); step('dl', 'ok', 'già nel telefono'); step('save', 'ok', 'già nel telefono'); }
+          else if (inizioUguale) log('Nel telefono c\'era una parte di ' + rec.id + ': la sostituisco con quella completa');
+          else if (arrivataReg(prev, inviati)) log('Stesso nome ' + rec.id + ' di una registrazione già arrivata al medico, ma battiti diversi: la sostituisco nel telefono (sul Drive diventa una nuova versione)');
+          else throw Object.assign(new Error('nel telefono c\'è già una registrazione «' + rec.id + '» con battiti diversi, non ancora arrivata al medico'), { conflitto: rec.id });
+        }
+        if (salva) {
+          step('dl', 'ok', data.samples.length.toLocaleString('it-IT') + ' battiti');
+          cur = 'save'; step('save', 'wait');
+          const durMin = data.type === 'rr' ? data.samples.reduce((a, b) => a + b, 0) / 60000 : data.samples.length * (data.interval || 1) / 60;
+          const startedAt = meta && meta.id === rec.id ? meta.t : startFromId(rec.id);
+          const stopVero = s.recording && s.id === rec.id ? stoppedAt : stopPrec && stopPrec.id === rec.id ? stopPrec.t : null;
+          const r = { id: rec.id, size: rec.size, type: data.type, n: data.samples.length, samples: data.samples, durMin, startedAt, stoppedAt: stopVero, savedAt: Date.now() };
+          await putReg(r);
+          const back = await getReg(rec.id), bs = back && back.samples;
+          if (!back || back.n !== r.n || !Array.isArray(bs) || bs.length !== r.samples.length || bs[0] !== r.samples[0] || bs[bs.length - 1] !== r.samples[r.samples.length - 1]) throw new Error('salvataggio nel telefono non verificato');
+          step('save', 'ok', fmtDur(durMin));
+          if (data.type !== 'rr') log('ATTENZIONE: la registrazione contiene solo la frequenza, non i battiti');
+        }
+        salvate++;
+        cur = 'del'; step('del', 'wait');
+        await retry('Cancellazione', () => psftp.remove(rec.path));
+        log('Cancellata dalla fascia: ' + rec.path);
+        step('del', 'ok');
+      }
+      if (!recs.length) { step('save', 'skip'); step('del', 'skip'); }
+
+      if (restart && battLetta != null && battLetta <= BATT_MIN) {
+        step('start', 'no', 'batteria ' + battLetta + '%');
+        nota = `${fraseFerma(fermaDal)}<br><b>La fascia dice batteria al ${battLetta}%: non l'ho fatta ripartire.</b> ${salvate ? 'I dati sono salvati nel telefono.' : 'Nella fascia non c\'era niente di nuovo da scaricare.'}<br>Spesso è una lettura sbagliata: <b>stacca il sensore dalla cinghia, aspetta 2-3 minuti</b> (si riavvia), riaggancialo, bagna gli elettrodi, indossa la fascia e tocca di nuovo il pulsante in alto.<br>Se dopo il riavvio la batteria è ancora bassa, cambia la pila (CR2025).`;
+        try { device.gatt.disconnect(); } catch (e) {}
+        return { avviato: false, nota, fermaDal };
+      }
+      if (restart) {
+        cur = 'start'; step('start', 'wait');
+        // mai due registrazioni con lo stesso identificativo (minuto): se il nome è già usato si aspetta il minuto dopo
+        let d = new Date(), id = idDa(d);
+        for (let k = 0; k < 2 && (id === s.id || await getReg(id)); k++) { log('Identificativo ' + id + ' già usato: aspetto il minuto successivo'); step('start', 'wait', 'aspetto un minuto'); await sleep(60500 - Date.now() % 60000); d = new Date(); id = idDa(d); }
+        if (id === s.id || await getReg(id)) throw new Error('identificativo ' + id + ' già usato');
+        await retry('Orologio', () => psftp.setLocalTime(d));
+        await retry('Avvio', () => psftp.startRr(id));
+        const s2 = await retry('Controllo', () => psftp.status());
+        if (!s2.recording) throw new Error('la fascia non risulta in registrazione dopo l\'avvio');
+        await setMeta('ultimoAvvio', { id, t: d.getTime() });
+        await setMeta('statoLetto', { t: Date.now(), recording: true, id });
+        await setMeta('fine', null);
+        await setMeta('chiusura', null);   // ripartita: una «Fine» rimasta a metà non vale più
+        log('Registrazione avviata: ' + id);
+        step('start', 'ok', 'dalle ' + p2(d.getHours()) + ':' + p2(d.getMinutes()));
+        avviato = true; fermaDal = null;
+        if (battLetta != null && battLetta <= 15) nota = `<b>Batteria al ${battLetta}%:</b> al prossimo cambio sostituisci la pila (CR2025).`;
+      } else {
+        step('start', 'skip', 'fine del monitoraggio');   // "fine" si scrive solo quando FINE.json è confermato sul Drive
+      }
+      try { device.gatt.disconnect(); } catch (e) {}
+      return { avviato, nota, fermaDal };
+    } catch (e) {
+      if (e && e.gestito) throw e;
+      log('Errore in "' + cur + '": ' + (e.name || '') + ' ' + e.message);
+      step(cur, 'no');
+      $('prog').innerHTML = '';
+      const gia = salvate ? (salvate === 1 ? ' La registrazione già scaricata è salvata nel telefono.' : ' Le ' + salvate + ' registrazioni già scaricate sono salvate nel telefono.') : '';
+      const dati = e.conflitto ? `<b>Non ho cancellato niente dalla fascia.</b> Nel telefono c'è già una registrazione con lo stesso nome (${esc(e.conflitto)}), non ancora arrivata al medico, e i battiti sono diversi: per non perdere niente non la sostituisco. Prima tocca <b>«Riprova solo l'invio»</b> qui sotto; quando è arrivata, tocca di nuovo il pulsante in alto.${gia}`
+        // (19/11/2026) dove non si sa se la fascia abbia registrato qualcosa non si afferma che i dati ci sono
+        : cur === 'conn' || cur === 'stop' || ((cur === 'dl' || cur === 'save') && !inScarico) ? 'Non ho cancellato niente: se la fascia ha registrato qualcosa, è ancora dentro.' + gia
+        : cur === 'dl' || cur === 'save' ? 'Nessun dato è andato perso: la registrazione che stavo scaricando è ancora nella fascia.' + gia
+        : cur === 'del' ? 'Le registrazioni scaricate sono salvate nel telefono (questa è anche ancora nella fascia).'
+        : salvate ? 'I dati sono salvati nel telefono, ma <b>la fascia non è ripartita</b>.' : 'Nella fascia non c\'era niente di nuovo da scaricare, e <b>la fascia non è ripartita</b>.';
+      const ferma = fermaDal != null ? '<br>' + fraseFerma(fermaDal, finale) : '';
+      out('bad', e.user ? e.message : `<b>Il cambio si è interrotto.</b> ${dati}${ferma}<br>${cur === 'start' ? (e.code === 209 ? '<b>La pila è scarica:</b> cambiala (CR2025), poi ' : e.code === 106 ? 'La fascia ha rifiutato l’avvio: di solito si sblocca <b>riavviandola</b>. Stacca il sensore dalla cinghia, aspetta 2-3 minuti, riaggancialo, bagna gli elettrodi, indossa la fascia, poi ' : 'Controlla di avere <b>la fascia indossata</b>, con il sensore agganciato e gli elettrodi bagnati, aspetta un minuto, poi ') : ''}${e.conflitto ? '' : (cur === 'start' ? 'avvicina' : 'Avvicina') + ' il telefono alla fascia e tocca di nuovo il pulsante in alto: riprende da dove si era fermato.'}<br><span class="note">Dettaglio: ${esc(e.message)}</span>`);
+      $('retryRow').style.display = '';   // i dati già salvati si possono comunque mandare
+      throw Object.assign(new Error('fascia'), { gestito: true });
+    }
+  }
+
+  /* ---------- l'invio: manda, controlla, e solo se è arrivato fa ripartire il diario ---------- */
+  function jsonp(url, ms) {
+    return new Promise((res, rej) => {
+      const cb = 'cb24_' + Date.now() + '_' + Math.floor(Math.random() * 1e6), s = document.createElement('script');
+      const fine = () => { delete window[cb]; s.remove(); };
+      const tm = setTimeout(() => { s.remove(); window[cb] = () => { delete window[cb]; }; rej(new Error('nessuna risposta dal Drive')); }, ms || 25000);   // una risposta che arriva tardi non deve dare errore
+      window[cb] = d => { clearTimeout(tm); fine(); res(d); };
+      s.onerror = () => { clearTimeout(tm); fine(); rej(new Error('Drive non raggiungibile')); };
+      s.src = url + '&callback=' + cb; document.head.appendChild(s);
+    });
+  }
+  // errore con "rifiuto": il Drive ha risposto ma ha detto di no (per esempio codice non valido); senza: rete
+  async function suDrive(code, nomi) {
+    const r = await jsonp(UPLOAD_URL + '?kind=mon24check&code=' + encodeURIComponent(code) + '&files=' + encodeURIComponent(nomi.join(',')));
+    if (!r || !r.ok) throw Object.assign(new Error((r && r.error) || 'verifica non riuscita'), { rifiuto: !!r });
+    return r;
+  }
+  // arrivato = una qualsiasi versione del file sul Drive ha esattamente la nostra lunghezza (le versioni _v2, _v3… le crea il server)
+  const arrivato = (it, r) => !!r && ((r.versioni && Array.isArray(r.versioni[it.fname])) ? r.versioni[it.fname].includes(it.len) : (r.files || {})[it.fname] === it.len);
+  const lunghezze = (r, fname) => r && r.versioni && Array.isArray(r.versioni[fname]) ? r.versioni[fname] : r && r.files && fname in r.files ? [r.files[fname]] : [];
+  // Il Drive conferma l'arrivo solo dalla lunghezza. Se con lo stesso nome c'è già un file della stessa lunghezza (stesso minuto,
+  // oppure FINE.json di un monitoraggio precedente) la conferma sarebbe ambigua: il nostro si allunga di poco con il campo
+  // "controllo" finché la lunghezza è unica. Il NOME non cambia (l'Apps Script accetta solo i nomi previsti).
+  function lunghezzaUnica(obj, lens, spazi) {
+    const o = Object.assign({}, obj); let k = 0, s;
+    do { if (k) o.controllo = 'x'.repeat(k); s = JSON.stringify(o, null, spazi || undefined); k++; } while (lens.includes(nByte(s)) && k < 300);
+    return s;
+  }
+  async function elementiDaInviare() {
+    const regs = (await allRegs()).sort((a, b) => (a.startedAt || startFromId(a.id) || a.savedAt) - (b.startedAt || startFromId(b.id) || b.savedAt));
+    const its = regs.map(r => ({ tipo: 'csv', fname: 'h10_' + r.id + '.csv', data: buildCsv(r), type: 'text/csv' }));
+    // una sola ora per il nome del diario e per il suo contenuto (a cavallo della mezzanotte prima potevano non coincidere)
+    const t = Date.now(), d = new Date(t), ex = DIARIO24.esporta(t);
+    if (ex.n) its.push({ tipo: 'diario', fname: 'diario_' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '.json', obj: ex.out, data: JSON.stringify(ex.out, null, 1), type: 'application/json', inviate: ex.inviate });
+    for (const it of its) it.len = nByte(it.data);
+    return its;
+  }
+  async function postFile(code, it) {   // true = la richiesta è partita; false = errore di rete (il contenuto della risposta non si legge)
+    const body = new URLSearchParams({ kind: 'mon24', code, fname: it.fname, data: it.data, consent: '1', ts: new Date().toISOString() });
+    try { await fetch(UPLOAD_URL, { method: 'POST', mode: 'no-cors', body }); return true; } catch (e) { log('Invio ' + it.fname + ': ' + e.message); return false; }
+  }
+  // Ritorna { tutto, diarioArrivato, motivo, vecchio, scartati, … }. Non lancia: scrive i passi e restituisce l'esito.
+  async function invio(code, cosa) {
+    const items = await elementiDaInviare();
+    // una registrazione con un nome che l'Apps Script non accetta non si manda (verrebbe rifiutata per sempre) e non blocca il resto
+    const scartati = items.filter(i => i.tipo === 'csv' && !NOME_OK.test(i.fname)), validi = items.filter(i => !scartati.includes(i));
+    const dia = validi.find(i => i.tipo === 'diario');   // assente = nel diario non c'è nessuna voce da mandare
+    if (scartati.length) log('Nomi che il Drive non accetta, non mandati: ' + scartati.map(i => i.fname).join(', '));
+    // niente da mandare: niente può essere in sospeso (si toglie anche un segno rimasto da prima, altrimenti il rosso non si spegnerebbe mai)
+    if (!validi.length) { step('send', 'skip', 'niente da mandare'); togliSospeso(false); return { tutto: true, vuoto: true, diarioArrivato: false, scartati }; }
+    segnaSospeso(cosa || 'invio', validi.length);   // PRIMA di qualsiasi richiesta al Drive
+    step('send', 'wait', 'controllo cosa ha già il medico');
+    let r0;
+    try { r0 = await suDrive(code, validi.map(i => i.fname)); }
+    catch (e) { log('Verifica iniziale: ' + e.message); step('send', 'no', e.rifiuto ? 'il Drive ha rifiutato la richiesta' : 'non raggiungo il Drive'); return { tutto: false, motivo: e.rifiuto ? 'rifiutato' : 'rete', dettaglio: e.rifiuto ? e.message : '', ko: validi, dia, scartati }; }
+    for (const it of validi) if (it.tipo === 'diario') { const lens = lunghezze(r0, it.fname); if (lens.includes(it.len)) { it.data = lunghezzaUnica(it.obj, lens, 1); it.len = nByte(it.data); log('Diario: lunghezza resa unica (' + it.len + ' byte)'); } }
+    // si manda SEMPRE ciò che non è segnato come arrivato con la lunghezza di adesso, anche se sul Drive c'è un file di uguale
+    // lunghezza (potrebbe essere diverso): il server non salva due volte un file identico
+    const inviati0 = (await getMeta('inviati')) || {};
+    const nuovi = validi.filter(i => i.tipo === 'diario' || inviati0[i.fname] !== i.len || !arrivato(i, r0));
+    log(`Invio al Drive: ${validi.length} file, già confermati ${validi.length - nuovi.length}, da mandare ${nuovi.length}`);
+    for (let i = 0; i < nuovi.length; i++) { step('send', 'wait', `${i + 1} di ${nuovi.length}`); nuovi[i].postOk = await postFile(code, nuovi[i]); }
+    step('send', 'ok', nuovi.length ? 'spedito' : 'niente di nuovo'); step('check', 'wait');
+    let arr = null;
+    for (let tent = 0; tent < 3; tent++) {
+      try { arr = await suDrive(code, validi.map(i => i.fname)); } catch (e) { log('Verifica finale: ' + e.message); }
+      if (arr && validi.every(i => arrivato(i, arr))) break;
+      await sleep(FINTA ? 5 : 4000);
+    }
+    const ok = validi.filter(i => arrivato(i, arr)), ko = validi.filter(i => !ok.includes(i));
+    const inviati = (await getMeta('inviati')) || {}; for (const i of ok) if (i.tipo === 'csv') inviati[i.fname] = i.len; await setMeta('inviati', inviati);
+    log(`Arrivati ${ok.length}, non confermati ${ko.length}` + (ko.length ? ': ' + ko.map(i => i.fname).join(', ') : ''));
+    step('check', ko.length ? 'no' : 'ok', ko.length ? `${ko.length} non ancora` : 'tutto arrivato');
+    if (!ko.length) { togliSospeso(true); log('Invio confermato dal Drive: segno «in sospeso» tolto'); }   // SOLO con la conferma di tutto
+    // rete = il Drive non si raggiunge (o la spedizione stessa è fallita); rifiutato = il Drive risponde ma il file non c'è
+    const motivo = !ko.length ? null : (!arr || ko.some(i => i.postOk === false)) ? 'rete' : 'rifiutato';
+    return { tutto: !ko.length, diarioArrivato: !!(dia && ok.includes(dia)), dia, ok, ko, motivo, vecchio: !!arr && !arr.versioni, scartati };
+  }
+  // Azzera il diario solo dopo la conferma di arrivo e con una copia di sicurezza verificata. Ritorna una frase o lancia.
+  async function azzeraDopoInvio(dia) {
+    step('reset', 'wait');
+    await faiCopia('prima dell\'azzeramento dopo l\'invio');
+    const n = DIARIO24.rimuoviInviate(dia.inviate);
+    step('reset', 'ok', n ? n + ' voci spostate nella copia di sicurezza' : 'niente da togliere');
+    return n;
+  }
+  function fraseNonArrivato(es) {
+    const coda = ' Il diario <b>non è stato azzerato</b>, quindi non si perde niente.';
+    if (es.motivo === 'rifiutato' && lic && lic.fresco && lic.attive && lic.codice === codiceSalvato() && BLOCCATI.includes(lic.stato)) return `<b>Il medico non riceve più dati per questo codice.</b> ${testoLic(lic.stato)} I dati restano sul telefono e non si perde niente.` + coda;
+    if (es.motivo !== 'rifiutato') return '<b>Non tutto è arrivato al medico: non riesco a raggiungere il Drive.</b> Controlla di avere internet e tocca <b>«Riprova solo l\'invio»</b>: rimanda quello che manca.' + coda;
+    const cosa = (es.ko || []).map(i => i.tipo === 'diario' ? 'il diario' : 'la registrazione ' + esc(i.fname.replace(/^h10_|\.csv$/g, ''))).join(', ');
+    const diarioNonRiconosciuto = es.vecchio && (es.ko || []).some(i => i.tipo === 'diario');
+    return `<b>Non tutto è arrivato al medico.</b> Il Drive del medico risponde (non è un problema di connessione), ma ${es.dettaglio ? 'ha rifiutato l\'invio: ' + esc(es.dettaglio) : 'non ha accettato ' + (cosa || 'i file')}.` +
+      (diarioNonRiconosciuto ? ' Il programma del medico che riceve i file <b>non riconosce ancora il nome nuovo del diario</b>: avvisa il medico, deve aggiornarlo.' : ' <b>Avvisa il medico</b>; intanto puoi riprovare con «Riprova solo l\'invio».') + coda;
+  }
+  const avvisoScartati = es => es && es.scartati && es.scartati.length ? `<br><b>Attenzione:</b> ${es.scartati.length === 1 ? 'una registrazione ha' : es.scartati.length + ' registrazioni hanno'} un nome che il Drive del medico non accetta (${es.scartati.map(i => esc(i.fname)).join(', ')}): non si può mandare da qui e resta sul telefono. Usa «Condividi registrazioni e diario in un altro modo» in «Altre opzioni» e avvisa il medico.` : '';
+
+  /* ---------- il processo unico ---------- */
+  async function processo(opts = {}) {
+    if (busy) return;
+    const restart = opts.restart !== false, finale = !!opts.finale;
+    mostraPannello();
+    const code = leggiCodice();
+    if (!RE_COD.test(code)) { resetSteps(); $('codeRow').style.display = 'block'; out('warn', 'Scrivi il tuo <b>codice</b> (te l\'ha dato il medico, per esempio MF-AB12CD) e tocca di nuovo il pulsante in alto.'); $('inCodice').focus(); window.scrollTo(0, 0); return; }
+    try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
+    setBusy(true); resetSteps(); mostraCtrl(null);
+    let esito = null, fascia = null, ch = null;
+    try {
+      // due avvii nello stesso minuto darebbero lo stesso identificativo a due registrazioni diverse: almeno 2 minuti tra un avvio e il processo dopo
+      const m0 = await getMeta('ultimoAvvio').catch(() => null), dt = m0 && m0.t > 0 ? Date.now() - m0.t : null;
+      if (dt != null && dt > -60000 && dt < ATTESA_MIN) {
+        out('warn', `La registrazione è ripartita alle <b>${hm(m0.t)}</b>, meno di 2 minuti fa: non serve un altro cambio adesso. Se qualcosa non è arrivato al medico usa <b>«Riprova solo l'invio»</b>; altrimenti aspetta ancora ${Math.max(1, Math.ceil((ATTESA_MIN - dt) / 1000))} secondi e tocca di nuovo.`);
+        $('retryRow').style.display = ''; window.scrollTo(0, 0); return;
+      }
+      keepAwake();
+      if (finale) {   // la chiusura si ricorda nel telefono finché FINE.json non è confermato sul Drive (anche dopo «Riprova solo l'invio»)
+        ch = await getMeta('chiusura');
+        if (!ch || ch.codice !== code) ch = { t: Date.now(), codice: code, data: JSON.stringify({ chiuso: new Date().toISOString(), codice: code }) };
+        ch.fase = 'fascia'; await setMeta('chiusura', ch);
+      }
+      try { fascia = await parteFascia(restart, finale); }
+      catch (e) { if (e && e.gestito) return; throw e; }
+      if (finale) { ch.fase = 'invio'; await setMeta('chiusura', ch); }
+      esito = await invio(code, finale ? 'Fine del monitoraggio' : 'Invia dati e continua il monitoraggio');
+      let diarioFatto = false, diarioNota = '';
+      if (esito.tutto && esito.diarioArrivato) {
+        try { await azzeraDopoInvio(esito.dia); diarioFatto = true; }
+        catch (e) { log('Azzeramento del diario non riuscito: ' + e.message); step('reset', 'no'); diarioNota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + '): non si è perso niente.'; }
+      } else if (!esito.dia) step('reset', 'skip', '', DIARIO_VUOTO);   // nessuna voce nel diario: non c'è niente da aspettare (18/11/2026)
+      else step('reset', 'skip', 'in attesa dell\'invio');
+      // ordine: fascia → invio → diario → FINE.json. «Concluso» SOLO se FINE.json è confermato dal Drive
+      const chiusa = finale && esito.tutto ? await chiudiMonitoraggio(code, ch) : false;
+      const tuttoTxt = esito.scartati && esito.scartati.length ? 'Tutto il resto è arrivato al medico' : 'Tutto è arrivato al medico';
+      if (esito.tutto && finale) {
+        out(chiusa ? 'ok' : 'bad', chiusa ? '<b>Monitoraggio concluso.</b> La fascia non registra più e tutti i dati sono arrivati al medico.' + diarioNota + avvisoScartati(esito)
+          : `<b>I dati sono arrivati al medico, ma la fine del monitoraggio non è ancora confermata.</b> La fascia è ferma (non registra più). Tocca <b>«Completa la fine del monitoraggio»</b> in alto quando hai internet: manda solo il segno di chiusura.${diarioNota}${avvisoScartati(esito)}`);
+        if (!chiusa) $('retryRow').style.display = '';
+      } else if (esito.tutto) {
+        const persa = !!$('perso').innerHTML;   // 19/11/2026: con l'avviso «registrazione NON salvata» il messaggio non può essere un verde rassicurante
+        out(fascia.avviato && !persa ? 'ok' : 'warn', `<b>${persa ? 'Fatto, ma leggi l\'avviso rosso qui sopra.' : 'Fatto.'}</b> ${fascia.avviato ? 'La fascia sta registrando di nuovo.' : '<b>La fascia non è ripartita</b> (vedi sotto).'} ${tuttoTxt}${diarioFatto ? ' e il diario riparte da capo (con una copia di sicurezza)' : ''}.${diarioNota} ${fascia.avviato && !persa ? 'Puoi chiudere la pagina e allontanarti dal telefono.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
+      } else {
+        out('bad', `${fascia.avviato ? 'La fascia è ripartita e i dati sono salvati sul telefono. ' : 'I dati sono salvati sul telefono. '}${fraseNonArrivato(esito)}${finale ? ' La fine del monitoraggio verrà registrata con il prossimo invio riuscito.' : ''}${fascia.nota ? '<br>' + fascia.nota : ''}${avvisoScartati(esito)}`);
+        $('retryRow').style.display = '';
+      }
+    } catch (e) {
+      log('Errore imprevisto: ' + e.message); out('bad', 'Qualcosa non ha funzionato: ' + esc(e.message) + '. I dati già salvati sul telefono non si perdono.'); $('retryRow').style.display = '';
+    } finally { setBusy(false); releaseAwake(); aggiorna(); }
+  }
+  // la chiusura vera: un piccolo file "FINE.json" nella cartella del paziente (il server non lo sostituisce mai).
+  // Il contenuto resta lo stesso a ogni tentativo (salvato nel telefono): rimandato uguale, il server non ne fa una copia.
+  async function chiudiMonitoraggio(code, ch) {
+    step('chiudi', 'wait');
+    const nome = 'FINE.json';
+    try {
+      const r0 = await suDrive(code, [nome]);
+      if (!ch.unico) { ch.data = lunghezzaUnica(JSON.parse(ch.data), lunghezze(r0, nome), 0); ch.unico = true; await setMeta('chiusura', ch); }
+    } catch (e) { log('Chiusura: ' + e.message); step('chiudi', 'no', 'non raggiungo il Drive'); return false; }
+    const it = { tipo: 'fine', fname: nome, data: ch.data, type: 'application/json' }; it.len = nByte(it.data);
+    await postFile(code, it);
+    for (let t = 0; t < 3; t++) {
+      try { const r = await suDrive(code, [nome]); if (arrivato(it, r)) { await setMeta('fine', ch.t); await setMeta('chiusura', null); log('Chiusura registrata sul Drive'); step('chiudi', 'ok'); return true; } } catch (e) {}
+      await sleep(FINTA ? 5 : 3000);
+    }
+    log('Chiusura NON confermata dal Drive'); step('chiudi', 'no', 'non confermata'); return false;
+  }
+  async function soloInvio() {
+    if (busy) return;
+    mostraPannello();
+    const code = leggiCodice();
+    if (!RE_COD.test(code)) { resetSteps(); $('codeRow').style.display = 'block'; out('warn', 'Scrivi il tuo <b>codice</b> e tocca di nuovo.'); $('inCodice').focus(); return; }
+    try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
+    setBusy(true); resetSteps(); mostraCtrl(null); keepAwake();
+    try {
+      const ch = await getMeta('chiusura');
+      const esito = await invio(code, 'Invia senza toccare la fascia');
+      if (esito.tutto) {
+        let fatto = false, nota = '';
+        if (esito.diarioArrivato) { try { await azzeraDopoInvio(esito.dia); fatto = true; } catch (e) { step('reset', 'no'); nota = '<br><b>Il diario non è stato azzerato</b> (' + esc(e.message) + ').'; } }
+        else if (!esito.dia) step('reset', 'skip', '', DIARIO_VUOTO);
+        // una «Fine del monitoraggio» rimasta in sospeso si completa anche da qui
+        let fine = '', kind = 'ok';
+        if (ch && ch.fase === 'invio') { if (await chiudiMonitoraggio(code, ch)) fine = ' <b>Monitoraggio concluso.</b>'; else { kind = 'warn'; fine = ' <b>La fine del monitoraggio non è ancora confermata:</b> tocca di nuovo quando hai internet.'; } }
+        else if (ch) { kind = 'warn'; fine = ' <b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito): tocca «Completa la fine del monitoraggio» in alto, con la fascia vicina.'; }
+        out(kind, `<b>Arrivato tutto al medico.</b>${fatto ? ' Il diario riparte da capo (con una copia di sicurezza).' : ''}${nota}${fine}${avvisoScartati(esito)}`);
+        if (kind !== 'ok') $('retryRow').style.display = '';
+      } else { out('bad', fraseNonArrivato(esito) + avvisoScartati(esito)); $('retryRow').style.display = ''; }
+    } catch (e) { out('bad', 'Invio interrotto: ' + esc(e.message) + '. Tocca di nuovo.'); $('retryRow').style.display = ''; }
+    finally { setBusy(false); releaseAwake(); aggiorna(); }
+  }
+  async function azzeraConCopia() {
+    if (busy) return;
+    mostraPannello(); resetSteps(); window.scrollTo(0, 0);
+    try {
+      // il diario si azzera solo quando le registrazioni sono arrivate al medico: serve per leggerle
+      const na = await regsNonArrivate();
+      if (na.length) { out('bad', `<b>Non ho azzerato il diario.</b> ${quante(na.length)} al medico (manca il segno ✓) e il diario serve per leggerle. Prima tocca <b>«Invia senza toccare la fascia»</b> in «Altre opzioni»: quando è arrivato tutto, il diario riparte da solo.`); return; }
+      const snap = await faiCopia('azzeramento manuale');
+      if (!snap) { out('warn', 'Il diario è già vuoto.'); return; }
+      const n = DIARIO24.tieniSoloAperte(snap.voci);
+      out('ok', `<b>Diario azzerato.</b> ${n} voci sono nella copia di sicurezza (si conserva ${GIORNI_COPIE} giorni): in «Altre opzioni» c'è il ripristino. Le attività ancora aperte sono rimaste.`);
+    } catch (e) { out('bad', 'Non ho azzerato il diario: ' + esc(e.message) + '. Il diario è com\'era.'); }
+    finally { aggiorna(); }
+  }
+
+  /* ---------- «Controlla la fascia» (18/11/2026): SOLA LETTURA ----------
+     Stesso collegamento del primo passo del processo, poi legge soltanto lo stato (e la batteria, letta collegandosi): non ferma,
+     non scarica, non cancella, non fa ripartire niente. Annota l'esito nell'archivio come fa già il processo: statoLetto e, se
+     registra, ultimoAvvio letto dalla fascia. Così la barra non è più una stima. Il risultato compare nel riquadro in alto;
+     sotto il pulsante solo l'avanzamento e gli errori, in parole semplici (il dettaglio tecnico va nel registro). */
+  let ctrlMsg = null;   // { kind, html, t }: messaggio sotto «Controlla la fascia»; sparisce da solo dopo 3 minuti
+  const CTRL_MS = 180000;
+  const testoCtrl = () => ctrlMsg && Date.now() - ctrlMsg.t < CTRL_MS ? `<div class="msg ${ctrlMsg.kind}">${ctrlMsg.html}</div>` : '';
+  function mostraCtrl(kind, html) { ctrlMsg = kind ? { kind, html, t: Date.now() } : null; const el = $('ctrlOut'); if (el) el.innerHTML = testoCtrl(); }
+  function fraseErroreControllo(e) {
+    const msg = String((e && e.message) || ''), nulla = ' <b>Non ho toccato niente</b>: se stava registrando, continua.';
+    if (e && e.nonScelta) return 'Nessuna fascia scelta. Tocca di nuovo <b>«Controlla la fascia»</b> e scegli «Polar H10» dall\'elenco. Se non compare, avvicina il telefono alla fascia (deve essere indossata).';
+    if (e && e.user) return esc(msg);   // per esempio: browser senza Bluetooth (va aperta in Bluefy)
+    if (/in progress|already|busy|occupat/i.test(msg)) return '<b>La fascia è occupata in questo momento</b>, forse da un\'altra app o da un\'altra pagina (per esempio Polar Beat o il Respiro Pacer). Chiudile, aspetta un minuto e tocca di nuovo «Controlla la fascia».' + nulla;
+    return '<b>Non riesco a collegarmi alla fascia</b>: forse è lontana o non è indossata. Avvicina il telefono alla fascia (indossata, con gli elettrodi bagnati) e tocca di nuovo «Controlla la fascia».' + nulla;
+  }
+  async function controllaFascia() {
+    if (busy) return;   // durante il processo (o un altro controllo) non si tocca la fascia
+    setBusy(true);
+    mostraCtrl('warn', 'Mi collego alla fascia… <b>Leggo soltanto</b>: non fermo, non cancello e non faccio ripartire niente. Può volerci fino a un minuto.');
+    const t0 = Date.now();
+    try {
+      await retry('Collegamento', async () => {});   // come il primo passo del processo
+      const s = await retry('Stato', () => psftp.status());
+      log('Controllo (sola lettura): registrando=' + s.recording + ', identificativo="' + s.id + '"');
+      const ora = Date.now(), m0 = await getMeta('ultimoAvvio'), prev = await getMeta('statoLetto'), fine = await getMeta('fine'), ch = await getMeta('chiusura');
+      const bat = await getMeta('batteria'), batt = bat && bat.t >= t0 ? bat.v : null;
+      log('Batteria ' + (batt != null ? batt + '%' : 'non letta in questo controllo'));
+      if (s.recording) {
+        // partenza letta dalla fascia: identico al processo (parteFascia)
+        if (startFromId(s.id) && (!m0 || m0.id !== s.id)) { await setMeta('ultimoAvvio', { id: s.id, t: startFromId(s.id) }); log('Partenza letta dalla fascia: ' + s.id); }
+        await setMeta('statoLetto', { t: ora, recording: true, id: s.id || '', fonte: 'controllo' });
+        mostraCtrl(startFromId(s.id) ? null : 'warn', startFromId(s.id) ? '' : '<b>La fascia sta registrando</b>, ma non riconosco l\'ora di partenza (forse è stata avviata da un\'altra app). Avvisa il medico.');
+      } else {
+        // fermata da un cambio interrotto: si tiene l'ora dello stop (più utile) e si annota solo che è stata ricontrollata
+        const fermaProcesso = prev && prev.recording === false && !prev.fonte && prev.t > 0 && (!m0 || prev.t > m0.t);
+        await setMeta('statoLetto', fermaProcesso ? Object.assign({}, prev, { verificato: ora }) : { t: ora, recording: false, id: s.id || '', fonte: 'controllo' });
+        const concluso = !!(fine && (!m0 || fine > m0.t));
+        mostraCtrl(concluso || ch ? 'ok' : null, concluso ? 'La fascia non registra: il monitoraggio è <b>concluso</b>, va bene così.' : ch ? 'La fascia non registra: è normale dopo «Fine del monitoraggio». Tocca «Completa la fine del monitoraggio».' : '');
+      }
+    } catch (e) {
+      log('Controllo della fascia non riuscito: ' + (e.name || '') + ' ' + e.message);
+      mostraCtrl('bad', fraseErroreControllo(e));
+    } finally {
+      try { if (device && device.gatt && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
+      setBusy(false); releaseAwake(); aggiorna();
+    }
+  }
+
+  /* ---------- pulsanti ---------- */
+  // doppio tocco (17/11/2026): il secondo tocco vale solo dopo almeno 600 ms dal primo (un tocco doppio involontario non
+  // conferma niente) ed entro 4 secondi; la scadenza vecchia non disarma un tocco nuovo
+  const INTERVALLO_MIN = 600;
+  function dueTocchiSu(b, testo, armato, azione, avviso) {
+    if (!b.dataset.arm) { b.dataset.arm = String(Date.now()); b.textContent = armato; clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = testo; }, 4000); if (avviso) avviso(); return; }
+    if (Date.now() - +b.dataset.arm < INTERVALLO_MIN) return;
+    clearTimeout(b._t); delete b.dataset.arm; b.textContent = testo; azione();
+  }
+  const dueTocchi = (btn, testo, armato, azione) => () => dueTocchiSu($(btn), testo, armato, azione);
+  function dueTocchi2(b, testo, armato, azione, avviso) { return () => dueTocchiSu(b, testo, armato, azione, avviso); }
+  $('bEnd').onclick = dueTocchi('bEnd', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => { window.scrollTo(0, 0); processo({ restart: false, finale: true }); });
+  $('bSoloInvio').onclick = () => soloInvio();
+  $('bSoloInvio2').onclick = () => { window.scrollTo(0, 0); soloInvio(); };
+  // si cancella solo ciò che è arrivato al medico nella versione di adesso, e mai durante il processo
+  $('bWipe').onclick = dueTocchi('bWipe', 'Cancella le registrazioni da questo telefono', 'Tocca di nuovo per cancellare', async () => {
+    if (busy) return;
+    mostraPannello(); resetSteps(); window.scrollTo(0, 0);
+    try {
+      const na = await regsNonArrivate(), ch = await getMeta('chiusura');
+      if (na.length) { out('bad', `<b>Non ho cancellato niente.</b> ${quante(na.length)} al medico (manca il segno ✓). Prima tocca <b>«Invia senza toccare la fascia»</b>; quando hanno tutte il segno ✓ le puoi cancellare.`); return; }
+      if (ch) { out('bad', '<b>Non ho cancellato niente.</b> La fine del monitoraggio non è ancora confermata dal Drive del medico: prima tocca «Completa la fine del monitoraggio» in alto.'); return; }
+      await clearAll(); out('ok', 'Registrazioni cancellate da questo telefono.');
+    } catch (e) { out('bad', 'Non ho cancellato niente: ' + esc(e.message)); }
+    finally { aggiorna(); }
+  });
+  $('bShare').onclick = async () => {
+    const files = (await elementiDaInviare()).map(i => new File([i.data], i.fname, { type: i.type }));
+    if (!files.length) return;
+    log('Condivisione di ' + files.length + ' file');
+    try { if (navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, title: 'Monitoraggio HRV' }); return; } }
+    catch (e) { if (e.name === 'AbortError') return; log('Condivisione non riuscita: ' + e.message); }
+    for (const f of files) { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 400)); }
+  };
+  $('bSnapNow').onclick = async () => {
+    try { const s = await faiCopia('copia manuale'); $('snapOut').innerHTML = s ? `<div class="msg ok">Copia fatta: ${s.n} voci.</div>` : '<div class="msg warn">Il diario è vuoto.</div>'; renderCopie(); }
+    catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Non sono riuscito a fare la copia: ${esc(e.message)}</div>`; }
+  };
+
+  /* ---------- copie e ripristino ---------- */
+  async function renderCopie() {
+    let lista = []; try { lista = await tutteLeCopie(); } catch (e) { $('snapList').innerHTML = '<div class="note">Copie non disponibili su questo telefono.</div>'; return; }
+    $('snapList').innerHTML = lista.length ? lista.map(s => `<div><span>${fmtWhen(s.t)} · ${s.n} voci<br><span class="note">${esc(s.motivo || '')}</span></span><span><button class="plain" data-rip="${s.t}" style="margin:0 4px 0 0">Ripristina</button><button class="plain" data-exp="${s.t}" style="margin:0">Salva</button></span></div>`).join('') : '<div class="note">Ancora nessuna copia.</div>';
+    // primo tocco: si dice cosa succede (le voci rimesse ripartono verso il medico); secondo tocco: si ripristina
+    document.querySelectorAll('[data-rip]').forEach(b => b.onclick = dueTocchi2(b, 'Ripristina', 'Conferma', async () => {
+      try {
+        const s = await stx('readonly', st2 => st2.get(+b.dataset.rip));
+        const r = DIARIO24.unisci(s.voci, s.t);
+        $('snapOut').innerHTML = `<div class="msg ok">Ripristino fatto: ${r.n} voci rimesse nel diario${r.n < s.n ? ` (le altre ${s.n - r.n} c'erano già)` : ''}.${r.chiuse ? ` ${r.chiuse === 1 ? 'Un\'attività che nella copia era ancora in corso è stata rimessa chiusa' : r.chiuse + ' attività che nella copia erano ancora in corso sono state rimesse chiuse'} alle ${hm(s.t)}.` : ''} Le voci che c'erano già non sono state cambiate.${r.n ? ' Quelle rimesse verranno mandate di nuovo al medico con il prossimo invio.' : ''}</div>`;
+      } catch (e) { $('snapOut').innerHTML = `<div class="msg bad">Ripristino non riuscito: ${esc(e.message)}</div>`; }
+    }, () => { $('snapOut').innerHTML = '<div class="msg warn"><b>Prima di ripristinare:</b> le voci della copia che mancano nel diario verranno rimesse e <b>mandate di nuovo al medico</b> con il prossimo invio (anche se le aveva già ricevute); le attività che nella copia erano ancora in corso tornano <b>chiuse</b> all\'ora della copia. Tocca <b>«Conferma»</b> per ripristinare.</div>'; }));
+    document.querySelectorAll('[data-exp]').forEach(b => b.onclick = async () => {
+      const s = await stx('readonly', st2 => st2.get(+b.dataset.exp)); if (!s) return;
+      const name = 'copia_diario_' + new Date(s.t).toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json', text = JSON.stringify({ formato: 'copia-diario-24h', versione: 1, t: s.t, voci: s.voci }, null, 1);
+      try { const f = new File([text], name, { type: 'application/json' }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: 'Copia del diario' }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click();
+    });
+  }
+
+  /* ---------- barra fissa: stato, riquadro di stato e pulsanti ---------- */
+  // Riquadro di stato (18/11/2026): UN solo posto, sempre visibile in alto, per tutto ciò che riguarda fascia e invio
+  // (assorbe il promemoria delle 19/22 ore e l'avviso «FERMA»). Ogni problema è una voce; la più importante sta in cima e
+  // il colore del riquadro è quello della voce più grave. Verde solo se non c'è niente in sospeso e la fascia è verificata.
+  const alle = t => new Date(t).toDateString() === new Date().toDateString() ? 'alle ' + hm(t) : fmtWhen(t);   // «alle 14:05» o «ieri alle 14:05»
+  const durHM = min => { min = Math.max(0, Math.round(min)); return Math.floor(min / 60) + ' h ' + p2(min % 60) + ' min'; };
+  const VERIFICA_ORE = 2;        // oltre: «Non controllo la fascia da X ore» (Federico, 18/11/2026)
+  const APPENA_MS = 120000;      // per 2 minuti dopo «Controlla la fascia» il suo esito sta in cima al riquadro
+  const PRIO = { appena: 0, ch: 1, ferma: 2, invio: 3, ore: 4, scartate: 6, verifica: 7, avvio: 8, tuttoOk: 8.5, fascia: 9 };
+  const LIVELLI = ['rosso', 'giallo', 'grigio', 'verde'];
+  async function aggiornaBarra() {
+    let m = null, ended = null, regs = [], inviati = {}, sl = null, ch = null, bat = null;
+    try { m = await getMeta('ultimoAvvio'); ended = await getMeta('fine'); sl = await getMeta('statoLetto'); ch = await getMeta('chiusura'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; bat = await getMeta('batteria'); } catch (e) { log('Archivio non disponibile: ' + e.message); }
+    const ora = Date.now();
+    const concluso = !!(ended && (!m || ended > m.t));
+    // fascia fermata da un processo (o trovata ferma) e non fatta ripartire: l'ultimo collegamento è più recente dell'ultimo avvio
+    const ferma = !concluso && !ch && !!sl && sl.recording === false && sl.t > 0 && (!m || sl.t > m.t);
+    const fermaVista = ferma && sl.fonte === 'controllo';   // trovata ferma da «Controlla la fascia», non da un cambio interrotto
+    // verificata = l'ultima lettura dalla fascia (controllo o riavvio del processo) dice che registra QUESTA registrazione
+    const verificata = !concluso && !ch && !!m && !!sl && sl.recording === true && sl.id === m.id && sl.t >= m.t;
+    const appena = !!sl && (sl.fonte === 'controllo' || sl.verificato) && ora - (sl.verificato || sl.t) < APPENA_MS;
+    const voci = [], voce = (prio, liv, html, extra) => voci.push(Object.assign({ prio, liv, html }, extra || {}));
+    const giorno = t => fmtWhen(t).split(' alle ')[0];
+    let stato = '';
+    if (concluso) { stato = 'Monitoraggio concluso.'; }
+    // «breve» (19/11/2026): il testo della striscia rossa che resta in alto quando l'intestazione è scorsa via (una riga)
+    else if (ch && fineImpossibile()) { stato = 'Fine del monitoraggio: la fascia è ferma.'; voce(PRIO.ch, 'grigio', '<b>La fascia è ferma.</b> Per questo codice il server non registra più la chiusura: i dati restano sul telefono. Contatta il medico.'); }
+    else if (ch) { stato = 'Fine del monitoraggio: la fascia è ferma.'; voce(PRIO.ch, 'rosso', ch.fase === 'invio' ? '<b>Manca la conferma dell’ultimo invio al medico.</b> Tocca «Completa la fine del monitoraggio» qui sotto (serve internet).' : '<b>La fine del monitoraggio non è completa</b> (lo scarico dalla fascia non era finito). Tocca «Completa la fine del monitoraggio» qui sotto, con la fascia vicina.', { breve: '⚠ Fine monitoraggio da completare — tocca' }); }
+    else if (fermaVista) {
+      stato = `Registrazione <b>FERMA</b> (controllata ${alle(sl.t)}).`;
+      // (19/11/2026) non si afferma più che i dati ci sono: la fascia ferma può avere la memoria vuota
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia NON sta registrando.</b> Se ha registrato qualcosa, è ancora dentro: tocca «Invia dati e continua il monitoraggio» per scaricarlo e farla ripartire. <span class="nota">(Controllata ${alle(sl.t)}.)</span>`, { tocca: 'Tocca qui per scaricare e farla ripartire', breve: '⚠ Fascia ferma — tocca' });
+    }
+    else if (ferma) {
+      stato = `Registrazione <b>FERMA</b> dalle ${hm(sl.t)} (${giorno(sl.t)}).`;
+      voce(appena ? PRIO.appena : PRIO.ferma, 'rosso', `<b>La fascia è FERMA dalle ${hm(sl.t)}: tocca per completare.</b> Il cambio si è interrotto prima di far ripartire la registrazione; i dati, se ce ne sono, sono al sicuro (nel telefono o ancora nella fascia). Tocca qui sotto (o «Invia dati e continua il monitoraggio») con la fascia addosso.${sl.verificato ? ` <span class="nota">(Controllata ${alle(sl.verificato)}: è ancora ferma.)</span>` : ''}`, { tocca: 'Tocca qui per completare', breve: '⚠ Fascia ferma — tocca' });
+    }
+    else if (!m) { stato = 'Registrazione: nessun avvio noto su questo telefono.'; voce(PRIO.avvio, 'grigio', 'Non trovo l’ora dell’ultimo cambio. Tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente) oppure «Invia dati e continua il monitoraggio».'); }
+    else {
+      const h = (ora - m.t) / 3600000, minTot = Math.round(h * 60);   // ore e minuti dai minuti totali (mai «5 h 60 min»)
+      const rr = regs.filter(r => r.type === 'rr' && r.durMin > 60), n = rr.reduce((a, r) => a + r.n, 0), mm = rr.reduce((a, r) => a + r.durMin, 0), fc = mm ? n / mm : 68;
+      let restanoMin = null; try { const s = PolarCore.stimaResiduo({ id: m.id, fcMedia: fc, capienza: CAPIENZA }); if (s) restanoMin = s.restanoMin; } catch (e) {}
+      stato = `In registrazione dalle ${hm(m.t)} (${giorno(m.t)}) · ${Math.floor(minTot / 60)} h ${p2(minTot % 60)} min <span style="opacity:.8">(${verificata ? 'verificato ' + alle(sl.t) : 'stima: per saperlo davvero tocca «Controlla la fascia»'})</span>`;
+      const entro = restanoMin == null ? null : Math.max(0, restanoMin - 60);   // un'ora di margine
+      const livOre = h >= 22 || (restanoMin != null && restanoMin <= 90) ? 'rosso' : h >= 19 || (restanoMin != null && restanoMin <= 240) ? 'giallo' : null;
+      if (livOre) {
+        const quando = entro == null ? '' : entro <= 5 ? ' Stima: <b>fai l’invio subito</b>.' : ` Stima: fai l’invio entro ${entro >= 90 ? 'circa ' + Math.round(entro / 60) + ' ore' : 'circa ' + Math.round(entro) + ' minuti'}.`;
+        voce(PRIO.ore, livOre, `<b>Ti consiglio: sono passate ${Math.round(h)} ore.</b>${quando} Ti consiglio di fare il cambio e di fare l’invio e il proseguimento del monitoraggio ora al medico.`, { breve: '⚠ È ora di fare l’invio — tocca' });
+      }
+      if (verificata && ora - sl.t <= VERIFICA_ORE * 3600000) {
+        const b = bat && Math.abs(bat.t - sl.t) < 15 * 60000 ? bat.v : null;   // la batteria letta con lo stesso collegamento
+        const pila = b == null ? '' : b <= BATT_MIN ? `<br><b>Batteria molto bassa (${b}%).</b> La registrazione continua, ma al prossimo «Invia dati e continua il monitoraggio» la fascia potrebbe non ripartire: tieni pronta una pila nuova (CR2025).` : b <= 15 ? `<br>Batteria al ${b}%: al prossimo cambio sostituisci la pila (CR2025).` : '';
+        // per esteso solo subito dopo «Controlla la fascia» (la risposta, in grande) o con la pila quasi scarica; altrimenti basta
+        // la riga in alto «In registrazione … (verificato alle hh:mm)»: la barra fissa resta bassa e non ripete le stesse cose
+        if (appena || pila) voce(appena ? PRIO.appena : PRIO.fascia, 'verde', `<b>La fascia sta registrando dalle ${hm(m.t)}${giorno(m.t) === 'oggi' ? '' : ' (' + giorno(m.t) + ')'} (da ${durHM((ora - m.t) / 60000)})${b != null ? ' · batteria ' + b + '%' : ''}</b>${pila}`, { notaVer: `<span class="nota">(verificato ${alle(sl.t)})</span>` });
+      } else if (verificata || ora - m.t > VERIFICA_ORE * 3600000) {
+        const ore = Math.floor((ora - (verificata ? sl.t : m.t)) / 3600000);
+        voce(PRIO.verifica, 'giallo', `Non controllo la fascia da ${ore} ${ore === 1 ? 'ora' : 'ore'}: tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente).`);
+      } else voce(PRIO.verifica, 'giallo', 'La fascia non è ancora stata controllata: tocca <b>«Controlla la fascia»</b> (legge soltanto, non ferma niente).');
+    }
+    // invio al medico: rosso SOLO per un invio tentato e non confermato, o per registrazioni nel telefono senza conferma d'arrivo.
+    // Un diario con voci nuove non ancora inviate è normale e non conta.
+    const sosp = leggiSospeso();
+    const nomeOk = r => NOME_OK.test('h10_' + r.id + '.csv');
+    const naV = regs.filter(r => nomeOk(r) && !arrivataReg(r, inviati)).length, naS = regs.filter(r => !nomeOk(r)).length;
+    // HRV Tool: chi ha dati NON ancora confermati dal medico (registrazioni non arrivate, invio in sospeso, chiusura a metà, diario con voci chiuse non ancora inviate) non deve vedere il riquadro spento
+    try { const conDati = naV > 0 || naS > 0 || !!sosp || !!ch || DIARIO24.raw().voci.some(v => v.fine != null); if (conDati) localStorage.setItem(INUSO_KEY, '1'); else localStorage.removeItem(INUSO_KEY); } catch (e) {}
+    const bloccoDati = bloccoAttivo() && lic.stato !== 'tolleranza' && lic.stato !== 'attivo';
+    if ((sosp || naV) && bloccoDati) {
+      // 2) il server non riceve più dati per questo codice: un allarme rosso che chiede di «rinviare» non si spegnerebbe mai
+      voce(PRIO.invio, 'grigio', `<b>Il periodo di monitoraggio è terminato:</b> ${naV ? (naV === 1 ? 'una registrazione resta' : naV + ' registrazioni restano') + ' sul telefono e non ' + (naV === 1 ? 'verrà inviata' : 'verranno inviate') + ' al medico' : 'l’ultimo invio non è stato accettato dal server'}. Non si perde niente: i dati sono sul telefono.`);
+    } else if (sosp || naV) {
+      const daFascia = voci.some(v => v.tocca);   // il pulsante della fascia (processo) manda anche quello che manca
+      const regTxt = naV === 1 ? '1 registrazione salvata nel telefono non è ancora arrivata al medico' : naV + ' registrazioni salvate nel telefono non sono ancora arrivate al medico';
+      const html = sosp ? `<b>Attenzione: l’invio al medico non è andato a buon fine.</b>${naV ? ' ' + regTxt + '.' : ''} <span class="nota">(tentato ${alle(sosp.t)} con «${esc(sosp.cosa || 'invio')}»)</span>` : `<b>Attenzione: ${regTxt}.</b>`;
+      voce(PRIO.invio, 'rosso', html + (daFascia ? ' Lo manda anche il pulsante qui sopra.' : ''), Object.assign({ breve: '⚠ Invio non arrivato — tocca per rinviare' }, daFascia ? {} : { rinvia: true }));
+    }
+    if (naS) voce(PRIO.scartate, 'giallo', `${naS === 1 ? 'Una registrazione ha' : naS + ' registrazioni hanno'} un nome che il Drive del medico non accetta: usa «Condividi registrazioni e diario in un altro modo» in «Altre opzioni» e avvisa il medico.`);
+    if (!voci.some(v => v.liv !== 'verde')) {   // niente in sospeso: «Tutto a posto»
+      const okT = leggiConfermato();
+      voce(PRIO.tuttoOk, 'verde', `<b>Tutto a posto:</b> ${okT ? 'ultimo invio confermato ' + alle(okT) : 'nessun invio in sospeso'}${concluso ? ' · monitoraggio concluso' : verificata ? ' · fascia verificata ' + alle(sl.t) : ''}.`);
+    }
+    voci.sort((a, b) => a.prio - b.prio);
+    const livello = LIVELLI.find(l => voci.some(v => v.liv === l));
+    // striscia rossa: solo nel ROSSO, con il testo breve della voce rossa più importante (nel giallo e nel verde niente striscia)
+    strisciaTesto = livello === 'rosso' ? (voci.find(v => v.liv === 'rosso').breve || '⚠ Attenzione — tocca') : '';
+    const conTuttoOk = voci.some(v => v.prio === PRIO.tuttoOk);   // «fascia verificata alle…» c'è già: non si ripete
+    const dis = busy ? ' disabled' : '';
+    const riquadro = `<div class="promemoria ${livello}${voci.length > 1 ? ' multi' : ''}" id="riquadro">${voci.map(v => `<div class="voce v-${v.liv}">${v.html}${v.notaVer && !conTuttoOk ? ' ' + v.notaVer : ''}${v.tocca ? `<button class="azione" id="promTocca"${dis}>${v.tocca}</button>` : ''}${v.rinvia ? `<button class="azione" id="bRinvia"${dis}>Tocca qui per rinviare al medico</button>` : ''}</div>`).join('')}</div>`;
+    // data di fine e data di oggi: quelle del SERVER per il codice di questo telefono (lo stato si rilegge ogni 5 minuti); senza, il telefono
+    const dellCodice = lic && lic.codice === codiceSalvato();
+    const fino = dellCodice ? (lic.fino || '') : (() => { try { return localStorage.getItem(FINO_KEY) || ''; } catch (e) { return ''; } })();
+    const oggiRif = dellCodice && lic.fresco && lic.oggi && Date.now() - lic.t < 2 * 3600000 ? lic.oggi : oggiLocale();
+    const mostraFine = !!fino && oggiRif >= fino && !concluso && !ch && !fineImpossibile();   // il pulsante compare dall'ultimo giorno del pacchetto, finché non si usa
+    $('barra').innerHTML = `<div class="stato">${stato}</div>${riquadro}
+      <div class="azioni"><button class="primario" id="bInvia"${dis}>Invia dati e continua il monitoraggio</button><button class="secondario" id="bCambia"${dis}>Cambia<br><span style="font-weight:500;font-size:11.5px">ho tolto la fascia</span></button></div>
+      <button class="controlla" id="bControlla"${dis}>Controlla la fascia<span>legge soltanto: non ferma e non cambia niente</span></button>
+      <div id="ctrlOut">${testoCtrl()}</div>
+      ${ch ? `<button class="fine" id="bCompleta"${dis}>Completa la fine del monitoraggio</button>` : mostraFine ? `<button class="fine" id="bFineBarra"${dis}>Fine del monitoraggio</button>` : ''}`;
+    $('bInvia').onclick = () => processo({ restart: true });
+    $('bCambia').onclick = () => processo({ restart: true });
+    $('bControlla').onclick = () => controllaFascia();
+    const pt = $('promTocca'); if (pt) pt.onclick = () => processo({ restart: true });
+    const br = $('bRinvia'); if (br) br.onclick = () => { window.scrollTo(0, 0); soloInvio(); };
+    const bc = $('bCompleta'); if (bc) bc.onclick = () => ch.fase === 'invio' ? soloInvio() : processo({ restart: false, finale: true });
+    const bf = $('bFineBarra'); if (bf) bf.onclick = dueTocchi('bFineBarra', 'Fine del monitoraggio', 'Tocca di nuovo per concludere', () => processo({ restart: false, finale: true }));
+    pianificaIntestazione();   // l'altezza o il colore del riquadro possono essere cambiati
+  }
+  async function aggiornaStato() {
+    let m = null, sl = null, bat = null, regs = [], inviati = {};
+    try { m = await getMeta('ultimoAvvio'); sl = await getMeta('statoLetto'); bat = await getMeta('batteria'); regs = await allRegs(); inviati = (await getMeta('inviati')) || {}; } catch (e) { return; }
+    const inizio = r => r.startedAt || startFromId(r.id);
+    regs = regs.sort((a, b) => (inizio(a) || a.savedAt) - (inizio(b) || b.savedAt));
+    $('state').innerHTML = (m ? `<b>Ultima partenza</b><span>${fmtWhen(m.t)}</span>` : '') + (sl ? `<b>Ultimo collegamento</b><span>${fmtWhen(sl.t)}: la fascia ${sl.recording ? 'registrava' : 'era ferma'}</span>` : '') +
+      (bat ? `<b>Batteria</b><span>${bat.v}% <span class="note">(letta ${fmtWhen(bat.t)})</span>${bat.v <= 15 ? ' · <b style="color:var(--giallo)">cambia la pila al prossimo cambio</b>' : ''}</span>` : '') || '<span class="note">Nessun dato.</span>';
+    const tot = regs.reduce((s, r) => s + r.durMin, 0);
+    $('days').innerHTML = regs.length ? regs.map(r => `<div><span>${inizio(r) ? fmtWhen(inizio(r)) : esc(r.id)}</span><span>${fmtDur(r.durMin)} · ${r.n.toLocaleString('it-IT')} battiti${arrivataReg(r, inviati) ? ' <b style="color:var(--ok)" title="arrivata al medico">✓</b>' : ''}</span></div>`).join('') + `<div><b>Totale</b><b>${fmtDur(tot)}</b></div>` : '<div class="note">Ancora nessuna.</div>';
+  }
+  function aggiorna() { aggiornaBarra().catch(e => log('Barra: ' + e.message)); aggiornaStato().catch(() => {}); renderCopie().catch(() => {}); }
+
+  /* ---------- intestazione che scorre via (19/11/2026) ----------
+     Segnalato da Federico: l'intestazione blu (barra, riquadro, pulsanti) occupava metà schermo e restava sempre fissa sopra i
+     pulsanti del diario. Ora ha due stati:
+     - «libera» (classe .libera, position: relative): è al suo posto nella pagina e scorre via con il contenuto, mossa dal browser
+       stesso (nessun calcolo a ogni scorrimento, quindi niente tremolii). In cima alla pagina è sempre così;
+     - «agganciata» (sticky): ferma in alto sopra il contenuto. Ci va quando si RISALE di almeno SOGLIA_PX (anche a metà pagina)
+       e durante un processo o un controllo (i passi e i messaggi devono vedersi); torna «libera» quando si riscende di SOGLIA_PX.
+     Il passaggio tra i due stati usa solo transform (con una transizione breve): niente si sposta sotto il dito.
+     Piccoli movimenti, il rimbalzo di iOS in cima e in fondo, la pagina che si allunga o si accorcia da sola e la rotella di un
+     orario aperto non cambiano lo stato. Se il riquadro è ROSSO e scorre fuori dallo schermo, in alto resta una striscia rossa
+     di una riga: toccandola si torna in cima. Nel giallo e nel verde nessuna striscia. */
+  const SOGLIA_PX = 10;          // movimento minimo nello stesso verso per decidere la direzione
+  const DURATA_MS = 220;         // come la transizione dell'intestazione nel CSS
+  const STRISCIA_PX = 44;        // la striscia compare quando il fondo del riquadro è salito sopra questa altezza
+  const QUIETE_MS = 250;         // dopo un cambio di altezza della pagina: lo scorrimento fatto dal browser per compensare non è un gesto
+  const intest = document.querySelector('header'), striscia = $('striscia');
+  let agganciata = false, ancora = 0, tRilascio = 0, rafInt = 0, quieteFino = 0, strisciaTesto = '';
+  const tySu = px => px ? 'translate3d(0,' + Math.round(px) + 'px,0)' : '';
+  function tyAttuale() {   // spostamento verticale di adesso, anche a metà di una transizione
+    const v = /matrix(3d)?\(([^)]+)\)/.exec(getComputedStyle(intest).transform || '');
+    if (!v) return 0; const n = v[2].split(',').map(parseFloat); return (v[1] ? n[13] : n[5]) || 0;
+  }
+  function posa(tr, tf) { intest.style.transition = tr; intest.style.transform = tf; }
+  function campoAperto() {   // un orario (rotella) o un testo aperto: la pagina si sposta da sola, non è un gesto
+    const a = document.activeElement; if (!a || !a.matches || !a.matches('input, select, textarea')) return false;
+    const d = a.closest('dialog'); return !d || d.open;
+  }
+  function mostraIntest(y, H) {   // da «libera» ad «agganciata»: parte da dove si trova adesso e scende fino in cima allo schermo
+    clearTimeout(tRilascio); tRilascio = 0;
+    if (intest.classList.contains('libera')) {
+      posa('none', tySu(Math.max(-H, -y + tyAttuale()))); intest.classList.remove('libera'); void intest.offsetHeight;
+    }
+    posa('', '');
+  }
+  function nascondiIntest(y, H) {   // da «agganciata» a «libera»
+    clearTimeout(tRilascio); tRilascio = 0;
+    if (y < H) {   // vicino alla cima: torna subito nella pagina e sale insieme al contenuto fino al suo posto
+      const da = y + tyAttuale(); posa('none', tySu(da)); intest.classList.add('libera'); void intest.offsetHeight; posa('', '');
+    } else {       // più in basso: sale fuori dallo schermo, poi torna nella pagina (fuori schermo, non si vede)
+      posa('', tySu(-H)); tRilascio = setTimeout(rilasciaIntest, DURATA_MS + 60);
+    }
+  }
+  function rilasciaIntest() { tRilascio = 0; if (!agganciata) { posa('none', ''); intest.classList.add('libera'); } }
+  function intestazione() {
+    rafInt = 0;
+    const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const y = Math.min(Math.max(window.scrollY || window.pageYOffset || 0, 0), max), H = intest.offsetHeight;   // rimbalzo di iOS: fuori da 0…max non conta
+    if (busy) {                      // processo o controllo in corso: resta in vista
+      if (!agganciata) { agganciata = true; mostraIntest(y, H); }
+      ancora = y;
+    } else if (y <= 0) {             // in cima: al suo posto nella pagina (i due stati qui non si distinguono)
+      if (agganciata || tRilascio || !intest.classList.contains('libera')) { agganciata = false; clearTimeout(tRilascio); tRilascio = 0; posa('none', ''); intest.classList.add('libera'); }
+      ancora = 0;
+    } else if (campoAperto() || performance.now() < quieteFino) {
+      ancora = y;
+    } else if (agganciata) {
+      if (y < ancora) ancora = y;    // continua a salire: si misura dal punto più alto
+      else if (y - ancora >= SOGLIA_PX) { agganciata = false; ancora = y; nascondiIntest(y, H); }
+    } else {
+      // in fondo la pagina può «accorciarsi» da sola (rimbalzo, barre del browser): lì non si decide una risalita
+      if (y > ancora || y >= max - 1) ancora = y;   // continua a scendere: si misura dal punto più basso
+      else if (ancora - y >= SOGLIA_PX) { agganciata = true; ancora = y; mostraIntest(y, H); }
+    }
+    // striscia rossa: riquadro rosso, nessun processo in corso, e il riquadro (dove andrà l'intestazione) è fuori dallo schermo
+    const riq = $('riquadro'), fondo = riq ? riq.offsetTop + riq.offsetHeight : H;   // misurato dall'alto dell'intestazione
+    const vis = !!strisciaTesto && !busy && fondo - (agganciata ? 0 : Math.min(y, H)) < STRISCIA_PX;
+    const sp = striscia.firstElementChild;
+    if (vis && sp.textContent !== strisciaTesto) { sp.textContent = strisciaTesto; striscia.setAttribute('aria-label', strisciaTesto.replace(/^⚠\s*/, '')); }
+    if (striscia.classList.contains('on') !== vis) { striscia.classList.toggle('on', vis); striscia.setAttribute('aria-hidden', vis ? 'false' : 'true'); striscia.tabIndex = vis ? 0 : -1; }
+  }
+  function pianificaIntestazione() { if (!rafInt) rafInt = requestAnimationFrame(intestazione); }
+  window.addEventListener('scroll', pianificaIntestazione, { passive: true });
+  window.addEventListener('resize', () => { quieteFino = performance.now() + QUIETE_MS; pianificaIntestazione(); });
+  if ('ResizeObserver' in window) new ResizeObserver(() => { quieteFino = performance.now() + QUIETE_MS; }).observe(document.body);
+  striscia.onclick = () => { log('Striscia rossa toccata («' + strisciaTesto + '»): torno in cima'); window.scrollTo(0, 0); intestazione(); };
+  pianificaIntestazione();
+
+  window.APP24 = {
+    cambia() { processo({ restart: true }); },
+    invia() { processo({ restart: true }); },
+    fine() { processo({ restart: false, finale: true }); },
+    soloInvio, azzeraConCopia, aggiorna, controllaFascia, log,
+    _prova: { faiCopia, tutteLeCopie, elementiDaInviare, arrivato, lunghezzaUnica, lenCsv },
+  };
+  // un'altra scheda ha iniziato o confermato un invio: il riquadro si aggiorna subito
+  window.addEventListener('storage', e => { if (e.key === SOSPESO_KEY || e.key === CONFERMATO_KEY || e.key == null) aggiorna(); });
+
+  pulisciCopie().catch(e => log('Pulizia copie: ' + e.message));
+  mostraLic();
+  // il controllo della licenza parte a pagina caricata: una risposta lenta del server non deve ritardare l'apertura
+  if (document.readyState === 'complete') verificaStato(true); else window.addEventListener('load', () => verificaStato(true), { once: true });
+  aggiorna();
+  setInterval(() => { if (!busy) { aggiorna(); verificaStato(false); } }, 60000);   // lo stato si rilegge al massimo ogni 5 minuti
+  // al ritorno in primo piano: durante il processo si richiede di nuovo lo schermo acceso (il telefono lo toglie quando la pagina va
+  // in secondo piano), altrimenti si aggiornano barra e diario (il diario si rilegge da solo)
+  document.addEventListener('visibilitychange', () => { if (document.hidden) return; if (busy) keepAwake(); else { aggiorna(); verificaStato(false); } });
+})();
+</script>
+</body>
+</html>
