@@ -37,7 +37,8 @@
   header .titles p{margin:1px 0 0;color:var(--muted);font-size:.72rem;line-height:1.35;letter-spacing:1.4px;text-transform:uppercase}
   header .titles p b{color:var(--accent);font-weight:700}
   @media (max-width:400px){header .titles p{letter-spacing:.9px}}
-  header .torna{margin-left:auto;flex:none;color:var(--accent);text-decoration:none;font-size:.85rem;font-weight:600;padding:8px 2px 8px 8px;white-space:nowrap}
+  .tornaHome{display:block;text-align:center;text-decoration:none;color:var(--accent);background:var(--panel-soft);border:1.5px solid var(--accent);border-radius:12px;padding:13px 14px;margin-bottom:14px;font:600 16px/1.3 'Segoe UI',system-ui,-apple-system,sans-serif}
+  .tornaHome:active{transform:translateY(1px)}
   .lic{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:15px;background:var(--panel)}
   .lic.giallo{border-color:#caa53a;background:rgba(202,165,58,.12)}
   .lic.grigio{border-color:var(--line);background:var(--panel-soft)}
@@ -155,12 +156,13 @@
       <h1>Monitoraggio 24 ore</h1>
       <p><span style="display:block">Dott. Sposini Federico</span><span style="display:block">Medicina Funzionale <b>&amp;</b> Longevity</span></p>
     </div>
-    <a class="torna" id="tornaHrv" href="./">← HRV Tool</a>
   </div>
   <div id="barra"></div>
 </header>
 <button type="button" id="striscia" class="striscia" aria-hidden="true" tabindex="-1"><span></span></button>
 <main>
+  <!-- ritorno alla Home di HRV Tool: pulsante vero, con scritto dove porta (richiesta di Federico, 23/11/2026) -->
+  <a class="tornaHome" id="tornaHrv" href="./">🏠 Torna alla Home di HRV Tool</a>
   <!-- licenza del monitoraggio (stato letto dal server; non blocca mai scarico, salvataggio e copie) -->
   <div class="lic" id="licBox" role="status" aria-live="polite" style="display:none"></div>
   <!-- esito del processo unico: passi, avanzamento e messaggi -->
@@ -244,6 +246,7 @@
       <div id="log24"></div>
     </div>
   </details>
+  <a class="tornaHome" id="tornaHrv2" href="./" style="margin-top:14px">🏠 Torna alla Home di HRV Tool</a>
 </main>
 
 <dialog id="dlgStress">
@@ -2192,6 +2195,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
   window.addEventListener('storage', e => { if (e.key === SOSPESO_KEY || e.key === CONFERMATO_KEY || e.key == null) aggiorna(); });
 
   pulisciCopie().catch(e => log('Pulizia copie: ' + e.message));
+  for (const id of ['tornaHrv', 'tornaHrv2']) $(id).addEventListener('click', e => { if (busy) { e.preventDefault(); const t = $('toast'); t.textContent = 'Aspetta che finisca l’operazione con la fascia, poi torna alla Home.'; t.classList.remove('act'); t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3500); } });   // uscire a metà di uno scarico lo interromperebbe
   mostraLic();
   // il controllo della licenza parte a pagina caricata: una risposta lenta del server non deve ritardare l'apertura
   if (document.readyState === 'complete') verificaStato(true); else window.addEventListener('load', () => verificaStato(true), { once: true });
