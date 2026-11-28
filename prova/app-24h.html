@@ -42,6 +42,7 @@
   .lic{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:15px;background:var(--panel)}
   .lic.giallo{border-color:#caa53a;background:rgba(202,165,58,.12)}
   .lic.grigio{border-color:var(--line);background:var(--panel-soft)}
+  .lic.rosso{border-color:#C8312B;background:rgba(200,49,43,.12)}
   .lic .nota{display:block;margin-top:4px;font-size:13px;color:var(--muted)}
   main{max-width:620px;margin:0 auto;padding:12px 14px}
   .now{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
@@ -1460,7 +1461,7 @@ if (typeof module !== 'undefined') module.exports = PolarCore;
     const vecchio = lic && !lic.fresco && provato ? '<span class="nota">(ultimo stato noto: adesso non riesco a controllarlo)</span>' : '';
     let h = '', cl = '';
     if (s === 'tolleranza') { cl = 'giallo'; h = `<b>Il periodo di monitoraggio è terminato.</b> Hai tempo fino al <b>${gm(lic.tolleranzaFino)}</b> per scaricare, inviare e toccare «Fine del monitoraggio».${vecchio}`; }
-    else if (s === 'scaduto' || s === 'chiuso') { cl = 'grigio'; h = `<b>Monitoraggio concluso.</b> ${testoLic(s)}<span class="nota">Puoi comunque scaricare i dati dalla fascia: restano al sicuro sul telefono.</span>${vecchio}`; }
+    else if (s === 'scaduto' || s === 'chiuso') { cl = 'rosso'; h = `<b>Monitoraggio concluso.</b> ${testoLic(s)}<span class="nota">Puoi comunque scaricare i dati dalla fascia: restano al sicuro sul telefono.</span>${vecchio}`; }
     else if (BLOCCATI.includes(s)) { cl = 'grigio'; h = `${testoLic(s)}<span class="nota">Se nella fascia o nel telefono ci sono registrazioni, puoi comunque scaricarle e tenerle sul telefono.</span>${vecchio}`; }
     b.className = 'lic ' + cl; b.innerHTML = h; b.style.display = h ? '' : 'none';
     pianificaIntestazione();
